@@ -1,601 +1,1487 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VartMap Krishi Sahayak - Admin</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
-    <style>
-        *{margin:0;padding:0;box-sizing:border-box}
-        body{font-family:'Inter',sans-serif;background:#f0f2f5;color:#333}
-        .login-page{display:flex;justify-content:center;align-items:center;min-height:100vh;background:linear-gradient(135deg,#1a6b3c,#0d4a2a)}
-        .login-box{background:#fff;padding:40px;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.3);width:420px;text-align:center}
-        .login-box img,.login-logo{font-size:48px;color:#1a6b3c;margin-bottom:8px}
-        .login-box h1{color:#1a6b3c;font-size:22px;margin-bottom:4px}
-        .login-box .sub{color:#888;margin-bottom:24px;font-size:14px}
-        .login-box input{width:100%;padding:12px 16px;margin-bottom:14px;border:1px solid #ddd;border-radius:8px;font-size:14px;outline:none;font-family:inherit}
-        .login-box input:focus{border-color:#1a6b3c;box-shadow:0 0 0 3px rgba(26,107,60,.1)}
-        .btn{padding:12px 24px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .2s}
-        .btn-primary{background:#1a6b3c;color:#fff;width:100%}
-        .btn-primary:hover{background:#145530}
-        .btn-sm{padding:8px 16px;font-size:12px}
-        .btn-outline{background:transparent;border:1px solid #ddd;color:#555}
-        .btn-outline:hover{background:#f5f5f5}
-        .btn-danger{background:#e74c3c;color:#fff}
-        .btn-success{background:#27ae60;color:#fff}
-        .btn-warning{background:#f39c12;color:#fff}
-        .error-msg{color:#e74c3c;font-size:13px;margin-bottom:12px;display:none}
-
-        /* Layout */
-        .app{display:none;height:100vh;overflow:hidden}
-        .sidebar{width:240px;background:#0d1f17;color:#fff;height:100vh;position:fixed;left:0;top:0;overflow-y:auto;transition:all .3s;z-index:100}
-        .sidebar .logo{padding:20px;border-bottom:1px solid rgba(255,255,255,.1);font-size:16px;font-weight:700;color:#4ade80}
-        .sidebar .logo span{color:#fff;font-weight:400;font-size:12px;display:block;margin-top:2px}
-        .nav-item{display:flex;align-items:center;padding:12px 20px;color:rgba(255,255,255,.6);cursor:pointer;font-size:13px;transition:all .2s;border-left:3px solid transparent}
-        .nav-item:hover{background:rgba(255,255,255,.05);color:#fff}
-        .nav-item.active{background:rgba(74,222,128,.1);color:#4ade80;border-left-color:#4ade80}
-        .nav-item i{width:20px;margin-right:12px;text-align:center}
-        .nav-section{padding:12px 20px 6px;font-size:10px;text-transform:uppercase;color:rgba(255,255,255,.3);letter-spacing:1px;margin-top:8px}
-
-        .main{margin-left:240px;height:100vh;overflow-y:auto}
-        .topbar{background:#fff;padding:16px 24px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50}
-        .topbar h2{font-size:18px;color:#333}
-        .topbar-right{display:flex;align-items:center;gap:12px}
-        .topbar-right .user-name{font-size:13px;color:#666}
-        .content{padding:24px}
-
-        /* Cards */
-        .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:24px}
-        .stat-card{background:#fff;padding:20px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);border-left:4px solid #1a6b3c}
-        .stat-card .label{font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.5px}
-        .stat-card .value{font-size:28px;font-weight:700;color:#1a6b3c;margin:6px 0}
-        .stat-card .sub{font-size:11px;color:#aaa}
-        .stat-card.orange{border-left-color:#f39c12}
-        .stat-card.orange .value{color:#f39c12}
-        .stat-card.blue{border-left-color:#3498db}
-        .stat-card.blue .value{color:#3498db}
-        .stat-card.red{border-left-color:#e74c3c}
-        .stat-card.red .value{color:#e74c3c}
-
-        .card{background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:20px}
-        .card-header{padding:16px 20px;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center}
-        .card-header h3{font-size:15px;font-weight:600}
-        .card-body{padding:20px}
-
-        /* Tables */
-        table{width:100%;border-collapse:collapse}
-        th{text-align:left;padding:10px 12px;background:#f8f9fa;border-bottom:2px solid #eee;font-size:12px;color:#666;text-transform:uppercase;letter-spacing:.5px}
-        td{padding:10px 12px;border-bottom:1px solid #f5f5f5;font-size:13px}
-        tr:hover{background:#f8fff8}
-        .badge{padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600}
-        .badge-green{background:#d4edda;color:#155724}
-        .badge-yellow{background:#fff3cd;color:#856404}
-        .badge-blue{background:#cce5ff;color:#004085}
-        .badge-red{background:#f8d7da;color:#721c24}
-        .badge-gray{background:#e9ecef;color:#495057}
-
-        /* Forms */
-        .form-group{margin-bottom:16px}
-        .form-group label{display:block;font-size:13px;font-weight:500;margin-bottom:6px;color:#555}
-        .form-group input,.form-group select,.form-group textarea{width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;font-family:inherit;outline:none}
-        .form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:#1a6b3c;box-shadow:0 0 0 3px rgba(26,107,60,.1)}
-        .form-group textarea{min-height:80px;resize:vertical}
-        .form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-
-        /* Modal */
-        .modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:200;justify-content:center;align-items:center}
-        .modal-overlay.show{display:flex}
-        .modal{background:#fff;border-radius:12px;width:600px;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)}
-        .modal-header{padding:16px 20px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}
-        .modal-header h3{font-size:16px}
-        .modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:#888}
-        .modal-body{padding:20px}
-        .modal-footer{padding:16px 20px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:8px}
-
-        /* Chat */
-        .chat-container{display:flex;height:calc(100vh - 130px)}
-        .chat-list{width:300px;border-right:1px solid #eee;overflow-y:auto}
-        .chat-item{padding:14px 16px;border-bottom:1px solid #f5f5f5;cursor:pointer;transition:all .2s}
-        .chat-item:hover{background:#f8fff8}
-        .chat-item.active{background:#e8f5e9;border-left:3px solid #1a6b3c}
-        .chat-item .name{font-weight:600;font-size:14px}
-        .chat-item .preview{color:#888;font-size:12px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-        .chat-item .time{font-size:11px;color:#aaa;float:right}
-        .chat-messages{flex:1;display:flex;flex-direction:column}
-        .messages-area{flex:1;overflow-y:auto;padding:20px;background:#f0f2f5}
-        .msg{max-width:70%;padding:10px 14px;border-radius:12px;margin-bottom:8px;font-size:13px;line-height:1.5}
-        .msg-in{background:#fff;align-self:flex-start;border-bottom-left-radius:4px}
-        .msg-out{background:#dcf8c6;align-self:flex-end;border-bottom-right-radius:4px;margin-left:auto}
-        .msg .time{font-size:10px;color:#999;margin-top:4px}
-        .reply-box{padding:16px;background:#fff;border-top:1px solid #eee;display:flex;gap:8px}
-        .reply-box input{flex:1;padding:10px;border:1px solid #ddd;border-radius:20px;outline:none;font-size:13px}
-        .reply-box button{padding:10px 20px;background:#1a6b3c;color:#fff;border:none;border-radius:20px;cursor:pointer}
-
-        /* Services */
-        .services-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
-        .service-card{background:#fff;padding:20px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);border-left:4px solid #ccc}
-        .service-card.healthy{border-left-color:#27ae60}
-        .service-card.unhealthy{border-left-color:#e74c3c}
-        .service-card .svc-name{font-weight:600;font-size:15px}
-        .service-card .svc-url{color:#888;font-size:11px;margin:4px 0}
-        .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
-        .dot-green{background:#27ae60}.dot-red{background:#e74c3c}.dot-yellow{background:#f39c12}
-
-        .empty-state{text-align:center;padding:40px;color:#aaa}
-        .empty-state i{font-size:48px;margin-bottom:12px;display:block}
-        .search-box{padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;width:250px;outline:none}
-        .search-box:focus{border-color:#1a6b3c}
-
-        @media(max-width:768px){
-            .sidebar{width:60px}.sidebar .logo span,.nav-item span,.nav-section{display:none}
-            .sidebar .logo{padding:16px;font-size:20px;text-align:center}
-            .nav-item{padding:14px;justify-content:center}.nav-item i{margin:0}
-            .main{margin-left:60px}
-            .chat-list{width:200px}
-            .form-row{grid-template-columns:1fr}
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VartMap Krishi Sahayak - Admin Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+:root{--primary:#1B5E20;--primary-light:#4CAF50;--primary-dark:#0D3B0F;--accent:#FF9800;--accent-dark:#F57C00;--danger:#E53935;--info:#1565C0;--bg:#F5F7FA;--card:#FFFFFF;--text:#1A1A2E;--text-light:#6B7280;--border:#E5E7EB;--sidebar-w:260px;--radius:12px;--shadow:0 2px 12px rgba(0,0,0,0.08)}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden}
+/* LOGIN */
+#loginPage{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#1B5E20 0%,#4CAF50 50%,#81C784 100%)}
+.login-box{background:#fff;border-radius:20px;padding:48px 40px;width:400px;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
+.login-box h1{font-size:28px;color:var(--primary);margin-bottom:6px;display:flex;align-items:center;gap:10px}
+.login-box h1 i{font-size:32px}
+.login-box p{color:var(--text-light);margin-bottom:30px;font-size:14px}
+.form-group{margin-bottom:20px}
+.form-group label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text)}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:12px 14px;border:2px solid var(--border);border-radius:10px;font-size:14px;font-family:inherit;transition:border-color .2s}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:var(--primary-light)}
+.btn{padding:12px 24px;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:8px;font-family:inherit}
+.btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:var(--primary-dark)}
+.btn-accent{background:var(--accent);color:#fff}.btn-accent:hover{background:var(--accent-dark)}
+.btn-danger{background:var(--danger);color:#fff}.btn-danger:hover{background:#C62828}
+.btn-outline{background:transparent;border:2px solid var(--border);color:var(--text)}.btn-outline:hover{border-color:var(--primary);color:var(--primary)}
+.btn-sm{padding:8px 14px;font-size:12px;border-radius:8px}
+.btn-full{width:100%;justify-content:center;padding:14px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.login-error{color:var(--danger);font-size:13px;margin-top:10px;display:none}
+/* SIDEBAR */
+#app{display:none}
+.sidebar{position:fixed;left:0;top:0;bottom:0;width:var(--sidebar-w);background:linear-gradient(180deg,#0D3B0F 0%,#1B5E20 100%);color:#fff;overflow-y:auto;z-index:100;transition:transform .3s}
+.sidebar-header{padding:24px 20px;border-bottom:1px solid rgba(255,255,255,.1)}
+.sidebar-header h2{font-size:20px;display:flex;align-items:center;gap:10px}
+.sidebar-header h2 i{color:var(--accent)}
+.sidebar-header small{display:block;font-size:11px;color:rgba(255,255,255,.5);margin-top:4px}
+.nav-section{padding:12px 0}
+.nav-section-title{padding:8px 20px;font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.35);font-weight:700}
+.nav-item{display:flex;align-items:center;gap:12px;padding:11px 20px;cursor:pointer;transition:all .15s;font-size:13px;color:rgba(255,255,255,.7);border-left:3px solid transparent}
+.nav-item:hover{background:rgba(255,255,255,.08);color:#fff}
+.nav-item.active{background:rgba(255,255,255,.12);color:#fff;border-left-color:var(--accent)}
+.nav-item i{width:20px;text-align:center;font-size:15px}
+.nav-item .badge{margin-left:auto;background:var(--accent);color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700}
+/* MAIN */
+.main{margin-left:var(--sidebar-w);min-height:100vh}
+.topbar{background:var(--card);padding:16px 30px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50}
+.topbar h1{font-size:22px;font-weight:700}
+.topbar-right{display:flex;align-items:center;gap:16px}
+.topbar-user{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-light)}
+.topbar-user .avatar{width:34px;height:34px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
+.content{padding:24px 30px}
+/* CARDS */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;margin-bottom:24px}
+.stat-card{background:var(--card);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);border-left:4px solid var(--primary-light)}
+.stat-card.accent{border-left-color:var(--accent)}
+.stat-card.info{border-left-color:var(--info)}
+.stat-card.danger{border-left-color:var(--danger)}
+.stat-card .stat-icon{font-size:28px;margin-bottom:8px;color:var(--primary-light)}
+.stat-card .stat-value{font-size:28px;font-weight:700;color:var(--text)}
+.stat-card .stat-label{font-size:12px;color:var(--text-light);margin-top:2px}
+/* TABLE */
+.table-wrap{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;margin-bottom:24px}
+.table-header{padding:16px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:10px}
+.table-header h3{font-size:16px;font-weight:700}
+.table-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.search-box{display:flex;align-items:center;background:var(--bg);border-radius:8px;padding:0 12px;border:1px solid var(--border)}
+.search-box input{border:none;background:transparent;padding:8px;font-size:13px;width:180px;font-family:inherit;outline:none}
+.search-box i{color:var(--text-light);font-size:14px}
+table{width:100%;border-collapse:collapse}
+th{background:var(--bg);padding:12px 16px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-light);font-weight:700;white-space:nowrap}
+td{padding:12px 16px;border-top:1px solid var(--border);font-size:13px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+tr:hover{background:rgba(76,175,80,.03)}
+.status{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;display:inline-block}
+.status.active,.status.healthy,.status.approved,.status.won,.status.delivered,.status.sent{background:#E8F5E9;color:#2E7D32}
+.status.pending,.status.draft,.status.queued{background:#FFF3E0;color:#E65100}
+.status.inactive,.status.unhealthy,.status.rejected,.status.failed,.status.closed,.status.expired{background:#FFEBEE;color:#C62828}
+.status.assigned,.status.open,.status.used{background:#E3F2FD;color:#1565C0}
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center}
+.modal-overlay.show{display:flex}
+.modal{background:#fff;border-radius:16px;width:90%;max-width:700px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.modal-head{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-head h2{font-size:18px}
+.modal-head .close{cursor:pointer;font-size:20px;color:var(--text-light);background:none;border:none}
+.modal-body{padding:24px}
+.modal-foot{padding:16px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+/* CHAT */
+.chat-layout{display:grid;grid-template-columns:320px 1fr;height:calc(100vh - 80px);background:var(--card);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
+.chat-list{border-right:1px solid var(--border);overflow-y:auto}
+.chat-list-header{padding:16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:10px}
+.chat-list-header h3{font-size:15px}
+.chat-item{padding:14px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+.chat-item:hover{background:var(--bg)}
+.chat-item.active{background:#E8F5E9;border-left:3px solid var(--primary)}
+.chat-item .chat-name{font-weight:600;font-size:14px;display:flex;justify-content:space-between}
+.chat-item .chat-preview{font-size:12px;color:var(--text-light);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-item .chat-meta{display:flex;justify-content:space-between;align-items:center;margin-top:4px;font-size:11px;color:var(--text-light)}
+.chat-item .unread{background:var(--primary);color:#fff;font-size:10px;padding:2px 6px;border-radius:10px;font-weight:700}
+.chat-main{display:flex;flex-direction:column}
+.chat-main-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.chat-main-header .farmer-info h4{font-size:15px}
+.chat-main-header .farmer-info span{font-size:12px;color:var(--text-light)}
+.chat-messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:8px;background:#F0F2F5}
+.msg{max-width:65%;padding:10px 14px;border-radius:12px;font-size:13px;line-height:1.5;position:relative}
+.msg.inbound{background:#fff;align-self:flex-start;border-bottom-left-radius:4px;box-shadow:0 1px 2px rgba(0,0,0,.1)}
+.msg.outbound{background:#DCF8C6;align-self:flex-end;border-bottom-right-radius:4px;box-shadow:0 1px 2px rgba(0,0,0,.1)}
+.msg .msg-time{font-size:10px;color:var(--text-light);margin-top:4px;text-align:right}
+.msg .msg-sender{font-size:10px;color:var(--info);font-weight:600;margin-bottom:2px}
+.chat-input{padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:10px;background:#fff}
+.chat-input input{flex:1;padding:12px 16px;border:2px solid var(--border);border-radius:24px;font-size:14px;font-family:inherit;outline:none}
+.chat-input input:focus{border-color:var(--primary-light)}
+.chat-input button{border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;padding:0}
+/* SPIN WHEEL */
+.wheel-container{display:flex;gap:30px;flex-wrap:wrap;align-items:flex-start}
+.wheel-visual{position:relative;width:320px;height:320px}
+.wheel-canvas{width:320px;height:320px}
+.wheel-pointer{position:absolute;top:-10px;left:50%;transform:translateX(-50%);font-size:30px;color:var(--danger);z-index:2;filter:drop-shadow(0 2px 4px rgba(0,0,0,.3))}
+.wheel-config{flex:1;min-width:300px}
+.segment-list{display:flex;flex-direction:column;gap:8px}
+.segment-item{display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border-radius:8px}
+.segment-color{width:24px;height:24px;border-radius:6px;flex-shrink:0}
+.segment-info{flex:1;font-size:13px}
+.segment-info strong{display:block}
+.segment-info small{color:var(--text-light)}
+/* SOIL MAP */
+.soil-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.soil-card{background:var(--card);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow)}
+.soil-card h4{font-size:14px;margin-bottom:12px;color:var(--primary)}
+.nutrient-bar{margin-bottom:10px}
+.nutrient-bar .label{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px}
+.nutrient-bar .bar{height:20px;background:var(--bg);border-radius:10px;overflow:hidden;display:flex}
+.nutrient-bar .bar div{height:100%;transition:width .5s}
+.bar-low{background:#E53935}
+.bar-medium{background:#FF9800}
+.bar-high{background:#4CAF50}
+/* TABS */
+.tabs{display:flex;gap:4px;margin-bottom:20px;border-bottom:2px solid var(--border);padding-bottom:0}
+.tab{padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text-light);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .2s}
+.tab.active{color:var(--primary);border-bottom-color:var(--primary)}
+.tab:hover{color:var(--primary)}
+/* MISC */
+.empty{text-align:center;padding:60px 20px;color:var(--text-light)}
+.empty i{font-size:48px;margin-bottom:16px;display:block;opacity:.3}
+.empty p{font-size:14px}
+.tag{display:inline-block;padding:3px 8px;background:var(--bg);border-radius:6px;font-size:11px;margin:2px;color:var(--text)}
+.flex{display:flex}.gap-10{gap:10px}.gap-16{gap:16px}.items-center{align-items:center}.justify-between{justify-content:space-between}.flex-wrap{flex-wrap:wrap}
+.mb-16{margin-bottom:16px}.mb-24{margin-bottom:24px}.mt-16{margin-top:16px}
+@media(max-width:768px){
+  .sidebar{transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .main{margin-left:0}
+  .chat-layout{grid-template-columns:1fr}
+  .form-row{grid-template-columns:1fr}
+  .stats-grid{grid-template-columns:1fr 1fr}
+}
+</style>
 </head>
 <body>
 
-<!-- Login -->
-<div class="login-page" id="loginPage">
-    <div class="login-box">
-        <i class="fas fa-seedling" style="font-size:48px;color:#1a6b3c;margin-bottom:12px"></i>
-        <h1>VartMap Krishi Sahayak</h1>
-        <p class="sub">Admin Control Panel</p>
-        <div class="error-msg" id="loginError"></div>
-        <input type="email" id="loginEmail" placeholder="Email address">
-        <input type="password" id="loginPass" placeholder="Password">
-        <button class="btn btn-primary" onclick="login()">Sign In</button>
+<!-- LOGIN PAGE -->
+<div id="loginPage">
+  <div class="login-box">
+    <h1><i class="fas fa-seedling"></i> VartMap</h1>
+    <p>Krishi Sahayak - Admin Panel</p>
+    <div class="form-group">
+      <label>Email</label>
+      <input type="email" id="loginEmail" placeholder="admin@example.com">
     </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="loginPass" placeholder="Enter password">
+    </div>
+    <button class="btn btn-primary btn-full" onclick="doLogin()"><i class="fas fa-sign-in-alt"></i> Sign In</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
 </div>
 
-<!-- App -->
-<div class="app" id="app">
-    <div class="sidebar">
-        <div class="logo"><i class="fas fa-seedling"></i> VartMap <span>Krishi Sahayak Admin</span></div>
-        <div class="nav-section">Main</div>
-        <div class="nav-item active" onclick="navigate('overview')"><i class="fas fa-chart-pie"></i><span>Overview</span></div>
-        <div class="nav-item" onclick="navigate('conversations')"><i class="fas fa-comments"></i><span>Conversations</span></div>
-        <div class="nav-item" onclick="navigate('farmers')"><i class="fas fa-users"></i><span>Farmers</span></div>
-        <div class="nav-section">Engage</div>
-        <div class="nav-item" onclick="navigate('templates')"><i class="fas fa-file-alt"></i><span>Templates</span></div>
-        <div class="nav-item" onclick="navigate('campaigns')"><i class="fas fa-bullhorn"></i><span>Campaigns</span></div>
-        <div class="nav-item" onclick="navigate('rewards')"><i class="fas fa-gift"></i><span>Rewards</span></div>
-        <div class="nav-item" onclick="navigate('referrals')"><i class="fas fa-share-alt"></i><span>Referrals</span></div>
-        <div class="nav-section">Content</div>
-        <div class="nav-item" onclick="navigate('schemes')"><i class="fas fa-landmark"></i><span>Govt Schemes</span></div>
-        <div class="nav-item" onclick="navigate('products')"><i class="fas fa-box"></i><span>Products</span></div>
-        <div class="nav-item" onclick="navigate('mandi')"><i class="fas fa-store"></i><span>Mandi Prices</span></div>
-        <div class="nav-section">System</div>
-        <div class="nav-item" onclick="navigate('moderation')"><i class="fas fa-shield-alt"></i><span>Moderation</span></div>
-        <div class="nav-item" onclick="navigate('services')"><i class="fas fa-server"></i><span>Services</span></div>
-        <div class="nav-item" onclick="navigate('analytics')"><i class="fas fa-chart-bar"></i><span>Analytics</span></div>
+<!-- MAIN APP -->
+<div id="app">
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <h2><i class="fas fa-seedling"></i> VartMap</h2>
+      <small>Krishi Sahayak Admin v2.0</small>
     </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Main</div>
+      <div class="nav-item active" onclick="navigate('overview')"><i class="fas fa-th-large"></i> Overview</div>
+      <div class="nav-item" onclick="navigate('chats')"><i class="fab fa-whatsapp"></i> WhatsApp Chat <span class="badge" id="chatBadge" style="display:none">0</span></div>
+      <div class="nav-item" onclick="navigate('farmers')"><i class="fas fa-users"></i> Farmers</div>
+      <div class="nav-item" onclick="navigate('conversations')"><i class="fas fa-comments"></i> Conversations</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Engagement</div>
+      <div class="nav-item" onclick="navigate('templates')"><i class="fas fa-file-alt"></i> Templates</div>
+      <div class="nav-item" onclick="navigate('campaigns')"><i class="fas fa-bullhorn"></i> Campaigns</div>
+      <div class="nav-item" onclick="navigate('spin-wheels')"><i class="fas fa-dharmachakra"></i> Spin Wheels</div>
+      <div class="nav-item" onclick="navigate('loyalty')"><i class="fas fa-crown"></i> Loyalty Program</div>
+      <div class="nav-item" onclick="navigate('coupons')"><i class="fas fa-ticket-alt"></i> Coupon Codes</div>
+      <div class="nav-item" onclick="navigate('rewards')"><i class="fas fa-gift"></i> Rewards</div>
+      <div class="nav-item" onclick="navigate('referrals')"><i class="fas fa-user-plus"></i> Referrals</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Data & Intelligence</div>
+      <div class="nav-item" onclick="navigate('soil-data')"><i class="fas fa-globe-asia"></i> Soil Database</div>
+      <div class="nav-item" onclick="navigate('schemes')"><i class="fas fa-university"></i> Govt Schemes</div>
+      <div class="nav-item" onclick="navigate('products')"><i class="fas fa-box"></i> Products</div>
+      <div class="nav-item" onclick="navigate('mandi-prices')"><i class="fas fa-chart-line"></i> Mandi Prices</div>
+      <div class="nav-item" onclick="navigate('dealers')"><i class="fas fa-store"></i> Dealers</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Operations</div>
+      <div class="nav-item" onclick="navigate('field-agents')"><i class="fas fa-walking"></i> Field Agents</div>
+      <div class="nav-item" onclick="navigate('orders')"><i class="fas fa-shopping-cart"></i> Orders</div>
+      <div class="nav-item" onclick="navigate('moderation')"><i class="fas fa-shield-alt"></i> Moderation</div>
+      <div class="nav-item" onclick="navigate('notifications')"><i class="fas fa-bell"></i> Notifications</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">System</div>
+      <div class="nav-item" onclick="navigate('analytics')"><i class="fas fa-chart-bar"></i> Analytics</div>
+      <div class="nav-item" onclick="navigate('services')"><i class="fas fa-server"></i> Services</div>
+      <div class="nav-item" onclick="navigate('admin-users')"><i class="fas fa-user-shield"></i> Admin Users</div>
+      <div class="nav-item" onclick="navigate('audit-log')"><i class="fas fa-history"></i> Audit Log</div>
+    </div>
+    <div style="padding:20px;border-top:1px solid rgba(255,255,255,.1);margin-top:10px">
+      <button class="btn btn-outline btn-sm btn-full" style="color:#fff;border-color:rgba(255,255,255,.2)" onclick="doLogout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+    </div>
+  </div>
 
-    <div class="main">
-        <div class="topbar">
-            <h2 id="pageTitle">Overview</h2>
-            <div class="topbar-right">
-                <span class="user-name" id="userName"></span>
-                <button class="btn btn-sm btn-outline" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
-            </div>
+  <!-- Main Content -->
+  <div class="main">
+    <div class="topbar">
+      <div style="display:flex;align-items:center;gap:14px">
+        <button class="btn btn-sm btn-outline" style="display:none" id="menuBtn" onclick="document.getElementById('sidebar').classList.toggle('open')"><i class="fas fa-bars"></i></button>
+        <h1 id="pageTitle">Overview</h1>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-user">
+          <span id="userName"></span>
+          <div class="avatar" id="userAvatar"></div>
         </div>
-        <div class="content" id="pageContent"></div>
+      </div>
     </div>
+    <div class="content" id="pageContent"></div>
+  </div>
 </div>
 
 <!-- Modal -->
-<div class="modal-overlay" id="modal">
-    <div class="modal">
-        <div class="modal-header"><h3 id="modalTitle">Modal</h3><button class="modal-close" onclick="closeModal()">&times;</button></div>
-        <div class="modal-body" id="modalBody"></div>
-        <div class="modal-footer" id="modalFooter"></div>
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="modalTitle">Modal</h2>
+      <button class="close" onclick="closeModal()">&times;</button>
     </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-foot" id="modalFoot"></div>
+  </div>
 </div>
-
 <script>
-const API='https://vartmap-admin-api.onrender.com';
-const SVCS=[
-    {name:'WhatsApp Gateway',url:'https://vartmap-whatsapp-gateway.onrender.com/health'},
-    {name:'Intelligence Service',url:'https://vartmap-intelligence.onrender.com/health'},
-    {name:'Admin API',url:'https://vartmap-admin-api.onrender.com/health'}
+const API = 'https://vartmap-admin-api.onrender.com';
+const SVCS = [
+  { name: 'WhatsApp Gateway', url: 'https://vartmap-whatsapp-gateway.onrender.com/health' },
+  { name: 'Intelligence Service', url: 'https://vartmap-intelligence.onrender.com/health' },
+  { name: 'Admin API', url: 'https://vartmap-admin-api.onrender.com/health' }
 ];
-let token=localStorage.getItem('vm_token'),user=JSON.parse(localStorage.getItem('vm_user')||'null');
-let currentPage='overview',selectedFarmer=null;
+let TOKEN = localStorage.getItem('vartmap_token');
+let USER = JSON.parse(localStorage.getItem('vartmap_user') || 'null');
+let currentPage = 'overview';
+let currentChat = null;
 
-if(token&&user)showApp();
-
-async function login(){
-    const email=document.getElementById('loginEmail').value,pass=document.getElementById('loginPass').value;
-    const err=document.getElementById('loginError');err.style.display='none';
-    try{
-        const r=await fetch(`${API}/api/v1/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pass})});
-        const d=await r.json();
-        if(r.ok&&d.token){token=d.token;user=d.user;localStorage.setItem('vm_token',token);localStorage.setItem('vm_user',JSON.stringify(user));showApp();}
-        else{err.textContent=d.error||'Login failed';err.style.display='block';}
-    }catch(e){err.textContent='Connection error';err.style.display='block';}
-}
-function logout(){token=null;user=null;localStorage.removeItem('vm_token');localStorage.removeItem('vm_user');location.reload();}
-function showApp(){document.getElementById('loginPage').style.display='none';document.getElementById('app').style.display='flex';document.getElementById('userName').textContent=user?.name||user?.email;navigate('overview');}
-
-async function api(path,opt={}){
-    const r=await fetch(`${API}${path}`,{...opt,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json',...(opt.headers||{})}});
-    if(r.status===401)return logout();return r.json();
-}
-
-function navigate(page){
-    currentPage=page;
-    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-    event?.target?.closest?.('.nav-item')?.classList.add('active');
-    document.getElementById('pageTitle').textContent=page.charAt(0).toUpperCase()+page.slice(1);
-    const c=document.getElementById('pageContent');
-    c.innerHTML='<div class="empty-state"><i class="fas fa-spinner fa-spin"></i>Loading...</div>';
-    switch(page){
-        case'overview':loadOverview();break;case'farmers':loadFarmers();break;case'conversations':loadConversations();break;
-        case'templates':loadTemplates();break;case'campaigns':loadCampaigns();break;case'rewards':loadRewards();break;
-        case'referrals':loadReferrals();break;case'schemes':loadSchemes();break;case'products':loadProducts();break;
-        case'mandi':loadMandi();break;case'moderation':loadModeration();break;case'services':loadServices();break;
-        case'analytics':loadAnalytics();break;
-    }
+// ─── AUTH ───
+function doLogin() {
+  const email = document.getElementById('loginEmail').value;
+  const pass = document.getElementById('loginPass').value;
+  const errEl = document.getElementById('loginError');
+  errEl.style.display = 'none';
+  fetch(API + '/api/v1/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: pass })
+  }).then(r => r.json()).then(d => {
+    if (d.token) {
+      TOKEN = d.token; USER = d.user;
+      localStorage.setItem('vartmap_token', TOKEN);
+      localStorage.setItem('vartmap_user', JSON.stringify(USER));
+      showApp();
+    } else { errEl.textContent = d.error || 'Login failed'; errEl.style.display = 'block'; }
+  }).catch(() => { errEl.textContent = 'Connection error'; errEl.style.display = 'block'; });
 }
 
-// ===== OVERVIEW =====
-async function loadOverview(){
-    const d=await api('/api/v1/dashboard');const c=document.getElementById('pageContent');
-    c.innerHTML=`
+function doLogout() {
+  TOKEN = null; USER = null;
+  localStorage.removeItem('vartmap_token'); localStorage.removeItem('vartmap_user');
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('loginPage').style.display = 'flex';
+}
+
+function showApp() {
+  document.getElementById('loginPage').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('userName').textContent = USER.name;
+  document.getElementById('userAvatar').textContent = USER.name.charAt(0).toUpperCase();
+  navigate('overview');
+}
+
+function api(path, opts = {}) {
+  return fetch(API + path, {
+    ...opts, headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN, ...(opts.headers || {}) }
+  }).then(r => r.json());
+}
+
+// ─── NAVIGATION ───
+function navigate(page) {
+  currentPage = page;
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const items = document.querySelectorAll('.nav-item');
+  items.forEach(n => { if (n.textContent.trim().toLowerCase().replace(/[\s\d]/g, '').includes(page.replace(/-/g, ''))) n.classList.add('active'); });
+  const titles = {
+    'overview':'Overview','chats':'WhatsApp Chat','farmers':'Farmers','conversations':'Conversations',
+    'templates':'Message Templates','campaigns':'Campaigns','spin-wheels':'Spin Wheels & Lucky Draw',
+    'loyalty':'Loyalty Program','coupons':'Coupon Codes','rewards':'Rewards','referrals':'Referrals',
+    'soil-data':'Soil Nutrient Database','schemes':'Government Schemes','products':'Products',
+    'mandi-prices':'Mandi Prices','dealers':'Dealers','field-agents':'Field Agents','orders':'Orders',
+    'moderation':'Moderation Queue','notifications':'Notification Logs','analytics':'Analytics',
+    'services':'Service Health','admin-users':'Admin Users','audit-log':'Audit Log'
+  };
+  document.getElementById('pageTitle').textContent = titles[page] || page;
+  const loaders = {
+    'overview':loadOverview,'chats':loadChats,'farmers':loadFarmers,'conversations':loadConversations,
+    'templates':loadTemplates,'campaigns':loadCampaigns,'spin-wheels':loadSpinWheels,
+    'loyalty':loadLoyalty,'coupons':loadCoupons,'rewards':loadRewards,'referrals':loadReferrals,
+    'soil-data':loadSoilData,'schemes':loadSchemes,'products':loadProducts,
+    'mandi-prices':loadMandi,'dealers':loadDealers,'field-agents':loadFieldAgents,'orders':loadOrders,
+    'moderation':loadModeration,'notifications':loadNotifications,'analytics':loadAnalytics,
+    'services':loadServices,'admin-users':loadAdminUsers,'audit-log':loadAuditLog
+  };
+  const loader = loaders[page];
+  if (loader) loader(); else document.getElementById('pageContent').innerHTML = '<div class="empty"><i class="fas fa-construction"></i><p>Coming soon</p></div>';
+}
+
+function openModal(title, bodyHtml, footHtml) {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = bodyHtml;
+  document.getElementById('modalFoot').innerHTML = footHtml || '';
+  document.getElementById('modalOverlay').classList.add('show');
+}
+function closeModal() { document.getElementById('modalOverlay').classList.remove('show'); }
+
+function timeAgo(d) {
+  const s = Math.floor((Date.now() - new Date(d)) / 1000);
+  if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago'; return Math.floor(s/86400) + 'd ago';
+}
+function fmtDate(d) { return d ? new Date(d).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '-'; }
+
+// ─── 1. OVERVIEW ───
+async function loadOverview() {
+  const el = document.getElementById('pageContent');
+  el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
+  try {
+    const d = await api('/api/v1/dashboard');
+    el.innerHTML = `
     <div class="stats-grid">
-        <div class="stat-card"><div class="label">Total Farmers</div><div class="value">${d.total_farmers}</div><div class="sub">Registered on platform</div></div>
-        <div class="stat-card blue"><div class="label">Conversations (24h)</div><div class="value">${d.conversations_24h}</div><div class="sub">Messages today</div></div>
-        <div class="stat-card orange"><div class="label">Active Farmers (24h)</div><div class="value">${d.active_farmers_24h}</div><div class="sub">Unique users today</div></div>
-        <div class="stat-card"><div class="label">New Farmers (7d)</div><div class="value">${d.new_farmers_7d}</div><div class="sub">This week</div></div>
-        <div class="stat-card blue"><div class="label">Templates</div><div class="value">${d.total_templates}</div><div class="sub">Message templates</div></div>
-        <div class="stat-card orange"><div class="label">Active Campaigns</div><div class="value">${d.active_campaigns}</div><div class="sub">Running now</div></div>
-        <div class="stat-card"><div class="label">Conversations (7d)</div><div class="value">${d.conversations_7d}</div><div class="sub">This week</div></div>
-        <div class="stat-card red"><div class="label">Moderation Queue</div><div class="value">${d.moderation_pending}</div><div class="sub">Pending review</div></div>
+      <div class="stat-card"><div class="stat-icon"><i class="fas fa-users"></i></div><div class="stat-value">${d.total_farmers}</div><div class="stat-label">Total Farmers</div></div>
+      <div class="stat-card accent"><div class="stat-icon"><i class="fas fa-comments" style="color:var(--accent)"></i></div><div class="stat-value">${d.conversations_24h}</div><div class="stat-label">Conversations (24h)</div></div>
+      <div class="stat-card info"><div class="stat-icon"><i class="fas fa-user-check" style="color:var(--info)"></i></div><div class="stat-value">${d.active_farmers_24h}</div><div class="stat-label">Active Farmers (24h)</div></div>
+      <div class="stat-card"><div class="stat-icon"><i class="fas fa-file-alt"></i></div><div class="stat-value">${d.total_templates}</div><div class="stat-label">Templates</div></div>
+      <div class="stat-card accent"><div class="stat-icon"><i class="fas fa-bullhorn" style="color:var(--accent)"></i></div><div class="stat-value">${d.active_campaigns}</div><div class="stat-label">Active Campaigns</div></div>
+      <div class="stat-card danger"><div class="stat-icon"><i class="fas fa-shield-alt" style="color:var(--danger)"></i></div><div class="stat-value">${d.moderation_pending}</div><div class="stat-label">Moderation Pending</div></div>
+      <div class="stat-card"><div class="stat-icon"><i class="fas fa-star"></i></div><div class="stat-value">${d.total_rewards_points}</div><div class="stat-label">Rewards Points</div></div>
+      <div class="stat-card info"><div class="stat-icon"><i class="fas fa-shopping-cart" style="color:var(--info)"></i></div><div class="stat-value">${d.total_orders}</div><div class="stat-label">Total Orders</div></div>
+      <div class="stat-card"><div class="stat-icon"><i class="fas fa-university"></i></div><div class="stat-value">${d.active_schemes}</div><div class="stat-label">Active Schemes</div></div>
+      <div class="stat-card accent"><div class="stat-icon"><i class="fas fa-dharmachakra" style="color:var(--accent)"></i></div><div class="stat-value">${d.active_spin_wheels}</div><div class="stat-label">Active Spin Wheels</div></div>
+      <div class="stat-card info"><div class="stat-icon"><i class="fab fa-whatsapp" style="color:var(--info)"></i></div><div class="stat-value">${d.open_chats}</div><div class="stat-label">Open Chats</div></div>
+    </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><i class="fas fa-exclamation-triangle"></i><p>Error loading dashboard</p></div>'; }
+}
+
+// ─── 2. WHATSAPP CHAT ───
+async function loadChats() {
+  const el = document.getElementById('pageContent');
+  el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading chats...</p></div>';
+  try {
+    const d = await api('/api/v1/chats?limit=100');
+    el.innerHTML = `
+    <div class="chat-layout">
+      <div class="chat-list">
+        <div class="chat-list-header">
+          <h3><i class="fab fa-whatsapp" style="color:#25D366"></i> Chats (${d.chats.length})</h3>
+          <div class="search-box"><i class="fas fa-search"></i><input placeholder="Search farmers..." oninput="searchChats(this.value)"></div>
+        </div>
+        <div id="chatListItems">
+          ${d.chats.length ? d.chats.map(c => `
+            <div class="chat-item" id="chat-${c.id}" onclick="openChatSession('${c.id}')">
+              <div class="chat-name"><span>${c.farmer_name || 'Unknown'}</span><span style="font-size:11px;color:var(--text-light)">${timeAgo(c.last_message_at)}</span></div>
+              <div class="chat-preview">${c.farmer_phone || ''} · ${c.village || ''}</div>
+              <div class="chat-meta">
+                <span class="status ${c.status}">${c.status}</span>
+                ${c.unread_count > 0 ? `<span class="unread">${c.unread_count}</span>` : ''}
+              </div>
+            </div>
+          `).join('') : '<div class="empty"><p>No chats yet. Start a chat from the Farmers page.</p></div>'}
+        </div>
+      </div>
+      <div class="chat-main" id="chatMain">
+        <div class="empty" style="flex:1;display:flex;align-items:center;justify-content:center"><div><i class="fab fa-whatsapp" style="font-size:64px;color:#25D366;opacity:.2"></i><p style="margin-top:16px">Select a chat to start messaging</p></div></div>
+      </div>
+    </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><i class="fas fa-exclamation-triangle"></i><p>Error loading chats</p></div>'; }
+}
+
+async function openChatSession(id) {
+  currentChat = id;
+  document.querySelectorAll('.chat-item').forEach(el => el.classList.remove('active'));
+  const item = document.getElementById('chat-' + id);
+  if (item) item.classList.add('active');
+  const mainEl = document.getElementById('chatMain');
+  mainEl.innerHTML = '<div class="empty" style="flex:1;display:flex;align-items:center;justify-content:center"><i class="fas fa-spinner fa-spin"></i></div>';
+  try {
+    const d = await api('/api/v1/chats/' + id + '/messages');
+    const chatItem = document.querySelector('#chat-' + id);
+    const name = chatItem ? chatItem.querySelector('.chat-name span').textContent : 'Farmer';
+    mainEl.innerHTML = `
+      <div class="chat-main-header">
+        <div class="farmer-info"><h4>${name}</h4><span>Chat Session</span></div>
+        <div class="flex gap-10">
+          <button class="btn btn-sm btn-outline" onclick="assignChat('${id}')"><i class="fas fa-user-tag"></i> Assign</button>
+          <button class="btn btn-sm btn-danger" onclick="closeChat('${id}')"><i class="fas fa-times"></i> Close</button>
+        </div>
+      </div>
+      <div class="chat-messages" id="chatMessages">
+        ${d.messages.length ? d.messages.map(m => `
+          <div class="msg ${m.direction}">
+            ${m.direction === 'outbound' ? `<div class="msg-sender">${m.admin_name || 'Bot'}</div>` : ''}
+            <div>${m.content || '[media]'}</div>
+            <div class="msg-time">${new Date(m.created_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</div>
+          </div>
+        `).join('') : '<div class="empty"><p>No messages yet</p></div>'}
+      </div>
+      <div class="chat-input">
+        <input id="chatMsgInput" placeholder="Type a message..." onkeydown="if(event.key==='Enter')sendChatMsg('${id}')">
+        <button class="btn btn-primary" onclick="sendChatMsg('${id}')"><i class="fas fa-paper-plane"></i></button>
+      </div>`;
+    const msgs = document.getElementById('chatMessages');
+    if (msgs) msgs.scrollTop = msgs.scrollHeight;
+  } catch (e) { mainEl.innerHTML = '<div class="empty"><p>Error loading messages</p></div>'; }
+}
+
+async function sendChatMsg(id) {
+  const inp = document.getElementById('chatMsgInput');
+  const content = inp.value.trim();
+  if (!content) return;
+  inp.value = '';
+  const msgs = document.getElementById('chatMessages');
+  msgs.innerHTML += `<div class="msg outbound"><div class="msg-sender">${USER.name}</div><div>${content}</div><div class="msg-time">sending...</div></div>`;
+  msgs.scrollTop = msgs.scrollHeight;
+  try { await api('/api/v1/chats/' + id + '/send', { method: 'POST', body: JSON.stringify({ content }) }); }
+  catch (e) { console.error(e); }
+}
+
+async function closeChat(id) { await api('/api/v1/chats/' + id + '/assign', { method: 'PUT', body: JSON.stringify({ status: 'closed' }) }); loadChats(); }
+async function assignChat(id) { await api('/api/v1/chats/' + id + '/assign', { method: 'PUT', body: JSON.stringify({ admin_id: USER.id, status: 'assigned' }) }); }
+function searchChats(q) {
+  document.querySelectorAll('.chat-item').forEach(el => {
+    el.style.display = el.textContent.toLowerCase().includes(q.toLowerCase()) ? 'block' : 'none';
+  });
+}
+
+// ─── 3. FARMERS ───
+async function loadFarmers() {
+  const el = document.getElementById('pageContent');
+  el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
+  try {
+    const d = await api('/api/v1/farmers?limit=100');
+    el.innerHTML = `
+    <div class="table-wrap">
+      <div class="table-header">
+        <h3><i class="fas fa-users"></i> Farmers (${d.total})</h3>
+        <div class="table-actions">
+          <div class="search-box"><i class="fas fa-search"></i><input id="farmerSearch" placeholder="Search name/phone..." onkeydown="if(event.key==='Enter')searchFarmers()"></div>
+          <button class="btn btn-primary btn-sm" onclick="newFarmerModal()"><i class="fas fa-plus"></i> Add Farmer</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+      <table>
+        <tr><th>Name</th><th>Phone</th><th>BSU ID</th><th>Village</th><th>District</th><th>Crops</th><th>Status</th><th>Actions</th></tr>
+        ${d.farmers.map(f => `<tr>
+          <td><strong>${f.name || '-'}</strong></td><td>${f.phone || '-'}</td><td>${f.bsu_id || '-'}</td>
+          <td>${f.village || '-'}</td><td>${f.district_name || '-'}</td>
+          <td>${Array.isArray(f.crops) ? f.crops.join(', ') : (f.crops || '-')}</td>
+          <td><span class="status ${f.status}">${f.status || '-'}</span></td>
+          <td>
+            <button class="btn btn-sm btn-outline" onclick="viewFarmer('${f.id}')"><i class="fas fa-eye"></i></button>
+            <button class="btn btn-sm btn-primary" onclick="startChatWithFarmer('${f.id}')"><i class="fab fa-whatsapp"></i></button>
+          </td>
+        </tr>`).join('')}
+      </table></div>
+    </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error loading farmers</p></div>'; }
+}
+
+async function searchFarmers() {
+  const q = document.getElementById('farmerSearch').value;
+  const d = await api('/api/v1/farmers?search=' + encodeURIComponent(q));
+  const tbody = document.querySelector('table');
+  if (tbody && d.farmers) { navigate('farmers'); }
+}
+
+async function viewFarmer(id) {
+  const d = await api('/api/v1/farmers/' + id);
+  const f = d.farmer;
+  openModal('Farmer Details', `
+    <div class="form-row">
+      <div class="form-group"><label>Name</label><input value="${f.name || ''}" onchange="this.dataset.changed='1'" data-field="name"></div>
+      <div class="form-group"><label>Phone</label><input value="${f.phone || ''}" data-field="phone"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Village</label><input value="${f.village || ''}" data-field="village"></div>
+      <div class="form-group"><label>Pin Code</label><input value="${f.pin_code || ''}" data-field="pin_code"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Land (acres)</label><input value="${f.land_holding_acres || ''}" data-field="land_holding_acres"></div>
+      <div class="form-group"><label>Crops</label><input value="${Array.isArray(f.crops) ? f.crops.join(',') : (f.crops || '')}" data-field="crops"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Soil Type</label><input value="${f.soil_type || ''}" data-field="soil_type"></div>
+      <div class="form-group"><label>Status</label><select data-field="status"><option ${f.status==='active'?'selected':''}>active</option><option ${f.status==='inactive'?'selected':''}>inactive</option></select></div>
+    </div>
+    ${d.loyalty ? `<div style="margin-top:16px;padding:12px;background:var(--bg);border-radius:8px"><strong>Loyalty:</strong> ${d.loyalty.available_points} pts (${d.loyalty.tier})</div>` : ''}
+    ${d.spin_history.length ? `<div style="margin-top:16px"><strong>Spin History:</strong> ${d.spin_history.map(s => `<span class="tag">${s.prize_label}: ₹${s.prize_value}</span>`).join('')}</div>` : ''}
+  `, `<button class="btn btn-primary" onclick="saveFarmerEdit('${id}')"><i class="fas fa-save"></i> Save</button>`);
+}
+
+async function saveFarmerEdit(id) {
+  const data = {};
+  document.querySelectorAll('.modal-body [data-field]').forEach(el => { if (el.value) data[el.dataset.field] = el.value; });
+  await api('/api/v1/farmers/' + id, { method: 'PUT', body: JSON.stringify(data) });
+  closeModal(); loadFarmers();
+}
+
+function newFarmerModal() {
+  openModal('Add New Farmer', `
+    <div class="form-row">
+      <div class="form-group"><label>Name *</label><input id="nfName"></div>
+      <div class="form-group"><label>Phone *</label><input id="nfPhone"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Village</label><input id="nfVillage"></div>
+      <div class="form-group"><label>Language</label><select id="nfLang"><option value="hi">Hindi</option><option value="en">English</option><option value="te">Telugu</option><option value="mr">Marathi</option><option value="ta">Tamil</option></select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Land (acres)</label><input id="nfLand" type="number"></div>
+      <div class="form-group"><label>Crops (comma-separated)</label><input id="nfCrops"></div>
+    </div>
+  `, `<button class="btn btn-primary" onclick="createFarmer()"><i class="fas fa-plus"></i> Create</button>`);
+}
+
+async function createFarmer() {
+  const data = {
+    name: document.getElementById('nfName').value,
+    phone: document.getElementById('nfPhone').value,
+    village: document.getElementById('nfVillage').value,
+    language: document.getElementById('nfLang').value,
+    land_holding_acres: document.getElementById('nfLand').value || null,
+    crops: document.getElementById('nfCrops').value ? '{' + document.getElementById('nfCrops').value + '}' : '{}'
+  };
+  await api('/api/v1/farmers', { method: 'POST', body: JSON.stringify(data) });
+  closeModal(); loadFarmers();
+}
+
+async function startChatWithFarmer(farmerId) {
+  await api('/api/v1/chats/start', { method: 'POST', body: JSON.stringify({ farmer_id: farmerId }) });
+  navigate('chats');
+}
+
+// ─── 4. CONVERSATIONS ───
+async function loadConversations() {
+  const el = document.getElementById('pageContent');
+  try {
+    const d = await api('/api/v1/farmers?limit=20');
+    el.innerHTML = `
+    <div class="table-wrap">
+      <div class="table-header"><h3>Recent Farmer Conversations</h3></div>
+      <table><tr><th>Farmer</th><th>Phone</th><th>Village</th><th>Status</th><th>Joined</th></tr>
+      ${d.farmers.map(f => `<tr><td>${f.name || '-'}</td><td>${f.phone}</td><td>${f.village || '-'}</td><td><span class="status ${f.status}">${f.status}</span></td><td>${fmtDate(f.created_at)}</td></tr>`).join('')}
+      </table>
+    </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
+}
+
+// ─── 5. TEMPLATES ───
+async function loadTemplates() {
+  const el = document.getElementById('pageContent');
+  el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
+  try {
+    const d = await api('/api/v1/templates');
+    el.innerHTML = `
+    <div class="table-wrap">
+      <div class="table-header">
+        <h3>Message Templates (${d.templates.length})</h3>
+        <button class="btn btn-primary btn-sm" onclick="newTemplateModal()"><i class="fas fa-plus"></i> New Template</button>
+      </div>
+      <table><tr><th>Name</th><th>Language</th><th>Category</th><th>WA Name</th><th>Status</th><th>Actions</th></tr>
+      ${d.templates.map(t => `<tr>
+        <td><strong>${t.name}</strong></td><td>${t.language}</td><td>${t.category || '-'}</td><td>${t.wa_template_name || '-'}</td>
+        <td><span class="status ${t.status}">${t.status}</span></td>
+        <td>
+          <button class="btn btn-sm btn-outline" onclick="editTemplate('${t.id}','${encodeURIComponent(JSON.stringify(t))}')"><i class="fas fa-edit"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteTemplate('${t.id}')"><i class="fas fa-trash"></i></button>
+        </td>
+      </tr>`).join('')}
+      </table>
+    </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
+}
+
+function newTemplateModal() {
+  openModal('New Template', `
+    <div class="form-group"><label>Name</label><input id="tName"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Language</label><select id="tLang"><option value="hi">Hindi</option><option value="en">English</option><option value="te">Telugu</option><option value="mr">Marathi</option></select></div>
+      <div class="form-group"><label>Category</label><select id="tCat"><option value="marketing">Marketing</option><option value="utility">Utility</option><option value="authentication">Auth</option><option value="alert">Alert</option></select></div>
+    </div>
+    <div class="form-group"><label>Template Text</label><textarea id="tText" rows="4" placeholder="Use {{1}}, {{2}} for variables"></textarea></div>
+    <div class="form-group"><label>WA Template Name (for approval)</label><input id="tWAName" placeholder="e.g. crop_alert_v1"></div>
+  `, `<button class="btn btn-primary" onclick="saveNewTemplate()"><i class="fas fa-save"></i> Save</button>`);
+}
+
+async function saveNewTemplate() {
+  await api('/api/v1/templates', { method: 'POST', body: JSON.stringify({
+    name: document.getElementById('tName').value,
+    language: document.getElementById('tLang').value,
+    category: document.getElementById('tCat').value,
+    template_text: document.getElementById('tText').value,
+    wa_template_name: document.getElementById('tWAName').value
+  })});
+  closeModal(); loadTemplates();
+}
+
+function editTemplate(id, encoded) {
+  const t = JSON.parse(decodeURIComponent(encoded));
+  openModal('Edit Template', `
+    <div class="form-group"><label>Name</label><input id="teName" value="${t.name}"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Language</label><input id="teLang" value="${t.language}"></div>
+      <div class="form-group"><label>Category</label><input id="teCat" value="${t.category || ''}"></div>
+    </div>
+    <div class="form-group"><label>Template Text</label><textarea id="teText" rows="4">${t.template_text || ''}</textarea></div>
+    <div class="form-group"><label>Status</label><select id="teStatus"><option ${t.status==='active'?'selected':''}>active</option><option ${t.status==='inactive'?'selected':''}>inactive</option></select></div>
+  `, `<button class="btn btn-primary" onclick="updateTemplate('${id}')"><i class="fas fa-save"></i> Update</button>`);
+}
+
+async function updateTemplate(id) {
+  await api('/api/v1/templates/' + id, { method: 'PUT', body: JSON.stringify({
+    name: document.getElementById('teName').value, language: document.getElementById('teLang').value,
+    category: document.getElementById('teCat').value, template_text: document.getElementById('teText').value,
+    status: document.getElementById('teStatus').value
+  })});
+  closeModal(); loadTemplates();
+}
+
+async function deleteTemplate(id) { if (confirm('Delete this template?')) { await api('/api/v1/templates/' + id, { method: 'DELETE' }); loadTemplates(); } }
+
+// ─── 6. CAMPAIGNS ───
+async function loadCampaigns() {
+  const el = document.getElementById('pageContent');
+  try {
+    const d = await api('/api/v1/campaigns');
+    el.innerHTML = `
+    <div class="table-wrap">
+      <div class="table-header">
+        <h3>Campaigns (${d.campaigns.length})</h3>
+        <button class="btn btn-primary btn-sm" onclick="newCampaignModal()"><i class="fas fa-plus"></i> New Campaign</button>
+      </div>
+      <table><tr><th>Name</th><th>Template</th><th>Target</th><th>Sent</th><th>Delivered</th><th>Status</th><th>Scheduled</th><th>Actions</th></tr>
+      ${d.campaigns.map(c => `<tr>
+        <td><strong>${c.name}</strong></td><td>${c.template_name || '-'}</td><td>${c.target_count || 0}</td><td>${c.sent_count || 0}</td><td>${c.delivered_count || 0}</td>
+        <td><span class="status ${c.status}">${c.status}</span></td><td>${fmtDate(c.scheduled_at)}</td>
+        <td>
+          ${c.status === 'draft' ? `<button class="btn btn-sm btn-primary" onclick="updateCampaignStatus('${c.id}','active')"><i class="fas fa-play"></i></button>` : ''}
+          ${c.status === 'active' ? `<button class="btn btn-sm btn-danger" onclick="updateCampaignStatus('${c.id}','paused')"><i class="fas fa-pause"></i></button>` : ''}
+        </td>
+      </tr>`).join('')}
+      </table>
+    </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
+}
+
+function newCampaignModal() {
+  openModal('New Campaign', `
+    <div class="form-group"><label>Campaign Name</label><input id="cName"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Target District</label><input id="cDistrict" placeholder="e.g. Varanasi"></div>
+      <div class="form-group"><label>Target Crop</label><input id="cCrop" placeholder="e.g. wheat"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Target Language</label><select id="cLang"><option value="">All</option><option value="hi">Hindi</option><option value="en">English</option></select></div>
+      <div class="form-group"><label>Schedule Date</label><input id="cDate" type="datetime-local"></div>
+    </div>
+  `, `<button class="btn btn-primary" onclick="createCampaign()"><i class="fas fa-rocket"></i> Create</button>`);
+}
+
+async function createCampaign() {
+  await api('/api/v1/campaigns', { method: 'POST', body: JSON.stringify({
+    name: document.getElementById('cName').value,
+    target_criteria: { district: document.getElementById('cDistrict').value, crop: document.getElementById('cCrop').value, language: document.getElementById('cLang').value },
+    scheduled_at: document.getElementById('cDate').value || null
+  })});
+  closeModal(); loadCampaigns();
+}
+
+async function updateCampaignStatus(id, status) { await api('/api/v1/campaigns/' + id, { method: 'PUT', body: JSON.stringify({ status }) }); loadCampaigns(); }
+// ─── 7. SPIN WHEELS ───
+async function loadSpinWheels() {
+  const el = document.getElementById('pageContent');
+  el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
+  try {
+    const d = await api('/api/v1/spin-wheels');
+    el.innerHTML = `
+    <div class="table-wrap">
+      <div class="table-header">
+        <h3><i class="fas fa-dharmachakra"></i> Spin Wheels & Lucky Draw (${d.wheels.length})</h3>
+        <button class="btn btn-primary btn-sm" onclick="newSpinWheelModal()"><i class="fas fa-plus"></i> Create Wheel</button>
+      </div>
+      ${d.wheels.length ? d.wheels.map(w => `
+      <div style="padding:20px;border-bottom:1px solid var(--border)">
+        <div class="flex justify-between items-center mb-16 flex-wrap gap-10">
+          <div>
+            <h3 style="font-size:16px">${w.name} <span class="status ${w.status}">${w.status}</span></h3>
+            <p style="font-size:12px;color:var(--text-light)">${w.description || ''} · Max ${w.max_spins_per_farmer} spin/farmer · Budget: ₹${w.total_budget}</p>
+          </div>
+          <div class="flex gap-10">
+            ${w.status === 'draft' ? `<button class="btn btn-sm btn-primary" onclick="activateWheel('${w.id}')"><i class="fas fa-play"></i> Activate</button>` : ''}
+            ${w.status === 'active' ? `<button class="btn btn-sm btn-accent" onclick="pauseWheel('${w.id}')"><i class="fas fa-pause"></i> Pause</button>` : ''}
+            <button class="btn btn-sm btn-outline" onclick="viewWheelResults('${w.id}','${w.name}')"><i class="fas fa-list"></i> Results</button>
+          </div>
+        </div>
+        <div class="wheel-container">
+          <div class="wheel-visual">
+            <div class="wheel-pointer"><i class="fas fa-caret-down"></i></div>
+            <canvas id="canvas-${w.id}" class="wheel-canvas" width="320" height="320"></canvas>
+          </div>
+          <div class="wheel-config">
+            <h4 style="margin-bottom:10px">Segments (${w.segments.length})</h4>
+            <div class="segment-list">
+              ${w.segments.map(s => `
+                <div class="segment-item">
+                  <div class="segment-color" style="background:${s.color}"></div>
+                  <div class="segment-info">
+                    <strong>${s.label}</strong>
+                    <small>${s.prize_type} · ₹${s.prize_value} · Prob: ${(s.probability * 100).toFixed(1)}% · Winners: ${s.current_winners}/${s.max_winners || '∞'}</small>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+            <p style="margin-top:12px;font-size:13px"><strong>Stats:</strong> ${w.stats.total_spins} spins · ${w.stats.winners} winners</p>
+          </div>
+        </div>
+      </div>
+      `).join('') : '<div class="empty"><i class="fas fa-dharmachakra"></i><p>No spin wheels yet. Create one!</p></div>'}
+    </div>`;
+    // Draw wheel canvases
+    d.wheels.forEach(w => { if (w.segments.length) drawWheel('canvas-' + w.id, w.segments); });
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error loading spin wheels</p></div>'; }
+}
+
+function drawWheel(canvasId, segments) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const cx = 160, cy = 160, r = 150;
+  const total = segments.length;
+  const arc = (2 * Math.PI) / total;
+  segments.forEach((s, i) => {
+    const start = i * arc - Math.PI / 2;
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, start, start + arc);
+    ctx.fillStyle = s.color || ['#4CAF50','#FF9800','#2196F3','#E91E63','#9C27B0','#00BCD4','#FF5722','#607D8B'][i % 8];
+    ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+    // label
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(start + arc / 2);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 11px Inter'; ctx.textAlign = 'center';
+    ctx.fillText(s.label.substring(0, 12), r * 0.65, 4);
+    ctx.restore();
+  });
+  // center
+  ctx.beginPath(); ctx.arc(cx, cy, 20, 0, 2 * Math.PI);
+  ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#ddd'; ctx.lineWidth = 2; ctx.stroke();
+}
+
+function newSpinWheelModal() {
+  openModal('Create Spin Wheel', `
+    <div class="form-group"><label>Name</label><input id="swName" placeholder="Diwali Lucky Draw"></div>
+    <div class="form-group"><label>Description</label><input id="swDesc"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Type</label><select id="swType"><option value="spin_wheel">Spin Wheel</option><option value="scratch_card">Scratch Card</option><option value="lucky_draw">Lucky Draw</option></select></div>
+      <div class="form-group"><label>Max Spins/Farmer</label><input id="swMax" type="number" value="1"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Start Date</label><input id="swStart" type="datetime-local"></div>
+      <div class="form-group"><label>End Date</label><input id="swEnd" type="datetime-local"></div>
+    </div>
+    <div class="form-group"><label>Total Budget (₹)</label><input id="swBudget" type="number" value="10000"></div>
+    <h4 style="margin:16px 0 8px">Segments (Prizes)</h4>
+    <div id="segmentsList">
+      <div class="segment-row" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+        <input placeholder="Label" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-label">
+        <select style="padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-type"><option value="cash">Cash</option><option value="discount">Discount</option><option value="points">Points</option><option value="product">Product</option><option value="better_luck">Better Luck</option></select>
+        <input placeholder="Value ₹" type="number" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-value">
+        <input placeholder="Prob (0-1)" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-prob" value="0.2">
+        <input type="color" value="#4CAF50" class="seg-color" style="width:40px;height:36px;border:none;cursor:pointer">
+      </div>
+    </div>
+    <button class="btn btn-sm btn-outline" onclick="addSegmentRow()"><i class="fas fa-plus"></i> Add Segment</button>
+  `, `<button class="btn btn-primary" onclick="createSpinWheel()"><i class="fas fa-save"></i> Create</button>`);
+}
+
+function addSegmentRow() {
+  document.getElementById('segmentsList').innerHTML += `
+    <div class="segment-row" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+      <input placeholder="Label" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-label">
+      <select style="padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-type"><option value="cash">Cash</option><option value="discount">Discount</option><option value="points">Points</option><option value="product">Product</option><option value="better_luck">Better Luck</option></select>
+      <input placeholder="Value ₹" type="number" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-value">
+      <input placeholder="Prob" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-prob" value="0.1">
+      <input type="color" value="#FF9800" class="seg-color" style="width:40px;height:36px;border:none;cursor:pointer">
     </div>`;
 }
 
-// ===== FARMERS =====
-async function loadFarmers(){
-    const d=await api('/api/v1/farmers?limit=100');const c=document.getElementById('pageContent');
-    let rows='';
-    if(d.farmers?.length){
-        d.farmers.forEach(f=>{
-            const badge=f.status==='active'?'badge-green':f.status==='blocked'?'badge-red':'badge-gray';
-            const stage=f.onboarding_stage==='complete'?'badge-blue':f.onboarding_stage==='new'?'badge-yellow':'badge-green';
-            rows+=`<tr onclick="viewFarmer('${f.id}')" style="cursor:pointer">
-                <td><strong>${f.name||'-'}</strong></td><td>${f.phone}</td><td>${f.village||'-'}</td>
-                <td>${(f.crops||[]).join(', ')||'-'}</td><td><span class="badge ${stage}">${f.onboarding_stage||'new'}</span></td>
-                <td><span class="badge ${badge}">${f.status}</span></td>
-                <td>${new Date(f.created_at).toLocaleDateString()}</td></tr>`;
-        });
+async function createSpinWheel() {
+  const segs = [];
+  document.querySelectorAll('.segment-row').forEach(row => {
+    const label = row.querySelector('.seg-label').value;
+    if (label) segs.push({ label, prize_type: row.querySelector('.seg-type').value, prize_value: +row.querySelector('.seg-value').value || 0, probability: +row.querySelector('.seg-prob').value || 0.1, color: row.querySelector('.seg-color').value });
+  });
+  await api('/api/v1/spin-wheels', { method: 'POST', body: JSON.stringify({
+    name: document.getElementById('swName').value, description: document.getElementById('swDesc').value,
+    type: document.getElementById('swType').value, max_spins_per_farmer: +document.getElementById('swMax').value,
+    start_date: document.getElementById('swStart').value || null, end_date: document.getElementById('swEnd').value || null,
+    total_budget: +document.getElementById('swBudget').value, segments: segs
+  })});
+  closeModal(); loadSpinWheels();
+}
+
+async function activateWheel(id) { await api('/api/v1/spin-wheels/' + id, { method: 'PUT', body: JSON.stringify({ status: 'active' }) }); loadSpinWheels(); }
+async function pauseWheel(id) { await api('/api/v1/spin-wheels/' + id, { method: 'PUT', body: JSON.stringify({ status: 'paused' }) }); loadSpinWheels(); }
+
+async function viewWheelResults(id, name) {
+  const d = await api('/api/v1/spin-wheels/' + id + '/results');
+  openModal('Spin Results: ' + name, `
+    <table><tr><th>Farmer</th><th>Phone</th><th>Prize</th><th>Value</th><th>Status</th><th>Date</th></tr>
+    ${d.results.map(r => `<tr><td>${r.farmer_name}</td><td>${r.farmer_phone}</td><td>${r.prize_label}</td><td>₹${r.prize_value}</td><td><span class="status ${r.status}">${r.status}</span></td><td>${fmtDate(r.created_at)}</td></tr>`).join('')}
+    </table>
+    ${!d.results.length ? '<div class="empty"><p>No results yet</p></div>' : ''}
+  `);
+}
+
+// ─── 8. LOYALTY ───
+async function loadLoyalty() {
+  const el = document.getElementById('pageContent');
+  try {
+    const [progs, lb] = await Promise.all([api('/api/v1/loyalty/programs'), api('/api/v1/loyalty/leaderboard')]);
+    el.innerHTML = `
+    <div class="tabs">
+      <div class="tab active" onclick="this.parentElement.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));this.classList.add('active');document.getElementById('loyProgs').style.display='block';document.getElementById('loyLB').style.display='none'">Programs</div>
+      <div class="tab" onclick="this.parentElement.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));this.classList.add('active');document.getElementById('loyProgs').style.display='none';document.getElementById('loyLB').style.display='block'">Leaderboard</div>
+    </div>
+    <div id="loyProgs">
+      <div class="flex justify-between items-center mb-16"><h3>Loyalty Programs</h3><button class="btn btn-primary btn-sm" onclick="newLoyaltyModal()"><i class="fas fa-plus"></i> New Program</button></div>
+      ${progs.programs.map(p => `
+        <div class="stat-card mb-16">
+          <h3 style="font-size:16px">${p.name} <span class="status ${p.status}">${p.status}</span></h3>
+          <p style="font-size:13px;color:var(--text-light);margin-top:4px">${p.description || ''}</p>
+          <div style="margin-top:12px;font-size:13px">
+            <strong>${p.stats?.members || 0}</strong> members · <strong>${p.stats?.total_available || 0}</strong> active points<br>
+            Per purchase: ${p.points_per_purchase}pts · Per referral: ${p.points_per_referral}pts · Per chat: ${p.points_per_interaction}pts · Redeem min: ${p.min_redeem_points}pts · 1pt = ₹${p.point_value_inr}
+          </div>
+        </div>
+      `).join('')}
+      ${!progs.programs.length ? '<div class="empty"><p>No loyalty programs yet</p></div>' : ''}
+    </div>
+    <div id="loyLB" style="display:none">
+      <div class="table-wrap"><div class="table-header"><h3>Top Farmers by Loyalty Points</h3></div>
+      <table><tr><th>#</th><th>Name</th><th>Phone</th><th>Village</th><th>Available</th><th>Lifetime</th><th>Tier</th></tr>
+      ${lb.leaderboard.map((l, i) => `<tr><td>${i+1}</td><td>${l.name || '-'}</td><td>${l.phone}</td><td>${l.village || '-'}</td><td><strong>${l.available_points}</strong></td><td>${l.lifetime_points}</td><td><span class="tag">${l.tier}</span></td></tr>`).join('')}
+      </table></div>
+    </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
+}
+
+function newLoyaltyModal() {
+  openModal('New Loyalty Program', `
+    <div class="form-group"><label>Name</label><input id="lpName" placeholder="VartMap Kisan Rewards"></div>
+    <div class="form-group"><label>Description</label><textarea id="lpDesc" rows="2"></textarea></div>
+    <div class="form-row">
+      <div class="form-group"><label>Points per Purchase</label><input id="lpPP" type="number" value="1"></div>
+      <div class="form-group"><label>Points per Referral</label><input id="lpPR" type="number" value="10"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Points per Interaction</label><input id="lpPI" type="number" value="0.5"></div>
+      <div class="form-group"><label>Min Redeem Points</label><input id="lpMin" type="number" value="100"></div>
+    </div>
+    <div class="form-group"><label>1 Point = ₹</label><input id="lpVal" type="number" step="0.01" value="0.10"></div>
+  `, `<button class="btn btn-primary" onclick="createLoyaltyProg()"><i class="fas fa-save"></i> Create</button>`);
+}
+
+async function createLoyaltyProg() {
+  await api('/api/v1/loyalty/programs', { method: 'POST', body: JSON.stringify({
+    name: document.getElementById('lpName').value, description: document.getElementById('lpDesc').value,
+    points_per_purchase: +document.getElementById('lpPP').value, points_per_referral: +document.getElementById('lpPR').value,
+    points_per_interaction: +document.getElementById('lpPI').value, min_redeem_points: +document.getElementById('lpMin').value,
+    point_value_inr: +document.getElementById('lpVal').value
+  })});
+  closeModal(); loadLoyalty();
+}
+
+// ─── 9. COUPONS ───
+async function loadCoupons() {
+  const el = document.getElementById('pageContent');
+  try {
+    const d = await api('/api/v1/coupons');
+    el.innerHTML = `
+    <div class="table-wrap">
+      <div class="table-header"><h3>Coupon Campaigns (${d.campaigns.length})</h3><button class="btn btn-primary btn-sm" onclick="newCouponModal()"><i class="fas fa-plus"></i> New Campaign</button></div>
+      <table><tr><th>Name</th><th>Prefix</th><th>Type</th><th>Value</th><th>Codes</th><th>Used</th><th>Status</th><th>Dates</th></tr>
+      ${d.campaigns.map(c => `<tr><td><strong>${c.name}</strong></td><td>${c.code_prefix}</td><td>${c.discount_type}</td><td>${c.discount_value}${c.discount_type==='percentage'?'%':' ₹'}</td><td>${c.stats?.total_codes || 0}</td><td>${c.stats?.used || 0}</td><td><span class="status ${c.status}">${c.status}</span></td><td>${fmtDate(c.start_date)} → ${fmtDate(c.end_date)}</td></tr>`).join('')}
+      </table>
+    </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
+}
+
+function newCouponModal() {
+  openModal('New Coupon Campaign', `
+    <div class="form-group"><label>Campaign Name</label><input id="ccName"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Code Prefix</label><input id="ccPrefix" value="VART"></div>
+      <div class="form-group"><label>Generate Count</label><input id="ccCount" type="number" value="50"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Discount Type</label><select id="ccType"><option value="percentage">Percentage</option><option value="fixed">Fixed ₹</option><option value="points">Points</option></select></div>
+      <div class="form-group"><label>Discount Value</label><input id="ccVal" type="number" value="10"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Start Date</label><input id="ccStart" type="date"></div>
+      <div class="form-group"><label>End Date</label><input id="ccEnd" type="date"></div>
+    </div>
+  `, `<button class="btn btn-primary" onclick="createCoupon()"><i class="fas fa-save"></i> Create & Generate Codes</button>`);
+}
+
+async function createCoupon() {
+  const d = await api('/api/v1/coupons', { method: 'POST', body: JSON.stringify({
+    name: document.getElementById('ccName').value, code_prefix: document.getElementById('ccPrefix').value,
+    discount_type: document.getElementById('ccType').value, discount_value: +document.getElementById('ccVal').value,
+    generate_count: +document.getElementById('ccCount').value,
+    start_date: document.getElementById('ccStart').value || null, end_date: document.getElementById('ccEnd').value || null
+  })});
+  closeModal();
+  if (d.sample_codes) alert('Generated ' + d.codes_generated + ' codes. Samples: ' + d.sample_codes.join(', '));
+  loadCoupons();
+}
+
+// ─── 10. REWARDS ───
+async function loadRewards() {
+  const el = document.getElementById('pageContent');
+  try {
+    const d = await api('/api/v1/rewards');
+    el.innerHTML = `
+    <div class="stats-grid mb-24">
+      <div class="stat-card"><div class="stat-value">${d.stats?.total || 0}</div><div class="stat-label">Total Rewards</div></div>
+      <div class="stat-card accent"><div class="stat-value">${d.stats?.total_points || 0}</div><div class="stat-label">Total Points Awarded</div></div>
+      <div class="stat-card info"><div class="stat-value">${d.stats?.pending || 0}</div><div class="stat-label">Pending</div></div>
+    </div>
+    <div class="table-wrap">
+      <div class="table-header"><h3>Reward History</h3><button class="btn btn-primary btn-sm" onclick="newRewardModal()"><i class="fas fa-plus"></i> Award Reward</button></div>
+      <table><tr><th>Farmer</th><th>Phone</th><th>Type</th><th>Points</th><th>Status</th><th>Date</th></tr>
+      ${d.rewards.map(r => `<tr><td>${r.farmer_name || '-'}</td><td>${r.phone || '-'}</td><td>${r.type}</td><td><strong>${r.points}</strong></td><td><span class="status ${r.status}">${r.status}</span></td><td>${fmtDate(r.created_at)}</td></tr>`).join('')}
+      </table>
+    </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
+}
+
+function newRewardModal() {
+  openModal('Award Reward', `
+    <div class="form-group"><label>Farmer ID</label><input id="rwFarmer" placeholder="Farmer UUID"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Type</label><select id="rwType"><option value="bonus">Bonus</option><option value="referral">Referral</option><option value="spin">Spin Win</option><option value="purchase">Purchase</option></select></div>
+      <div class="form-group"><label>Points</label><input id="rwPoints" type="number" value="10"></div>
+    </div>
+    <div class="form-group"><label>Description</label><input id="rwDesc"></div>
+  `, `<button class="btn btn-primary" onclick="awardReward()"><i class="fas fa-gift"></i> Award</button>`);
+}
+
+async function awardReward() {
+  await api('/api/v1/rewards', { method: 'POST', body: JSON.stringify({
+    farmer_id: document.getElementById('rwFarmer').value, type: document.getElementById('rwType').value,
+    points: +document.getElementById('rwPoints').value, description: document.getElementById('rwDesc').value
+  })});
+  closeModal(); loadRewards();
+}
+
+// ─── 11. REFERRALS ───
+async function loadReferrals() {
+  const el = document.getElementById('pageContent');
+  try {
+    const d = await api('/api/v1/referrals');
+    el.innerHTML = `
+    <div class="table-wrap mb-24">
+      <div class="table-header"><h3>Referral Codes (${d.codes.length})</h3></div>
+      <table><tr><th>Code</th><th>Farmer</th><th>Phone</th><th>Uses</th><th>Max</th><th>Status</th></tr>
+      ${d.codes.map(c => `<tr><td><strong>${c.code}</strong></td><td>${c.farmer_name || '-'}</td><td>${c.phone || '-'}</td><td>${c.total_uses}</td><td>${c.max_uses}</td><td><span class="status ${c.status}">${c.status}</span></td></tr>`).join('')}
+      </table>
+    </div>
+    <div class="table-wrap">
+      <div class="table-header"><h3>Referral History (${d.referrals.length})</h3></div>
+      <table><tr><th>Referrer</th><th>Referee</th><th>Status</th><th>Date</th></tr>
+      ${d.referrals.map(r => `<tr><td>${r.referrer_name || '-'}</td><td>${r.referee_name || '-'}</td><td><span class="status ${r.status}">${r.status}</span></td><td>${fmtDate(r.created_at)}</td></tr>`).join('')}
+      </table>
+    </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
+}
+
+// ─── 12. SOIL DATA ───
+async function loadSoilData() {
+  const el = document.getElementById('pageContent');
+  el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
+  try {
+    const [summary, data] = await Promise.all([api('/api/v1/soil-data/summary'), api('/api/v1/soil-data')]);
+    el.innerHTML = `
+    <div class="stats-grid mb-24">
+      <div class="stat-card"><div class="stat-value">${summary.total}</div><div class="stat-label">Total Records</div></div>
+      <div class="stat-card accent"><div class="stat-value">${summary.states.length}</div><div class="stat-label">States</div></div>
+      <div class="stat-card info"><div class="stat-value">${summary.districts.length}</div><div class="stat-label">Districts</div></div>
+    </div>
+    <div class="table-wrap mb-24">
+      <div class="table-header">
+        <h3><i class="fas fa-globe-asia"></i> Soil Nutrient Database</h3>
+        <div class="table-actions">
+          <div class="search-box"><i class="fas fa-search"></i><input id="soilSearch" placeholder="Search district..." onkeydown="if(event.key==='Enter')searchSoil()"></div>
+          <button class="btn btn-sm btn-primary" onclick="addSoilModal()"><i class="fas fa-plus"></i> Add Data</button>
+          <button class="btn btn-sm btn-accent" onclick="bulkSoilModal()"><i class="fas fa-upload"></i> Bulk Upload</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+      <table>
+        <tr><th>State</th><th>District</th><th>Block</th><th>N (L/M/H %)</th><th>P (L/M/H %)</th><th>K (L/M/H %)</th><th>OC (L/M/H %)</th><th>pH</th><th>Soil Type</th><th>Samples</th></tr>
+        ${data.data.map(d => `<tr>
+          <td>${d.state_name}</td><td><strong>${d.district_name}</strong></td><td>${d.block_name || '-'}</td>
+          <td><span style="color:#E53935">${d.nitrogen_low_pct}</span>/<span style="color:#FF9800">${d.nitrogen_medium_pct}</span>/<span style="color:#4CAF50">${d.nitrogen_high_pct}</span></td>
+          <td><span style="color:#E53935">${d.phosphorus_low_pct}</span>/<span style="color:#FF9800">${d.phosphorus_medium_pct}</span>/<span style="color:#4CAF50">${d.phosphorus_high_pct}</span></td>
+          <td><span style="color:#E53935">${d.potassium_low_pct}</span>/<span style="color:#FF9800">${d.potassium_medium_pct}</span>/<span style="color:#4CAF50">${d.potassium_high_pct}</span></td>
+          <td><span style="color:#E53935">${d.organic_carbon_low_pct}</span>/<span style="color:#FF9800">${d.organic_carbon_medium_pct}</span>/<span style="color:#4CAF50">${d.organic_carbon_high_pct}</span></td>
+          <td>${d.avg_ph || '-'}</td><td>${d.soil_type || '-'}</td><td>${d.total_samples}</td>
+        </tr>`).join('')}
+      </table></div>
+      ${!data.data.length ? '<div class="empty"><p>No soil data yet. Add data manually or bulk upload.</p></div>' : ''}
+    </div>
+    ${data.data.length ? `
+    <h3 style="margin-bottom:16px">Nutrient Visualization</h3>
+    <div class="soil-grid">
+      ${data.data.slice(0, 6).map(d => `
+        <div class="soil-card">
+          <h4>${d.district_name}, ${d.state_name}</h4>
+          <div class="nutrient-bar"><div class="label"><span>Nitrogen (N)</span><span>L:${d.nitrogen_low_pct}% M:${d.nitrogen_medium_pct}% H:${d.nitrogen_high_pct}%</span></div><div class="bar"><div class="bar-low" style="width:${d.nitrogen_low_pct}%"></div><div class="bar-medium" style="width:${d.nitrogen_medium_pct}%"></div><div class="bar-high" style="width:${d.nitrogen_high_pct}%"></div></div></div>
+          <div class="nutrient-bar"><div class="label"><span>Phosphorus (P)</span><span>L:${d.phosphorus_low_pct}% M:${d.phosphorus_medium_pct}% H:${d.phosphorus_high_pct}%</span></div><div class="bar"><div class="bar-low" style="width:${d.phosphorus_low_pct}%"></div><div class="bar-medium" style="width:${d.phosphorus_medium_pct}%"></div><div class="bar-high" style="width:${d.phosphorus_high_pct}%"></div></div></div>
+          <div class="nutrient-bar"><div class="label"><span>Potassium (K)</span><span>L:${d.potassium_low_pct}% M:${d.potassium_medium_pct}% H:${d.potassium_high_pct}%</span></div><div class="bar"><div class="bar-low" style="width:${d.potassium_low_pct}%"></div><div class="bar-medium" style="width:${d.potassium_medium_pct}%"></div><div class="bar-high" style="width:${d.potassium_high_pct}%"></div></div></div>
+          <div class="nutrient-bar"><div class="label"><span>Organic Carbon</span><span>L:${d.organic_carbon_low_pct}% M:${d.organic_carbon_medium_pct}% H:${d.organic_carbon_high_pct}%</span></div><div class="bar"><div class="bar-low" style="width:${d.organic_carbon_low_pct}%"></div><div class="bar-medium" style="width:${d.organic_carbon_medium_pct}%"></div><div class="bar-high" style="width:${d.organic_carbon_high_pct}%"></div></div></div>
+          <p style="font-size:12px;margin-top:8px">pH: ${d.avg_ph || '-'} · Soil: ${d.soil_type || '-'} · Samples: ${d.total_samples}</p>
+        </div>
+      `).join('')}
+    </div>` : ''}`;
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error loading soil data</p></div>'; }
+}
+
+async function searchSoil() {
+  const q = document.getElementById('soilSearch').value;
+  const d = await api('/api/v1/soil-data?district=' + encodeURIComponent(q));
+  // re-render just the table portion would be ideal, but for simplicity reload page
+  loadSoilData();
+}
+
+function addSoilModal() {
+  openModal('Add Soil Data', `
+    <div class="form-row"><div class="form-group"><label>State</label><input id="sdState"></div><div class="form-group"><label>District</label><input id="sdDist"></div></div>
+    <div class="form-row"><div class="form-group"><label>Block</label><input id="sdBlock"></div><div class="form-group"><label>Village</label><input id="sdVillage"></div></div>
+    <div class="form-row"><div class="form-group"><label>Year</label><input id="sdYear" type="number" value="2025"></div><div class="form-group"><label>Total Samples</label><input id="sdSamples" type="number"></div></div>
+    <h4 style="margin:12px 0 8px">Nitrogen (%)</h4>
+    <div class="form-row"><div class="form-group"><label>Low</label><input id="sdNL" type="number" value="0"></div><div class="form-group"><label>Medium</label><input id="sdNM" type="number" value="0"></div></div>
+    <div class="form-group"><label>High</label><input id="sdNH" type="number" value="0"></div>
+    <h4 style="margin:12px 0 8px">Phosphorus (%)</h4>
+    <div class="form-row"><div class="form-group"><label>Low</label><input id="sdPL" type="number" value="0"></div><div class="form-group"><label>Medium</label><input id="sdPM" type="number" value="0"></div></div>
+    <div class="form-group"><label>High</label><input id="sdPH" type="number" value="0"></div>
+    <h4 style="margin:12px 0 8px">Potassium (%)</h4>
+    <div class="form-row"><div class="form-group"><label>Low</label><input id="sdKL" type="number" value="0"></div><div class="form-group"><label>Medium</label><input id="sdKM" type="number" value="0"></div></div>
+    <div class="form-group"><label>High</label><input id="sdKH" type="number" value="0"></div>
+    <h4 style="margin:12px 0 8px">Other</h4>
+    <div class="form-row"><div class="form-group"><label>Avg pH</label><input id="sdPH2" type="number" step="0.1"></div><div class="form-group"><label>Soil Type</label><input id="sdSoil" placeholder="Alluvial, Black, Red..."></div></div>
+  `, `<button class="btn btn-primary" onclick="saveSoilData()"><i class="fas fa-save"></i> Save</button>`);
+}
+
+async function saveSoilData() {
+  await api('/api/v1/soil-data', { method: 'POST', body: JSON.stringify({
+    state_name: document.getElementById('sdState').value, district_name: document.getElementById('sdDist').value,
+    block_name: document.getElementById('sdBlock').value, village_name: document.getElementById('sdVillage').value,
+    sample_year: +document.getElementById('sdYear').value, total_samples: +document.getElementById('sdSamples').value,
+    nitrogen_low_pct: +document.getElementById('sdNL').value, nitrogen_medium_pct: +document.getElementById('sdNM').value, nitrogen_high_pct: +document.getElementById('sdNH').value,
+    phosphorus_low_pct: +document.getElementById('sdPL').value, phosphorus_medium_pct: +document.getElementById('sdPM').value, phosphorus_high_pct: +document.getElementById('sdPH').value,
+    potassium_low_pct: +document.getElementById('sdKL').value, potassium_medium_pct: +document.getElementById('sdKM').value, potassium_high_pct: +document.getElementById('sdKH').value,
+    avg_ph: +document.getElementById('sdPH2').value || null, soil_type: document.getElementById('sdSoil').value
+  })});
+  closeModal(); loadSoilData();
+}
+
+function bulkSoilModal() {
+  openModal('Bulk Upload Soil Data', `
+    <p style="margin-bottom:12px;font-size:13px">Paste JSON array of soil records. Each record should have: state_name, district_name, block_name, nitrogen_low_pct, nitrogen_medium_pct, nitrogen_high_pct, phosphorus_low_pct/medium/high, potassium_low_pct/medium/high, avg_ph, soil_type</p>
+    <div class="form-group"><label>JSON Data</label><textarea id="bulkJson" rows="10" placeholder='[{"state_name":"UP","district_name":"Varanasi","nitrogen_low_pct":45,...}]'></textarea></div>
+  `, `<button class="btn btn-primary" onclick="uploadBulkSoil()"><i class="fas fa-upload"></i> Upload</button>`);
+}
+
+async function uploadBulkSoil() {
+  try {
+    const records = JSON.parse(document.getElementById('bulkJson').value);
+    const d = await api('/api/v1/soil-data/bulk', { method: 'POST', body: JSON.stringify({ records }) });
+    alert('Inserted ' + d.inserted + ' records');
+    closeModal(); loadSoilData();
+  } catch (e) { alert('Invalid JSON: ' + e.message); }
+}
+
+// ─── 13. SCHEMES ───
+async function loadSchemes() {
+  const el = document.getElementById('pageContent');
+  try {
+    const d = await api('/api/v1/schemes');
+    el.innerHTML = `
+    <div class="table-wrap">
+      <div class="table-header"><h3>Government Schemes (${d.schemes.length})</h3><button class="btn btn-primary btn-sm" onclick="newSchemeModal()"><i class="fas fa-plus"></i> Add Scheme</button></div>
+      <table><tr><th>Name</th><th>Hindi Name</th><th>Department</th><th>Level</th><th>Deadline</th><th>Status</th><th>Actions</th></tr>
+      ${d.schemes.map(s => `<tr><td><strong>${s.name}</strong></td><td>${s.name_hi || '-'}</td><td>${s.department || '-'}</td><td>${s.level}</td><td>${fmtDate(s.deadline)}</td><td><span class="status ${s.status}">${s.status}</span></td>
+      <td><button class="btn btn-sm btn-outline" onclick="editScheme('${s.id}','${encodeURIComponent(JSON.stringify(s))}')"><i class="fas fa-edit"></i></button></td></tr>`).join('')}
+      </table>
+    </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
+}
+
+function newSchemeModal() {
+  openModal('Add Government Scheme', `
+    <div class="form-row"><div class="form-group"><label>Name (English)</label><input id="schName"></div><div class="form-group"><label>Name (Hindi)</label><input id="schNameHi"></div></div>
+    <div class="form-row"><div class="form-group"><label>Department</label><input id="schDept"></div><div class="form-group"><label>Level</label><select id="schLevel"><option value="central">Central</option><option value="state">State</option></select></div></div>
+    <div class="form-group"><label>Description</label><textarea id="schDesc" rows="3"></textarea></div>
+    <div class="form-row"><div class="form-group"><label>Benefits</label><input id="schBenefits"></div><div class="form-group"><label>Application URL</label><input id="schUrl"></div></div>
+    <div class="form-row"><div class="form-group"><label>Helpline</label><input id="schHelp"></div><div class="form-group"><label>Deadline</label><input id="schDeadline" type="date"></div></div>
+  `, `<button class="btn btn-primary" onclick="createScheme()"><i class="fas fa-save"></i> Save</button>`);
+}
+
+async function createScheme() {
+  await api('/api/v1/schemes', { method: 'POST', body: JSON.stringify({
+    name: document.getElementById('schName').value, name_hi: document.getElementById('schNameHi').value,
+    department: document.getElementById('schDept').value, level: document.getElementById('schLevel').value,
+    description: document.getElementById('schDesc').value, benefits: document.getElementById('schBenefits').value,
+    application_url: document.getElementById('schUrl').value, helpline: document.getElementById('schHelp').value,
+    deadline: document.getElementById('schDeadline').value || null
+  })});
+  closeModal(); loadSchemes();
+}
+
+function editScheme(id, enc) {
+  const s = JSON.parse(decodeURIComponent(enc));
+  openModal('Edit Scheme', `
+    <div class="form-group"><label>Name</label><input id="esName" value="${s.name}"></div>
+    <div class="form-group"><label>Status</label><select id="esStatus"><option ${s.status==='active'?'selected':''}>active</option><option ${s.status==='inactive'?'selected':''}>inactive</option></select></div>
+    <div class="form-group"><label>Description</label><textarea id="esDesc" rows="3">${s.description || ''}</textarea></div>
+    <div class="form-group"><label>Benefits</label><input id="esBenefits" value="${s.benefits || ''}"></div>
+  `, `<button class="btn btn-primary" onclick="updateScheme('${id}')"><i class="fas fa-save"></i> Update</button>`);
+}
+
+async function updateScheme(id) {
+  await api('/api/v1/schemes/' + id, { method: 'PUT', body: JSON.stringify({
+    name: document.getElementById('esName').value, status: document.getElementById('esStatus').value,
+    description: document.getElementById('esDesc').value, benefits: document.getElementById('esBenefits').value
+  })});
+  closeModal(); loadSchemes();
+}
+
+// ─── 14. PRODUCTS ───
+async function loadProducts() {
+  const el = document.getElementById('pageContent');
+  try {
+    const d = await api('/api/v1/products');
+    el.innerHTML = `
+    <div class="table-wrap">
+      <div class="table-header"><h3>Products (${d.products.length})</h3>
+        <div class="table-actions"><div class="search-box"><i class="fas fa-search"></i><input placeholder="Search..."></div><button class="btn btn-primary btn-sm" onclick="newProductModal()"><i class="fas fa-plus"></i> Add Product</button></div>
+      </div>
+      <table><tr><th>Name</th><th>Brand</th><th>Category</th><th>Reg No.</th><th>Verified</th><th>Status</th></tr>
+      ${d.products.map(p => `<tr><td><strong>${p.name}</strong></td><td>${p.brand || '-'}</td><td>${p.category || '-'}</td><td>${p.registration_number || '-'}</td><td>${p.verified ? '<i class="fas fa-check-circle" style="color:green"></i>' : '<i class="fas fa-times-circle" style="color:red"></i>'}</td><td><span class="status ${p.status}">${p.status}</span></td></tr>`).join('')}
+      </table>
+    </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
+}
+
+function newProductModal() {
+  openModal('Add Product', `
+    <div class="form-row"><div class="form-group"><label>Name</label><input id="prName"></div><div class="form-group"><label>Brand</label><input id="prBrand"></div></div>
+    <div class="form-row"><div class="form-group"><label>Category</label><select id="prCat"><option>Insecticide</option><option>Fungicide</option><option>Herbicide</option><option>Fertilizer</option><option>Seed</option><option>Bio-pesticide</option><option>Other</option></select></div><div class="form-group"><label>Registration No.</label><input id="prReg"></div></div>
+    <div class="form-group"><label>Dosage</label><input id="prDosage" placeholder="e.g. 2ml/L"></div>
+    <div class="form-group"><label>Target Crops (comma-separated)</label><input id="prCrops" placeholder="wheat, rice, cotton"></div>
+    <div class="form-group"><label>Safety Info</label><textarea id="prSafety" rows="2"></textarea></div>
+  `, `<button class="btn btn-primary" onclick="createProduct()"><i class="fas fa-save"></i> Save</button>`);
+}
+
+async function createProduct() {
+  await api('/api/v1/products', { method: 'POST', body: JSON.stringify({
+    name: document.getElementById('prName').value, brand: document.getElementById('prBrand').value,
+    category: document.getElementById('prCat').value, registration_number: document.getElementById('prReg').value,
+    dosage: document.getElementById('prDosage').value, target_crops: document.getElementById('prCrops').value ? '{' + document.getElementById('prCrops').value + '}' : '{}',
+    safety_info: document.getElementById('prSafety').value
+  })});
+  closeModal(); loadProducts();
+}
+
+// ─── 15. MANDI PRICES ───
+async function loadMandi() {
+  const el = document.getElementById('pageContent');
+  try {
+    const d = await api('/api/v1/mandi-prices');
+    el.innerHTML = `
+    <div class="table-wrap">
+      <div class="table-header"><h3>Mandi Prices (${d.count})</h3>
+        <div class="table-actions"><div class="search-box"><i class="fas fa-search"></i><input id="mandiSearch" placeholder="Search commodity..." onkeydown="if(event.key==='Enter')searchMandi()"></div><button class="btn btn-primary btn-sm" onclick="newMandiModal()"><i class="fas fa-plus"></i> Add Price</button></div>
+      </div>
+      <table><tr><th>Commodity</th><th>Variety</th><th>Market</th><th>District</th><th>State</th><th>Min ₹</th><th>Max ₹</th><th>Modal ₹</th><th>Date</th></tr>
+      ${d.prices.map(p => `<tr><td><strong>${p.commodity}</strong></td><td>${p.variety || '-'}</td><td>${p.market_name || '-'}</td><td>${p.district || '-'}</td><td>${p.state || '-'}</td><td>${p.min_price || '-'}</td><td>${p.max_price || '-'}</td><td><strong>${p.modal_price || '-'}</strong></td><td>${fmtDate(p.price_date)}</td></tr>`).join('')}
+      </table>
+    </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
+}
+
+async function searchMandi() { navigate('mandi-prices'); }
+
+function newMandiModal() {
+  openModal('Add Mandi Price', `
+    <div class="form-row"><div class="form-group"><label>Commodity</label><input id="mpComm"></div><div class="form-group"><label>Variety</label><input id="mpVar"></div></div>
+    <div class="form-row"><div class="form-group"><label>Market Name</label><input id="mpMarket"></div><div class="form-group"><label>District</label><input id="mpDist"></div></div>
+    <div class="form-row"><div class="form-group"><label>State</label><input id="mpState"></div><div class="form-group"><label>Price Date</label><input id="mpDate" type="date"></div></div>
+    <div class="form-row"><div class="form-group"><label>Min ₹/qtl</label><input id="mpMin" type="number"></div><div class="form-group"><label>Max ₹/qtl</label><input id="mpMax" type="number"></div></div>
+    <div class="form-group"><label>Modal ₹/qtl</label><input id="mpModal" type="number"></div>
+  `, `<button class="btn btn-primary" onclick="createMandiPrice()"><i class="fas fa-save"></i> Save</button>`);
+}
+
+async function createMandiPrice() {
+  await api('/api/v1/mandi-prices', { method: 'POST', body: JSON.stringify({
+    commodity: document.getElementById('mpComm').value, variety: document.getElementById('mpVar').value,
+    market_name: document.getElementById('mpMarket').value, district: document.getElementById('mpDist').value,
+    state: document.getElementById('mpState').value, price_date: document.getElementById('mpDate').value,
+    min_price: +document.getElementById('mpMin').value, max_price: +document.getElementById('mpMax').value,
+    modal_price: +document.getElementById('mpModal').value
+  })});
+  closeModal(); loadMandi();
+}
+
+// ─── 16. DEALERS ───
+async function loadDealers() {
+  const el = document.getElementById('pageContent');
+  try {
+    const d = await api('/api/v1/dealers');
+    el.innerHTML = `
+    <div class="table-wrap">
+      <div class="table-header"><h3>Dealers (${d.dealers.length})</h3><button class="btn btn-primary btn-sm" onclick="newDealerModal()"><i class="fas fa-plus"></i> Add Dealer</button></div>
+      <table><tr><th>Name</th><th>Phone</th><th>District</th><th>License</th><th>Verified</th><th>Status</th></tr>
+      ${d.dealers.map(d => `<tr><td><strong>${d.name}</strong></td><td>${d.phone}</td><td>${d.district_name || '-'}</td><td>${d.license_number || '-'}</td><td>${d.verified ? '✅' : '❌'}</td><td><span class="status ${d.status}">${d.status}</span></td></tr>`).join('')}
+      </table>
+    </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
+}
+
+function newDealerModal() {
+  openModal('Add Dealer', `
+    <div class="form-row"><div class="form-group"><label>Name</label><input id="dlName"></div><div class="form-group"><label>Phone</label><input id="dlPhone"></div></div>
+    <div class="form-row"><div class="form-group"><label>Address</label><input id="dlAddr"></div><div class="form-group"><label>License Number</label><input id="dlLicense"></div></div>
+  `, `<button class="btn btn-primary" onclick="createDealer()"><i class="fas fa-save"></i> Save</button>`);
+}
+
+async function createDealer() {
+  await api('/api/v1/dealers', { method: 'POST', body: JSON.stringify({
+    name: document.getElementById('dlName').value, phone: document.getElementById('dlPhone').value,
+    address: document.getElementById('dlAddr').value, license_number: document.getElementById('dlLicense').value
+  })});
+  closeModal(); loadDealers();
+}
+
+// ─── 17. FIELD AGENTS ───
+async function loadFieldAgents() {
+  const el = document.getElementById('pageContent');
+  try {
+    const d = await api('/api/v1/field-agents');
+    el.innerHTML = `
+    <div class="table-wrap">
+      <div class="table-header"><h3>Field Agents (${d.agents.length})</h3><button class="btn btn-primary btn-sm" onclick="newAgentModal()"><i class="fas fa-plus"></i> Add Agent</button></div>
+      <table><tr><th>Name</th><th>Phone</th><th>District</th><th>Role</th><th>Farmers</th><th>Visits</th><th>Status</th></tr>
+      ${d.agents.map(a => `<tr><td><strong>${a.name}</strong></td><td>${a.phone}</td><td>${a.district_name || '-'}</td><td>${a.role}</td><td>${a.assigned_farmers}</td><td>${a.total_visits}</td><td><span class="status ${a.status}">${a.status}</span></td></tr>`).join('')}
+      </table>
+    </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
+}
+
+function newAgentModal() {
+  openModal('Add Field Agent', `
+    <div class="form-row"><div class="form-group"><label>Name</label><input id="faName"></div><div class="form-group"><label>Phone</label><input id="faPhone"></div></div>
+    <div class="form-row"><div class="form-group"><label>Email</label><input id="faEmail"></div><div class="form-group"><label>Role</label><select id="faRole"><option value="field_agent">Field Agent</option><option value="supervisor">Supervisor</option><option value="manager">Manager</option></select></div></div>
+  `, `<button class="btn btn-primary" onclick="createAgent()"><i class="fas fa-save"></i> Save</button>`);
+}
+
+async function createAgent() {
+  await api('/api/v1/field-agents', { method: 'POST', body: JSON.stringify({
+    name: document.getElementById('faName').value, phone: document.getElementById('faPhone').value,
+    email: document.getElementById('faEmail').value, role: document.getElementById('faRole').value
+  })});
+  closeModal(); loadFieldAgents();
+}
+
+// ─── 18. ORDERS ───
+async function loadOrders() {
+  const el = document.getElementById('pageContent');
+  try {
+    const d = await api('/api/v1/orders');
+    el.innerHTML = `
+    <div class="table-wrap">
+      <div class="table-header"><h3>Orders (${d.orders.length})</h3></div>
+      <table><tr><th>Farmer</th><th>Product</th><th>Dealer</th><th>Qty</th><th>Amount</th><th>Status</th><th>Payment</th><th>Date</th></tr>
+      ${d.orders.map(o => `<tr><td>${o.farmer_name || '-'}</td><td>${o.product_name || '-'}</td><td>${o.dealer_name || '-'}</td><td>${o.quantity}</td><td>₹${o.total_amount || 0}</td><td><span class="status ${o.status}">${o.status}</span></td><td><span class="status ${o.payment_status}">${o.payment_status}</span></td><td>${fmtDate(o.created_at)}</td></tr>`).join('')}
+      </table>
+    </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
+}
+
+// ─── 19. MODERATION ───
+async function loadModeration() {
+  const el = document.getElementById('pageContent');
+  try {
+    const d = await api('/api/v1/moderation?status=pending');
+    el.innerHTML = `
+    <div class="table-wrap">
+      <div class="table-header"><h3>Moderation Queue (${d.items.length} pending)</h3></div>
+      <table><tr><th>Farmer</th><th>Type</th><th>Content</th><th>Score</th><th>Priority</th><th>Actions</th></tr>
+      ${d.items.map(i => `<tr><td>${i.farmer_name || '-'}</td><td>${i.content_type}</td><td style="max-width:300px">${i.content || '-'}</td><td>${i.detection_score || '-'}</td><td><span class="status ${i.priority}">${i.priority}</span></td>
+      <td><button class="btn btn-sm btn-primary" onclick="modAction('${i.id}','approve')"><i class="fas fa-check"></i></button> <button class="btn btn-sm btn-danger" onclick="modAction('${i.id}','reject')"><i class="fas fa-ban"></i></button></td></tr>`).join('')}
+      </table>
+      ${!d.items.length ? '<div class="empty"><i class="fas fa-shield-alt"></i><p>No pending items</p></div>' : ''}
+    </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
+}
+
+async function modAction(id, action) { await api('/api/v1/moderation/' + id + '/action', { method: 'POST', body: JSON.stringify({ action }) }); loadModeration(); }
+
+// ─── 20. NOTIFICATIONS ───
+async function loadNotifications() {
+  const el = document.getElementById('pageContent');
+  try {
+    const d = await api('/api/v1/notifications');
+    el.innerHTML = `
+    <div class="table-wrap">
+      <div class="table-header"><h3>Notification Logs (${d.notifications.length})</h3></div>
+      <table><tr><th>Farmer</th><th>Channel</th><th>Type</th><th>Content</th><th>Status</th><th>Sent At</th></tr>
+      ${d.notifications.map(n => `<tr><td>${n.farmer_name || '-'}</td><td>${n.channel}</td><td>${n.type || '-'}</td><td style="max-width:300px">${n.content || '-'}</td><td><span class="status ${n.status}">${n.status}</span></td><td>${fmtDate(n.sent_at || n.created_at)}</td></tr>`).join('')}
+      </table>
+    </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
+}
+
+// ─── 21. ANALYTICS ───
+async function loadAnalytics() {
+  const el = document.getElementById('pageContent');
+  try {
+    const [overview, usage] = await Promise.all([api('/api/v1/analytics/overview'), api('/api/v1/analytics/usage')]);
+    el.innerHTML = `
+    <div class="tabs">
+      <div class="tab active" onclick="showAnalyticsTab('convTab',this)">Conversations</div>
+      <div class="tab" onclick="showAnalyticsTab('usageTab',this)">Usage & Costs</div>
+    </div>
+    <div id="convTab">
+      <div class="table-wrap">
+        <div class="table-header"><h3>Daily Conversations (Last 30 days)</h3></div>
+        <table><tr><th>Date</th><th>Conversations</th><th>Active Farmers</th></tr>
+        ${overview.daily.map(d => `<tr><td>${d.date}</td><td>${d.conversations}</td><td>${d.active_farmers}</td></tr>`).join('')}
+        </table>
+      </div>
+      <div class="form-row">
+        <div class="table-wrap"><div class="table-header"><h3>Top Intents</h3></div>
+          <table><tr><th>Intent</th><th>Count</th></tr>${overview.by_intent.map(i => `<tr><td>${i.intent}</td><td>${i.count}</td></tr>`).join('')}</table></div>
+        <div class="table-wrap"><div class="table-header"><h3>Farmer Growth</h3></div>
+          <table><tr><th>Date</th><th>New Farmers</th></tr>${overview.farmer_growth.map(g => `<tr><td>${g.date}</td><td>${g.new_farmers}</td></tr>`).join('')}</table></div>
+      </div>
+    </div>
+    <div id="usageTab" style="display:none">
+      <div class="table-wrap">
+        <div class="table-header"><h3>Usage by Feature</h3></div>
+        <table><tr><th>Feature</th><th>Count</th><th>Cost (₹)</th></tr>
+        ${usage.by_feature.map(f => `<tr><td>${f.feature}</td><td>${f.count}</td><td>₹${(+f.total_cost).toFixed(2)}</td></tr>`).join('')}
+        </table>
+      </div>
+      <div class="table-wrap">
+        <div class="table-header"><h3>Daily Costs</h3></div>
+        <table><tr><th>Date</th><th>Cost (₹)</th></tr>
+        ${usage.costs.map(c => `<tr><td>${c.date}</td><td>₹${(+c.cost).toFixed(2)}</td></tr>`).join('')}
+        </table>
+      </div>
+    </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error loading analytics</p></div>'; }
+}
+
+function showAnalyticsTab(tabId, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('convTab').style.display = tabId === 'convTab' ? 'block' : 'none';
+  document.getElementById('usageTab').style.display = tabId === 'usageTab' ? 'block' : 'none';
+}
+
+// ─── 22. SERVICES ───
+async function loadServices() {
+  const el = document.getElementById('pageContent');
+  el.innerHTML = '<div class="stats-grid">' + SVCS.map(s => `<div class="stat-card" id="svc-${s.name.replace(/\s/g,'')}"><div class="stat-icon"><i class="fas fa-spinner fa-spin"></i></div><div class="stat-value">${s.name}</div><div class="stat-label">Checking...</div></div>`).join('') + '</div>';
+  for (const s of SVCS) {
+    try {
+      const r = await fetch(s.url).then(r => r.json());
+      const card = document.getElementById('svc-' + s.name.replace(/\s/g, ''));
+      card.className = 'stat-card' + (r.status === 'healthy' ? '' : ' danger');
+      card.innerHTML = `<div class="stat-icon"><i class="fas ${r.status === 'healthy' ? 'fa-check-circle' : 'fa-times-circle'}" style="color:${r.status === 'healthy' ? '#4CAF50' : '#E53935'}"></i></div><div class="stat-value">${s.name}</div><div class="stat-label"><span class="status ${r.status === 'healthy' ? 'healthy' : 'unhealthy'}">${r.status}</span> · DB: ${r.database || '?'} · Redis: ${r.redis || '?'}</div>`;
+    } catch (e) {
+      const card = document.getElementById('svc-' + s.name.replace(/\s/g, ''));
+      card.className = 'stat-card danger';
+      card.innerHTML = `<div class="stat-icon"><i class="fas fa-times-circle" style="color:#E53935"></i></div><div class="stat-value">${s.name}</div><div class="stat-label"><span class="status unhealthy">Unreachable</span></div>`;
     }
-    c.innerHTML=`
-    <div class="card"><div class="card-header"><h3>Farmers (${d.total||0})</h3>
-        <div><input class="search-box" placeholder="Search farmers..." onkeyup="searchFarmers(this.value)">
-        </div></div>
-    <div class="card-body">${d.farmers?.length?`<table><thead><tr><th>Name</th><th>Phone</th><th>Village</th><th>Crops</th><th>Stage</th><th>Status</th><th>Joined</th></tr></thead><tbody id="farmersBody">${rows}</tbody></table>`:'<div class="empty-state"><i class="fas fa-users"></i>No farmers registered yet</div>'}</div></div>`;
+  }
 }
 
-async function searchFarmers(q){
-    const d=await api(`/api/v1/farmers?limit=100&search=${encodeURIComponent(q)}`);
-    let rows='';
-    d.farmers?.forEach(f=>{
-        const badge=f.status==='active'?'badge-green':'badge-gray';
-        rows+=`<tr onclick="viewFarmer('${f.id}')" style="cursor:pointer"><td><strong>${f.name||'-'}</strong></td><td>${f.phone}</td><td>${f.village||'-'}</td><td>${(f.crops||[]).join(', ')||'-'}</td><td><span class="badge badge-yellow">${f.onboarding_stage||'new'}</span></td><td><span class="badge ${badge}">${f.status}</span></td><td>${new Date(f.created_at).toLocaleDateString()}</td></tr>`;
-    });
-    document.getElementById('farmersBody').innerHTML=rows||'<tr><td colspan="7" style="text-align:center;color:#aaa">No results</td></tr>';
+// ─── 23. ADMIN USERS ───
+async function loadAdminUsers() {
+  const el = document.getElementById('pageContent');
+  try {
+    const d = await api('/api/v1/admin-users');
+    el.innerHTML = `
+    <div class="table-wrap">
+      <div class="table-header"><h3>Admin Users (${d.users.length})</h3><button class="btn btn-primary btn-sm" onclick="newAdminModal()"><i class="fas fa-plus"></i> Add User</button></div>
+      <table><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last Login</th></tr>
+      ${d.users.map(u => `<tr><td><strong>${u.name}</strong></td><td>${u.email}</td><td><span class="tag">${u.role}</span></td><td><span class="status ${u.status}">${u.status}</span></td><td>${u.last_login_at ? timeAgo(u.last_login_at) : 'Never'}</td></tr>`).join('')}
+      </table>
+    </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
 }
 
-async function viewFarmer(id){
-    const d=await api(`/api/v1/farmers/${id}`);const f=d.farmer;
-    let convHtml='';d.conversations?.forEach(c=>{
-        convHtml+=`<div class="msg ${c.direction==='inbound'?'msg-in':'msg-out'}">${c.content||'[media]'}<div class="time">${new Date(c.created_at).toLocaleString()}</div></div>`;
-    });
-    openModal('Farmer Details',`
-        <div class="form-row"><div class="form-group"><label>Name</label><input id="ef_name" value="${f.name||''}"></div>
-        <div class="form-group"><label>Phone</label><input value="${f.phone}" disabled></div></div>
-        <div class="form-row"><div class="form-group"><label>Village</label><input id="ef_village" value="${f.village||''}"></div>
-        <div class="form-group"><label>Language</label><select id="ef_lang"><option value="hi" ${f.language==='hi'?'selected':''}>Hindi</option><option value="en" ${f.language==='en'?'selected':''}>English</option><option value="mr" ${f.language==='mr'?'selected':''}>Marathi</option><option value="te" ${f.language==='te'?'selected':''}>Telugu</option></select></div></div>
-        <div class="form-row"><div class="form-group"><label>Status</label><select id="ef_status"><option value="active" ${f.status==='active'?'selected':''}>Active</option><option value="blocked" ${f.status==='blocked'?'selected':''}>Blocked</option><option value="inactive" ${f.status==='inactive'?'selected':''}>Inactive</option></select></div>
-        <div class="form-group"><label>Land (acres)</label><input id="ef_land" type="number" value="${f.land_holding_acres||''}"></div></div>
-        <h4 style="margin:16px 0 8px">Recent Conversations</h4>
-        <div style="max-height:300px;overflow-y:auto;background:#f0f2f5;border-radius:8px;padding:12px;display:flex;flex-direction:column">${convHtml||'<div class="empty-state">No conversations yet</div>'}</div>
-    `,`<button class="btn btn-primary" onclick="saveFarmer('${f.id}')">Save Changes</button>`);
+function newAdminModal() {
+  openModal('Add Admin User', `
+    <div class="form-row"><div class="form-group"><label>Name</label><input id="auName"></div><div class="form-group"><label>Email</label><input id="auEmail" type="email"></div></div>
+    <div class="form-row"><div class="form-group"><label>Password</label><input id="auPass" type="password"></div><div class="form-group"><label>Role</label><select id="auRole"><option value="admin">Admin</option><option value="manager">Manager</option><option value="viewer">Viewer</option></select></div></div>
+  `, `<button class="btn btn-primary" onclick="createAdmin()"><i class="fas fa-save"></i> Create</button>`);
 }
 
-async function saveFarmer(id){
-    await api(`/api/v1/farmers/${id}`,{method:'PUT',body:JSON.stringify({
-        name:document.getElementById('ef_name').value,village:document.getElementById('ef_village').value,
-        language:document.getElementById('ef_lang').value,status:document.getElementById('ef_status').value,
-        land_holding_acres:document.getElementById('ef_land').value||null
-    })});closeModal();loadFarmers();
+async function createAdmin() {
+  await api('/api/v1/admin-users', { method: 'POST', body: JSON.stringify({
+    name: document.getElementById('auName').value, email: document.getElementById('auEmail').value,
+    password: document.getElementById('auPass').value, role: document.getElementById('auRole').value
+  })});
+  closeModal(); loadAdminUsers();
 }
 
-// ===== CONVERSATIONS =====
-async function loadConversations(){
-    const d=await api('/api/v1/conversations?limit=100');const c=document.getElementById('pageContent');
-    let items='';const grouped={};
-    d.conversations?.forEach(cv=>{
-        const key=cv.farmer_id;
-        if(!grouped[key])grouped[key]={name:cv.farmer_name||cv.farmer_phone,phone:cv.farmer_phone,id:key,messages:[],last:cv.created_at,preview:cv.content};
-        grouped[key].messages.push(cv);
-    });
-    Object.values(grouped).sort((a,b)=>new Date(b.last)-new Date(a.last)).forEach(g=>{
-        items+=`<div class="chat-item" onclick="openChat('${g.id}','${g.name}')">
-            <span class="time">${new Date(g.last).toLocaleTimeString()}</span>
-            <div class="name">${g.name||g.phone}</div><div class="preview">${g.preview||'...'}</div></div>`;
-    });
-    c.innerHTML=`<div class="chat-container"><div class="chat-list">${items||'<div class="empty-state"><i class="fas fa-comments"></i>No conversations</div>'}</div>
-    <div class="chat-messages" id="chatArea"><div class="messages-area"><div class="empty-state"><i class="fas fa-comment-dots"></i>Select a conversation</div></div></div></div>`;
+// ─── 24. AUDIT LOG ───
+async function loadAuditLog() {
+  const el = document.getElementById('pageContent');
+  try {
+    const d = await api('/api/v1/audit-log');
+    el.innerHTML = `
+    <div class="table-wrap">
+      <div class="table-header"><h3>Audit Log (${d.logs.length})</h3></div>
+      <table><tr><th>Event</th><th>Entity</th><th>Action</th><th>Actor</th><th>Severity</th><th>Date</th></tr>
+      ${d.logs.map(l => `<tr><td>${l.event_type || '-'}</td><td>${l.entity_type || '-'}:${l.entity_id || ''}</td><td>${l.action || '-'}</td><td>${l.actor_type || '-'}:${(l.actor_id || '').substring(0,8)}</td><td><span class="status ${l.severity}">${l.severity}</span></td><td>${fmtDate(l.created_at)}</td></tr>`).join('')}
+      </table>
+      ${!d.logs.length ? '<div class="empty"><p>No audit logs yet</p></div>' : ''}
+    </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
 }
 
-async function openChat(farmerId,name){
-    selectedFarmer=farmerId;
-    const d=await api(`/api/v1/farmers/${farmerId}`);
-    let msgs='';d.conversations?.reverse().forEach(c=>{
-        msgs+=`<div class="msg ${c.direction==='inbound'?'msg-in':'msg-out'}">${c.content||'[media]'}<div class="time">${new Date(c.created_at).toLocaleString()}</div></div>`;
-    });
-    document.getElementById('chatArea').innerHTML=`
-        <div style="padding:12px 16px;background:#fff;border-bottom:1px solid #eee;font-weight:600">${name} <span style="font-weight:400;color:#888;font-size:12px">${d.farmer?.phone||''}</span></div>
-        <div class="messages-area" id="msgsArea" style="display:flex;flex-direction:column">${msgs||'<div class="empty-state">No messages</div>'}</div>
-        <div class="reply-box"><input id="replyInput" placeholder="Type a reply..." onkeypress="if(event.key==='Enter')sendReply()"><button onclick="sendReply()"><i class="fas fa-paper-plane"></i></button></div>`;
-    document.getElementById('msgsArea').scrollTop=99999;
-}
-
-async function sendReply(){
-    const msg=document.getElementById('replyInput').value;if(!msg||!selectedFarmer)return;
-    document.getElementById('replyInput').value='';
-    await api('/api/v1/conversations/reply',{method:'POST',body:JSON.stringify({farmer_id:selectedFarmer,message:msg})});
-    const area=document.getElementById('msgsArea');
-    area.innerHTML+=`<div class="msg msg-out">${msg}<div class="time">Just now</div></div>`;
-    area.scrollTop=99999;
-}
-
-// ===== TEMPLATES =====
-async function loadTemplates(){
-    const d=await api('/api/v1/templates');const c=document.getElementById('pageContent');
-    let rows='';
-    d.templates?.forEach(t=>{
-        const sBadge=t.status==='active'?'badge-green':t.status==='draft'?'badge-yellow':'badge-gray';
-        const aBadge=t.wa_approved?'badge-green':'badge-yellow';
-        rows+=`<tr><td><strong>${t.name}</strong></td><td>${t.category||'-'}</td><td>${t.language}</td>
-        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.template_text}</td>
-        <td><span class="badge ${sBadge}">${t.status}</span></td><td><span class="badge ${aBadge}">${t.wa_approved?'Approved':'Pending'}</span></td>
-        <td><button class="btn btn-sm btn-outline" onclick="editTemplate('${t.id}')"><i class="fas fa-edit"></i></button>
-        <button class="btn btn-sm btn-danger" onclick="deleteTemplate('${t.id}')"><i class="fas fa-trash"></i></button></td></tr>`;
-    });
-    c.innerHTML=`<div class="card"><div class="card-header"><h3>Message Templates</h3><button class="btn btn-sm btn-primary" onclick="newTemplate()"><i class="fas fa-plus"></i> New Template</button></div>
-    <div class="card-body">${d.templates?.length?`<table><thead><tr><th>Name</th><th>Category</th><th>Language</th><th>Text</th><th>Status</th><th>WA Approved</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="empty-state"><i class="fas fa-file-alt"></i>No templates yet. Create one!</div>'}</div></div>`;
-}
-
-function newTemplate(){
-    openModal('New Template',`
-        <div class="form-group"><label>Template Name</label><input id="t_name" placeholder="e.g. welcome_message"></div>
-        <div class="form-row"><div class="form-group"><label>Category</label><select id="t_cat"><option value="utility">Utility</option><option value="marketing">Marketing</option><option value="authentication">Authentication</option></select></div>
-        <div class="form-group"><label>Language</label><select id="t_lang"><option value="hi">Hindi</option><option value="en">English</option><option value="mr">Marathi</option></select></div></div>
-        <div class="form-group"><label>Template Text</label><textarea id="t_text" placeholder="Use {{1}}, {{2}} for variables"></textarea></div>
-        <div class="form-group"><label>WA Template Name</label><input id="t_wa" placeholder="WhatsApp template name"></div>
-    `,`<button class="btn btn-primary" onclick="saveTemplate()">Create Template</button>`);
-}
-
-async function saveTemplate(){
-    const body={name:document.getElementById('t_name').value,category:document.getElementById('t_cat').value,language:document.getElementById('t_lang').value,template_text:document.getElementById('t_text').value,wa_template_name:document.getElementById('t_wa').value};
-    await api('/api/v1/templates',{method:'POST',body:JSON.stringify(body)});closeModal();loadTemplates();
-}
-
-async function deleteTemplate(id){if(!confirm('Delete this template?'))return;await api(`/api/v1/templates/${id}`,{method:'DELETE'});loadTemplates();}
-
-// ===== CAMPAIGNS =====
-async function loadCampaigns(){
-    const d=await api('/api/v1/campaigns');const c=document.getElementById('pageContent');
-    let rows='';
-    d.campaigns?.forEach(cp=>{
-        const badge=cp.status==='active'||cp.status==='running'?'badge-green':cp.status==='draft'?'badge-yellow':cp.status==='completed'?'badge-blue':'badge-gray';
-        rows+=`<tr><td><strong>${cp.name}</strong></td><td>${cp.template_name||'-'}</td><td>${cp.target_count}</td>
-        <td>${cp.sent_count}/${cp.delivered_count}</td><td><span class="badge ${badge}">${cp.status}</span></td>
-        <td>${cp.scheduled_at?new Date(cp.scheduled_at).toLocaleString():'-'}</td></tr>`;
-    });
-    c.innerHTML=`<div class="card"><div class="card-header"><h3>Campaigns</h3><button class="btn btn-sm btn-primary" onclick="newCampaign()"><i class="fas fa-plus"></i> New Campaign</button></div>
-    <div class="card-body">${d.campaigns?.length?`<table><thead><tr><th>Name</th><th>Template</th><th>Target</th><th>Sent/Delivered</th><th>Status</th><th>Scheduled</th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="empty-state"><i class="fas fa-bullhorn"></i>No campaigns yet</div>'}</div></div>`;
-}
-
-async function newCampaign(){
-    const t=await api('/api/v1/templates');
-    let opts='<option value="">Select template</option>';t.templates?.forEach(tp=>{opts+=`<option value="${tp.id}">${tp.name}</option>`;});
-    openModal('New Campaign',`
-        <div class="form-group"><label>Campaign Name</label><input id="c_name" placeholder="e.g. Rabi Season Tips"></div>
-        <div class="form-group"><label>Template</label><select id="c_template">${opts}</select></div>
-        <div class="form-group"><label>Target Crop (optional)</label><input id="c_crop" placeholder="e.g. wheat"></div>
-        <div class="form-group"><label>Schedule (optional)</label><input id="c_schedule" type="datetime-local"></div>
-    `,`<button class="btn btn-primary" onclick="saveCampaign()">Create Campaign</button>`);
-}
-
-async function saveCampaign(){
-    const body={name:document.getElementById('c_name').value,template_id:document.getElementById('c_template').value||null,
-        target_criteria:{crop:document.getElementById('c_crop').value||null},scheduled_at:document.getElementById('c_schedule').value||null};
-    await api('/api/v1/campaigns',{method:'POST',body:JSON.stringify(body)});closeModal();loadCampaigns();
-}
-
-// ===== REWARDS =====
-async function loadRewards(){
-    const d=await api('/api/v1/rewards');const c=document.getElementById('pageContent');
-    let rows='',statsHtml='';
-    d.stats?.forEach(s=>{statsHtml+=`<div class="stat-card"><div class="label">${s.type}</div><div class="value">${s.total_points||0}</div><div class="sub">${s.count} rewards</div></div>`;});
-    d.rewards?.forEach(r=>{
-        rows+=`<tr><td>${r.farmer_name||'-'}</td><td>${r.farmer_phone||'-'}</td><td>${r.type}</td><td><strong>${r.points}</strong></td><td>${r.description||'-'}</td><td><span class="badge badge-green">${r.status}</span></td><td>${new Date(r.created_at).toLocaleDateString()}</td></tr>`;
-    });
-    c.innerHTML=`<div class="stats-grid">${statsHtml}</div>
-    <div class="card"><div class="card-header"><h3>Rewards History</h3><button class="btn btn-sm btn-primary" onclick="newReward()"><i class="fas fa-plus"></i> Give Reward</button></div>
-    <div class="card-body">${rows?`<table><thead><tr><th>Farmer</th><th>Phone</th><th>Type</th><th>Points</th><th>Description</th><th>Status</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="empty-state"><i class="fas fa-gift"></i>No rewards yet</div>'}</div></div>`;
-}
-
-function newReward(){
-    openModal('Give Reward',`
-        <div class="form-group"><label>Farmer ID</label><input id="r_farmer" placeholder="Farmer UUID"></div>
-        <div class="form-row"><div class="form-group"><label>Type</label><select id="r_type"><option value="signup">Signup</option><option value="referral">Referral</option><option value="engagement">Engagement</option><option value="feedback">Feedback</option><option value="manual">Manual</option></select></div>
-        <div class="form-group"><label>Points</label><input id="r_points" type="number" value="10"></div></div>
-        <div class="form-group"><label>Description</label><input id="r_desc" placeholder="Reason for reward"></div>
-    `,`<button class="btn btn-primary" onclick="saveReward()">Give Reward</button>`);
-}
-
-async function saveReward(){
-    await api('/api/v1/rewards',{method:'POST',body:JSON.stringify({farmer_id:document.getElementById('r_farmer').value,type:document.getElementById('r_type').value,points:+document.getElementById('r_points').value,description:document.getElementById('r_desc').value})});
-    closeModal();loadRewards();
-}
-
-// ===== REFERRALS =====
-async function loadReferrals(){
-    const d=await api('/api/v1/referrals');const c=document.getElementById('pageContent');
-    let codeRows='',refRows='';
-    d.codes?.forEach(rc=>{
-        codeRows+=`<tr><td><strong>${rc.code}</strong></td><td>${rc.farmer_name||'-'}</td><td>${rc.farmer_phone||'-'}</td><td>${rc.total_uses}/${rc.max_uses}</td><td><span class="badge badge-green">${rc.status}</span></td></tr>`;
-    });
-    d.referrals?.forEach(r=>{
-        refRows+=`<tr><td>${r.referrer_name||'-'}</td><td>${r.referee_name||'-'}</td><td><span class="badge badge-${r.status==='qualified'?'green':'yellow'}">${r.status}</span></td><td>${new Date(r.created_at).toLocaleDateString()}</td></tr>`;
-    });
-    c.innerHTML=`
-    <div class="card"><div class="card-header"><h3>Referral Codes</h3></div>
-    <div class="card-body">${codeRows?`<table><thead><tr><th>Code</th><th>Farmer</th><th>Phone</th><th>Uses</th><th>Status</th></tr></thead><tbody>${codeRows}</tbody></table>`:'<div class="empty-state"><i class="fas fa-share-alt"></i>No referral codes yet</div>'}</div></div>
-    <div class="card"><div class="card-header"><h3>Referral History</h3></div>
-    <div class="card-body">${refRows?`<table><thead><tr><th>Referrer</th><th>Referee</th><th>Status</th><th>Date</th></tr></thead><tbody>${refRows}</tbody></table>`:'<div class="empty-state">No referrals yet</div>'}</div></div>`;
-}
-
-// ===== SCHEMES =====
-async function loadSchemes(){
-    const d=await api('/api/v1/schemes');const c=document.getElementById('pageContent');
-    let rows='';
-    d.schemes?.forEach(s=>{
-        rows+=`<tr><td><strong>${s.name}</strong></td><td>${s.department||'-'}</td><td><span class="badge badge-blue">${s.level}</span></td><td>${s.state_code||'All'}</td><td><span class="badge badge-green">${s.status}</span></td><td>${s.deadline?new Date(s.deadline).toLocaleDateString():'-'}</td></tr>`;
-    });
-    c.innerHTML=`<div class="card"><div class="card-header"><h3>Government Schemes</h3><button class="btn btn-sm btn-primary" onclick="newScheme()"><i class="fas fa-plus"></i> Add Scheme</button></div>
-    <div class="card-body">${rows?`<table><thead><tr><th>Name</th><th>Department</th><th>Level</th><th>State</th><th>Status</th><th>Deadline</th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="empty-state"><i class="fas fa-landmark"></i>No schemes yet. Add one!</div>'}</div></div>`;
-}
-
-function newScheme(){
-    openModal('Add Government Scheme',`
-        <div class="form-group"><label>Scheme Name (English)</label><input id="s_name"></div>
-        <div class="form-group"><label>Scheme Name (Hindi)</label><input id="s_name_hi"></div>
-        <div class="form-row"><div class="form-group"><label>Department</label><input id="s_dept"></div>
-        <div class="form-group"><label>Level</label><select id="s_level"><option value="central">Central</option><option value="state">State</option></select></div></div>
-        <div class="form-group"><label>Description (English)</label><textarea id="s_desc"></textarea></div>
-        <div class="form-group"><label>Benefits (English)</label><textarea id="s_benefits"></textarea></div>
-        <div class="form-row"><div class="form-group"><label>Application URL</label><input id="s_url"></div>
-        <div class="form-group"><label>Helpline</label><input id="s_helpline"></div></div>
-        <div class="form-group"><label>Deadline</label><input id="s_deadline" type="date"></div>
-    `,`<button class="btn btn-primary" onclick="saveScheme()">Add Scheme</button>`);
-}
-
-async function saveScheme(){
-    await api('/api/v1/schemes',{method:'POST',body:JSON.stringify({name:document.getElementById('s_name').value,name_hi:document.getElementById('s_name_hi').value,department:document.getElementById('s_dept').value,level:document.getElementById('s_level').value,description:document.getElementById('s_desc').value,benefits:document.getElementById('s_benefits').value,application_url:document.getElementById('s_url').value,helpline:document.getElementById('s_helpline').value,deadline:document.getElementById('s_deadline').value||null})});
-    closeModal();loadSchemes();
-}
-
-// ===== PRODUCTS =====
-async function loadProducts(){
-    const d=await api('/api/v1/products');const c=document.getElementById('pageContent');
-    let rows='';
-    d.products?.forEach(p=>{
-        rows+=`<tr><td><strong>${p.name}</strong></td><td>${p.brand||'-'}</td><td>${p.category||'-'}</td><td>${p.registration_number||'-'}</td><td><span class="badge ${p.verified?'badge-green':'badge-yellow'}">${p.verified?'Verified':'Unverified'}</span></td></tr>`;
-    });
-    c.innerHTML=`<div class="card"><div class="card-header"><h3>Products</h3><button class="btn btn-sm btn-primary" onclick="newProduct()"><i class="fas fa-plus"></i> Add Product</button></div>
-    <div class="card-body">${rows?`<table><thead><tr><th>Name</th><th>Brand</th><th>Category</th><th>Reg. No.</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="empty-state"><i class="fas fa-box"></i>No products yet</div>'}</div></div>`;
-}
-
-function newProduct(){
-    openModal('Add Product',`
-        <div class="form-row"><div class="form-group"><label>Product Name</label><input id="p_name"></div>
-        <div class="form-group"><label>Brand</label><input id="p_brand"></div></div>
-        <div class="form-row"><div class="form-group"><label>Category</label><select id="p_cat"><option value="pesticide">Pesticide</option><option value="fertilizer">Fertilizer</option><option value="herbicide">Herbicide</option><option value="seed">Seed</option><option value="equipment">Equipment</option></select></div>
-        <div class="form-group"><label>Registration Number</label><input id="p_reg"></div></div>
-        <div class="form-group"><label>Dosage</label><input id="p_dosage"></div>
-        <div class="form-group"><label>Safety Info</label><textarea id="p_safety"></textarea></div>
-    `,`<button class="btn btn-primary" onclick="saveProduct()">Add Product</button>`);
-}
-
-async function saveProduct(){
-    await api('/api/v1/products',{method:'POST',body:JSON.stringify({name:document.getElementById('p_name').value,brand:document.getElementById('p_brand').value,category:document.getElementById('p_cat').value,registration_number:document.getElementById('p_reg').value,dosage:document.getElementById('p_dosage').value,safety_info:document.getElementById('p_safety').value})});
-    closeModal();loadProducts();
-}
-
-// ===== MANDI =====
-async function loadMandi(){
-    const d=await api('/api/v1/mandi-prices');const c=document.getElementById('pageContent');
-    let rows='';
-    d.prices?.forEach(p=>{
-        rows+=`<tr><td><strong>${p.commodity}</strong></td><td>${p.variety||'-'}</td><td>${p.market_name}</td><td>${p.district||'-'}</td><td>${p.min_price||'-'}</td><td>${p.max_price||'-'}</td><td><strong>${p.modal_price||'-'}</strong></td><td>${p.price_date}</td></tr>`;
-    });
-    c.innerHTML=`<div class="card"><div class="card-header"><h3>Mandi Prices</h3><div><input class="search-box" id="mandiSearch" placeholder="Search commodity..." onkeyup="searchMandi()"></div></div>
-    <div class="card-body">${rows?`<table><thead><tr><th>Commodity</th><th>Variety</th><th>Market</th><th>District</th><th>Min</th><th>Max</th><th>Modal</th><th>Date</th></tr></thead><tbody id="mandiBody">${rows}</tbody></table>`:'<div class="empty-state"><i class="fas fa-store"></i>No mandi prices loaded yet. Connect data.gov.in API to fetch prices.</div>'}</div></div>`;
-}
-
-async function searchMandi(){
-    const q=document.getElementById('mandiSearch').value;
-    const d=await api(`/api/v1/mandi-prices?commodity=${encodeURIComponent(q)}`);
-    let rows='';
-    d.prices?.forEach(p=>{rows+=`<tr><td><strong>${p.commodity}</strong></td><td>${p.variety||'-'}</td><td>${p.market_name}</td><td>${p.district||'-'}</td><td>${p.min_price||'-'}</td><td>${p.max_price||'-'}</td><td><strong>${p.modal_price||'-'}</strong></td><td>${p.price_date}</td></tr>`;});
-    document.getElementById('mandiBody').innerHTML=rows||'<tr><td colspan="8" style="text-align:center;color:#aaa">No results</td></tr>';
-}
-
-// ===== MODERATION =====
-async function loadModeration(){
-    const d=await api('/api/v1/moderation');const c=document.getElementById('pageContent');
-    let rows='';
-    d.items?.forEach(m=>{
-        rows+=`<tr><td>${m.farmer_name||'-'}</td><td>${m.farmer_phone||'-'}</td><td>${m.content_type}</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${m.content||'-'}</td>
-        <td>${(m.flags||[]).join(', ')}</td><td>${m.detection_score||'-'}</td>
-        <td><button class="btn btn-sm btn-success" onclick="moderateAction('${m.id}','approve')"><i class="fas fa-check"></i></button>
-        <button class="btn btn-sm btn-danger" onclick="moderateAction('${m.id}','reject')"><i class="fas fa-times"></i></button></td></tr>`;
-    });
-    c.innerHTML=`<div class="card"><div class="card-header"><h3>Moderation Queue</h3></div>
-    <div class="card-body">${rows?`<table><thead><tr><th>Farmer</th><th>Phone</th><th>Type</th><th>Content</th><th>Flags</th><th>Score</th><th>Action</th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="empty-state"><i class="fas fa-shield-alt"></i>No items pending moderation</div>'}</div></div>`;
-}
-
-async function moderateAction(id,action){
-    const reason=prompt(`Reason for ${action}:`);if(reason===null)return;
-    await api(`/api/v1/moderation/${id}/action`,{method:'POST',body:JSON.stringify({action,reason})});loadModeration();
-}
-
-// ===== SERVICES =====
-async function loadServices(){
-    const c=document.getElementById('pageContent');let html='<div class="services-grid">';
-    for(const s of SVCS){
-        try{
-            const r=await fetch(s.url);const d=await r.json();const h=d.status==='healthy';
-            html+=`<div class="service-card ${h?'healthy':'unhealthy'}"><div class="svc-name">${s.name}</div><div class="svc-url">${s.url.replace('/health','')}</div>
-            <div style="margin-top:8px"><span class="dot ${h?'dot-green':'dot-red'}"></span><strong>${h?'Healthy':'Unhealthy'}</strong></div>
-            <div style="margin-top:8px;font-size:12px;color:#888">DB: ${d.database||'N/A'} | Redis: ${d.redis||'N/A'}</div>
-            ${d.timestamp?`<div style="font-size:11px;color:#aaa;margin-top:4px">Last check: ${new Date(d.timestamp).toLocaleString()}</div>`:''}</div>`;
-        }catch(e){html+=`<div class="service-card unhealthy"><div class="svc-name">${s.name}</div><div class="svc-url">${s.url.replace('/health','')}</div><div style="margin-top:8px"><span class="dot dot-red"></span>Unreachable</div></div>`;}
-    }
-    html+='</div>';c.innerHTML=html;
-}
-
-// ===== ANALYTICS =====
-async function loadAnalytics(){
-    const d=await api('/api/v1/analytics/usage');const c=document.getElementById('pageContent');
-    let dailyRows='',featureRows='';
-    d.daily?.forEach(r=>{dailyRows+=`<tr><td>${r.date}</td><td>${r.count}</td><td>${r.tokens||0}</td><td>₹${parseFloat(r.cost||0).toFixed(4)}</td></tr>`;});
-    d.by_feature?.forEach(r=>{featureRows+=`<tr><td>${r.feature}</td><td>${r.count}</td></tr>`;});
-    c.innerHTML=`
-    <div class="card"><div class="card-header"><h3>Daily Usage (30 days)</h3></div>
-    <div class="card-body">${dailyRows?`<table><thead><tr><th>Date</th><th>Requests</th><th>Tokens</th><th>Cost</th></tr></thead><tbody>${dailyRows}</tbody></table>`:'<div class="empty-state"><i class="fas fa-chart-bar"></i>No usage data yet</div>'}</div></div>
-    <div class="card"><div class="card-header"><h3>Usage by Feature</h3></div>
-    <div class="card-body">${featureRows?`<table><thead><tr><th>Feature</th><th>Count</th></tr></thead><tbody>${featureRows}</tbody></table>`:'<div class="empty-state">No feature data yet</div>'}</div></div>`;
-}
-
-// ===== MODAL =====
-function openModal(title,body,footer=''){
-    document.getElementById('modalTitle').textContent=title;
-    document.getElementById('modalBody').innerHTML=body;
-    document.getElementById('modalFooter').innerHTML=footer;
-    document.getElementById('modal').classList.add('show');
-}
-function closeModal(){document.getElementById('modal').classList.remove('show');}
-document.getElementById('modal').addEventListener('click',function(e){if(e.target===this)closeModal();});
+// ─── INIT ───
+if (TOKEN && USER) showApp();
 </script>
 </body>
 </html>
