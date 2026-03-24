@@ -15,18 +15,44 @@ app.use(morgan('combined'));
 app.use(express.json());
 
 // Database connection
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
+let pool = null;
+try {
+  const dbUrl = process.env.DATABASE_URL;
+  if (dbUrl && dbUrl !== 'placeholder') {
+    pool = new Pool({
+      connectionString: dbUrl,
+      ssl: { rejectUnauthorized: false },
+      max: 5,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000
+    });
+    pool.on('error', (err) => console.error('DB pool error:', err.message));
+    console.log('Database pool created');
+  }
+} catch (err) {
+  console.error('DB init error:', err.message);
+}
 
-// Redis connection
+// Redis connection (Upstash compatible)
 let redis = null;
 try {
-  if (process.env.REDIS_URL && process.env.REDIS_URL !== 'placeholder') {
-    redis = new Redis(process.env.REDIS_URL);
+  const redisUrl = process.env.REDIS_URL;
+  if (redisUrl && redisUrl !== 'placeholder') {
+    redis = new Redis(redisUrl, {
+      maxRetriesPerRequest: 3,
+      retryStrategy(times) {
+        if (times > 3) return null;
+        return Math.min(times * 200, 2000);
+      },
+      reconnectOnError(err) {
+        return err.message.includes('READONLY');
+      },
+      tls: {},
+      lazyConnect: true
+    });
     redis.on('error', (err) => console.error('Redis error:', err.message));
     redis.on('connect', () => console.log('Redis connected'));
+    redis.connect().catch((err) => console.error('Redis connect failed:', err.message));
   }
 } catch (err) {
   console.error('Redis init error:', err.message);
@@ -34,18 +60,35 @@ try {
 
 // Health check
 app.get('/health', async (req, res) => {
+  let dbStatus = 'not configured';
+  let dbTime = null;
   try {
-    const dbResult = await pool.query('SELECT NOW()');
-    res.json({
-      status: 'healthy',
-      service: 'whatsapp-gateway',
-      timestamp: dbResult.rows[0].now,
-      database: 'connected',
-      redis: redis ? 'connected' : 'not configured'
-    });
+    if (pool) {
+      const result = await pool.query('SELECT NOW()');
+      dbStatus = 'connected';
+      dbTime = result.rows[0].now;
+    }
   } catch (err) {
-    res.status(500).json({ status: 'unhealthy', error: err.message });
+    dbStatus = 'error: ' + err.message;
   }
+
+  let redisStatus = 'not configured';
+  try {
+    if (redis) {
+      await redis.ping();
+      redisStatus = 'connected';
+    }
+  } catch (err) {
+    redisStatus = 'error: ' + err.message;
+  }
+
+  res.json({
+    status: dbStatus === 'connected' ? 'healthy' : 'degraded',
+    service: 'whatsapp-gateway',
+    timestamp: dbTime,
+    database: dbStatus,
+    redis: redisStatus
+  });
 });
 
 // WhatsApp webhook verification
@@ -67,14 +110,13 @@ app.post('/webhook', async (req, res) => {
     const body = req.body;
     console.log('Incoming webhook:', JSON.stringify(body).substring(0, 500));
 
-    if (body.object === 'whatsapp_business_account') {
+    if (body.object === 'whatsapp_business_account' && pool) {
       for (const entry of body.entry || []) {
         for (const change of entry.changes || []) {
           if (change.value.messages) {
             for (const message of change.value.messages) {
               console.log('Message from:', message.from, 'Text:', message.text?.body);
-              
-              // Store conversation
+
               await pool.query(
                 `INSERT INTO conversations (farmer_id, channel, direction, message_type, content, wa_message_id, created_at)
                  SELECT f.id, 'whatsapp', 'inbound', $1, $2, $3, NOW()
