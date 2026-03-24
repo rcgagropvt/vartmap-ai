@@ -1,57 +1,67 @@
-"""
-VartMap Intelligence Service – main FastAPI application.
-"""
-
-from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from prometheus_client import make_asgi_app
+import asyncpg
+import os
+import redis.asyncio as aioredis
 
-from src.config import settings
-from src.utils.logging import setup_logging
-from src.utils.db import db_pool
-from src.utils.redis_client import redis_pool
-from src.utils.embeddings import embedding_model
-from src.routes import process, health, admin, mandi, weather, schemes
-
-logger = setup_logging()
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Startup / shutdown lifecycle."""
-    logger.info("Starting Intelligence Service", version="1.0.0")
-    await db_pool.initialize()
-    await redis_pool.initialize()
-    embedding_model.load()
-    logger.info("All resources initialized")
-    yield
-    await db_pool.close()
-    await redis_pool.close()
-    logger.info("Intelligence Service stopped")
-
-
-app = FastAPI(
-    title="VartMap Intelligence Service",
-    version="1.0.0",
-    lifespan=lifespan,
-)
+app = FastAPI(title="VartMap Intelligence Service")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Prometheus metrics endpoint
-metrics_app = make_asgi_app()
-app.mount("/metrics", metrics_app)
+db_pool = None
+redis_client = None
 
-# Routes
-app.include_router(health.router, tags=["health"])
-app.include_router(process.router, prefix="/api/v1", tags=["process"])
-app.include_router(mandi.router, prefix="/api/v1/mandi", tags=["mandi"])
-app.include_router(weather.router, prefix="/api/v1/weather", tags=["weather"])
-app.include_router(schemes.router, prefix="/api/v1/schemes", tags=["schemes"])
-app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
+@app.on_event("startup")
+async def startup():
+    global db_pool, redis_client
+    try:
+        db_url = os.environ.get("DATABASE_URL", "")
+        if db_url and db_url != "placeholder":
+            db_pool = await asyncpg.create_pool(db_url, min_size=1, max_size=5, ssl="require")
+            print("Database connected")
+    except Exception as e:
+        print(f"Database connection error: {e}")
+
+    try:
+        redis_url = os.environ.get("REDIS_URL", "")
+        if redis_url and redis_url != "placeholder":
+            redis_client = aioredis.from_url(redis_url)
+            print("Redis connected")
+    except Exception as e:
+        print(f"Redis connection error: {e}")
+
+@app.on_event("shutdown")
+async def shutdown():
+    global db_pool, redis_client
+    if db_pool:
+        await db_pool.close()
+    if redis_client:
+        await redis_client.close()
+
+@app.get("/health")
+async def health():
+    db_status = "connected" if db_pool else "not connected"
+    redis_status = "connected" if redis_client else "not connected"
+    return {
+        "status": "healthy",
+        "service": "intelligence-service",
+        "database": db_status,
+        "redis": redis_status
+    }
+
+@app.post("/api/v1/process")
+async def process_message(payload: dict):
+    return {
+        "response": "Service is running. AI processing coming soon.",
+        "intent": "unknown",
+        "confidence": 0.0
+    }
+
+@app.get("/api/v1/status")
+async def status():
+    return {"status": "running", "service": "intelligence-service", "version": "1.0.0"}
