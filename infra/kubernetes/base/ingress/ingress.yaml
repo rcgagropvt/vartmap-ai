@@ -1,0 +1,66 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vartmap-ingress
+  namespace: vartmap
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    # WAF: basic protection
+    nginx.ingress.kubernetes.io/server-snippets: |
+      # Block suspicious user agents
+      if ($http_user_agent ~* (scanner|bot|curl|wget)) {
+        return 403;
+      }
+spec:
+  tls:
+    - hosts:
+        - api.vartmap.in
+        - admin.vartmap.in
+      secretName: vartmap-tls
+  rules:
+    # ─── WhatsApp Webhook (public) ───────────────
+    - host: api.vartmap.in
+      http:
+        paths:
+          - path: /api/v1/webhook/whatsapp
+            pathType: Prefix
+            backend:
+              service:
+                name: whatsapp-gateway
+                port:
+                  number: 3000
+
+          # ─── Internal API (send messages, etc.) ──
+          - path: /api/v1/internal
+            pathType: Prefix
+            backend:
+              service:
+                name: whatsapp-gateway
+                port:
+                  number: 3000
+
+    # ─── Admin API (authenticated) ───────────────
+    - host: admin.vartmap.in
+      http:
+        paths:
+          - path: /api/v1
+            pathType: Prefix
+            backend:
+              service:
+                name: admin-api
+                port:
+                  number: 8001
+
+          # ─── Admin Dashboard (static frontend) ──
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dashboard
+                port:
+                  number: 3000

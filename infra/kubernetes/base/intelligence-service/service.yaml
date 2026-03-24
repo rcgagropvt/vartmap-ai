@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: intelligence-service
+  namespace: vartmap
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: intelligence-service

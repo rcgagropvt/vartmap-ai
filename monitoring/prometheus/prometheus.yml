@@ -1,0 +1,111 @@
+# ═══════════════════════════════════════════════════════════════
+# VartMap — Prometheus Configuration
+# Scrape config for all services, recording rules, alert routing.
+# ═══════════════════════════════════════════════════════════════
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+  external_labels:
+    cluster: vartmap-production
+    environment: production
+
+# ─── Alert Rules ──────────────────────────────────────────────
+rule_files:
+  - /etc/prometheus/alert-rules.yml
+
+# ─── Alertmanager ─────────────────────────────────────────────
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager.vartmap.svc.cluster.local:9093
+
+# ─── Scrape Configurations ───────────────────────────────────
+scrape_configs:
+
+  # ═══ WhatsApp Gateway (Node.js) ═══
+  - job_name: whatsapp-gateway
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [vartmap]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        regex: whatsapp-gateway
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port]
+        target_label: __address__
+        regex: (.+)
+        replacement: ${1}
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_ip, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        target_label: __address__
+        regex: (.+);(.+)
+        replacement: $1:$2
+
+  # ═══ Intelligence Service (Python/FastAPI) ═══
+  - job_name: intelligence-service
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [vartmap]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        regex: intelligence-service
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_ip, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        target_label: __address__
+        regex: (.+);(.+)
+        replacement: $1:$2
+
+  # ═══ Admin API ═══
+  - job_name: admin-api
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [vartmap]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        regex: admin-api
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_ip, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        target_label: __address__
+        regex: (.+);(.+)
+        replacement: $1:$2
+
+  # ═══ Qdrant Vector DB ═══
+  - job_name: qdrant
+    static_configs:
+      - targets:
+          - qdrant.vartmap.svc.cluster.local:6333
+    metrics_path: /metrics
+
+  # ═══ Redis ═══
+  - job_name: redis
+    static_configs:
+      - targets:
+          - redis-exporter.vartmap.svc.cluster.local:9121
+
+  # ═══ PostgreSQL ═══
+  - job_name: postgres
+    static_configs:
+      - targets:
+          - postgres-exporter.vartmap.svc.cluster.local:9187
+
+  # ═══ Node Exporter (Kubernetes nodes) ═══
+  - job_name: node-exporter
+    kubernetes_sd_configs:
+      - role: node
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: (.+):(.+)
+        target_label: __address__
+        replacement: $1:9100
+
+  # ═══ Kubernetes State Metrics ═══
+  - job_name: kube-state-metrics
+    static_configs:
+      - targets:
+          - kube-state-metrics.kube-system.svc.cluster.local:8080

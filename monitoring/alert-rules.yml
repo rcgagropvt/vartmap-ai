@@ -1,0 +1,179 @@
+groups:
+  # ── 1. WhatsApp Webhook Health ───────────────────────────
+  - name: whatsapp_webhook
+    rules:
+      - alert: WebhookDown
+        expr: up{job="whatsapp-gateway"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "WhatsApp gateway is down"
+          description: "WhatsApp gateway pod {{ $labels.instance }} has been unreachable for 2 minutes."
+          runbook_url: "https://wiki.vartmap.in/runbooks/webhook-down"
+
+      - alert: WebhookHighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="whatsapp-gateway", route="/webhook"}[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Webhook P95 latency > 2s"
+          description: "P95 latency for webhook endpoint is {{ $value }}s."
+
+      - alert: WebhookSignatureFailures
+        expr: rate(webhook_signature_failures_total[5m]) > 5
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High webhook signature failure rate"
+          description: "More than 5 signature failures per second over 5 minutes."
+
+      - alert: HighMessageDropRate
+        expr: rate(messages_dropped_total[10m]) / rate(messages_received_total[10m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Message drop rate > 5%"
+
+  # ── 2. Intelligence Service ──────────────────────────────
+  - name: intelligence_service
+    rules:
+      - alert: IntelligenceServiceDown
+        expr: up{job="intelligence-service"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Intelligence service is down"
+
+      - alert: AIBudgetWarning
+        expr: ai_monthly_spend_inr / ai_monthly_budget_inr > 0.8
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI budget at {{ $value | humanizePercentage }}"
+
+      - alert: AIBudgetExceeded
+        expr: ai_monthly_spend_inr >= ai_monthly_budget_inr
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "AI monthly budget EXCEEDED"
+
+      - alert: HighAIErrorRate
+        expr: rate(ai_requests_errors_total[10m]) / rate(ai_requests_total[10m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI error rate > 10%"
+
+  # ── 3. Farmer Engagement ─────────────────────────────────
+  - name: farmer_engagement
+    rules:
+      - alert: DAUDrop
+        expr: count(count by (farmer_id) (usage_tracking_created_today)) < 0.5 * avg_over_time(dau_count[7d])
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Daily active users dropped below 50% of 7-day average"
+
+      - alert: OnboardingDropOff
+        expr: rate(onboarding_abandoned_total[1d]) / rate(onboarding_started_total[1d]) > 0.6
+        for: 1d
+        labels:
+          severity: warning
+        annotations:
+          summary: "Onboarding abandonment rate > 60%"
+
+  # ── 4. Disease Outbreak ──────────────────────────────────
+  - name: disease_outbreak
+    rules:
+      - alert: PossibleDiseaseOutbreak
+        expr: sum by (district, disease) (rate(disease_reports_total[24h])) > 10
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Possible disease outbreak: {{ $labels.disease }} in {{ $labels.district }}"
+          description: "{{ $value }} disease reports in last 24 hours."
+
+  # ── 5. WhatsApp Cost Tracking ────────────────────────────
+  - name: whatsapp_costs
+    rules:
+      - alert: HighWACost
+        expr: sum(rate(wa_message_cost_inr[1h])) * 3600 * 24 > 5000
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Projected daily WhatsApp cost > ₹5,000"
+
+  # ── 6. Infrastructure ───────────────────────────────────
+  - name: infrastructure
+    rules:
+      - alert: PostgreSQLDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is down"
+
+      - alert: PostgreSQLHighConnections
+        expr: pg_stat_activity_count / pg_settings_max_connections > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL connections at {{ $value | humanizePercentage }}"
+
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is down"
+
+      - alert: HighDiskUsage
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk usage > 85% on {{ $labels.instance }}"
+
+      - alert: PodCrashLooping
+        expr: rate(kube_pod_container_status_restarts_total{namespace="vartmap"}[15m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pod {{ $labels.pod }} is crash-looping"
+
+  # ── 7. Fraud Detection ──────────────────────────────────
+  - name: fraud
+    rules:
+      - alert: ReferralFraudSuspected
+        expr: sum by (referrer_id) (rate(referral_created_total[1h])) > 10
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Referral fraud suspected for farmer {{ $labels.referrer_id }}"
+          description: "More than 10 referrals in 1 hour."
+
+      - alert: UsageAnomaly
+        expr: sum by (farmer_id) (rate(usage_requests_total[1h])) > 100
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Abnormally high usage from farmer {{ $labels.farmer_id }}"

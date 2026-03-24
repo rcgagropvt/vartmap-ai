@@ -1,0 +1,44 @@
+[
+  {
+    "brand_name": "Tata Rallis",
+    "product_name": "Tata Mida (Imidacloprid 17.8% SL)",
+    "category": "insecticide",
+    "cibrc_number": "CIR-456/2019",
+    "manufacturer": "Rallis India Ltd",
+    "batch": "BATCH-2025-A001",
+    "mfg_date": "2025-06-15",
+    "expiry_date": "2027-06-14",
+    "target_crops": ["cotton", "rice", "wheat"],
+    "target_pests": ["aphids", "jassids", "whitefly", "termites"],
+    "dosage": "0.5 ml/L water for spray",
+    "is_genuine": true
+  },
+  {
+    "brand_name": "UPL",
+    "product_name": "Saaf (Carbendazim 12% + Mancozeb 63% WP)",
+    "category": "fungicide",
+    "cibrc_number": "CIR-102/2015",
+    "manufacturer": "UPL Limited",
+    "batch": "BATCH-2025-B110",
+    "mfg_date": "2025-03-10",
+    "expiry_date": "2027-03-09",
+    "target_crops": ["wheat", "rice", "groundnut", "grape"],
+    "target_pests": ["leaf_blast", "sheath_blight", "tikka_disease"],
+    "dosage": "2 g/L water",
+    "is_genuine": true
+  },
+  {
+    "brand_name": "Bayer CropScience",
+    "product_name": "Nativo (Tebuconazole 50% + Trifloxystrobin 25% WG)",
+    "category": "fungicide",
+    "cibrc_number": "CIR-789/2020",
+    "manufacturer": "Bayer CropScience Ltd",
+    "batch": "BATCH-2025-C044",
+    "mfg_date": "2025-08-01",
+    "expiry_date": "2027-07-31",
+    "target_crops": ["rice", "wheat", "chilli", "soybean"],
+    "target_pests": ["sheath_blight", "leaf_blast", "rust"],
+    "dosage": "0.4 g/L water",
+    "is_genuine": true
+  }
+]

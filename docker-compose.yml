@@ -1,0 +1,129 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: timescale/timescaledb-ha:pg16-latest
+    environment:
+      POSTGRES_USER: vartmap
+      POSTGRES_PASSWORD: vartmap_dev
+      POSTGRES_DB: vartmap
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/home/postgres/pgdata/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vartmap"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.0
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrantdata:/qdrant/storage
+
+  temporal:
+    image: temporalio/auto-setup:1.25
+    environment:
+      DB: postgresql
+      DB_PORT: 5432
+      POSTGRES_USER: vartmap
+      POSTGRES_PWD: vartmap_dev
+      POSTGRES_SEEDS: postgres
+    ports:
+      - "7233:7233"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  temporal-ui:
+    image: temporalio/ui:2.32
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+    ports:
+      - "8233:8080"
+    depends_on:
+      - temporal
+
+  whatsapp-gateway:
+    build: ./services/whatsapp-gateway
+    ports:
+      - "3000:3000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://vartmap:vartmap_dev@postgres:5432/vartmap
+      REDIS_URL: redis://redis:6379
+      INTELLIGENCE_SERVICE_URL: http://intelligence-service:8000
+      AUTOMATION_SERVICE_URL: http://automation-worker:8001
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  intelligence-service:
+    build: ./services/intelligence-service
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://vartmap:vartmap_dev@postgres:5432/vartmap
+      REDIS_URL: redis://redis:6379
+      QDRANT_HOST: qdrant
+      WA_GATEWAY_URL: http://whatsapp-gateway:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      qdrant:
+        condition: service_started
+
+  admin-api:
+    build: ./services/admin-api
+    ports:
+      - "3001:3001"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://vartmap:vartmap_dev@postgres:5432/vartmap
+      REDIS_URL: redis://redis:6379
+      WA_GATEWAY_URL: http://whatsapp-gateway:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  automation-worker:
+    build: ./services/automation-worker
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://vartmap:vartmap_dev@postgres:5432/vartmap
+      TEMPORAL_HOST: temporal:7233
+      WA_GATEWAY_URL: http://whatsapp-gateway:3000
+    depends_on:
+      temporal:
+        condition: service_started
+
+  analytics-pipeline:
+    build: ./services/analytics-pipeline
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://vartmap:vartmap_dev@postgres:5432/vartmap
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:
+  qdrantdata:

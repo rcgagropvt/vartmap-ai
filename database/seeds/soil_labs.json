@@ -1,0 +1,47 @@
+[
+  {
+    "name": "Central Soil Testing Laboratory, New Delhi",
+    "state_code": "DL",
+    "district": "New Delhi",
+    "address": "IARI Campus, Pusa, New Delhi 110012",
+    "phone": "011-25841355",
+    "type": "central",
+    "services": ["NPK", "pH", "EC", "OC", "micro_nutrients", "heavy_metals"]
+  },
+  {
+    "name": "UP State Soil Testing Lab, Lucknow",
+    "state_code": "UP",
+    "district": "Lucknow",
+    "address": "Krishi Bhawan, Lucknow 226001",
+    "phone": "0522-2636907",
+    "type": "state",
+    "services": ["NPK", "pH", "EC", "OC"]
+  },
+  {
+    "name": "KVK Soil Lab, Varanasi",
+    "state_code": "UP",
+    "district": "Varanasi",
+    "address": "BHU Campus, Varanasi 221005",
+    "phone": "0542-2368993",
+    "type": "kvk",
+    "services": ["NPK", "pH", "EC", "OC", "micro_nutrients"]
+  },
+  {
+    "name": "Maharashtra State Soil Lab, Pune",
+    "state_code": "MH",
+    "district": "Pune",
+    "address": "Agriculture College Campus, Shivajinagar, Pune 411005",
+    "phone": "020-25533218",
+    "type": "state",
+    "services": ["NPK", "pH", "EC", "OC", "micro_nutrients"]
+  },
+  {
+    "name": "MP State Soil Lab, Bhopal",
+    "state_code": "MP",
+    "district": "Bhopal",
+    "address": "Directorate of Agriculture, Bhopal 462004",
+    "phone": "0755-2551652",
+    "type": "state",
+    "services": ["NPK", "pH", "EC", "OC"]
+  }
+]

@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vartmap-config
+  namespace: vartmap
+data:
+  # ─── WhatsApp Gateway ─────────────────────────
+  NODE_ENV: "production"
+  WA_API_VERSION: "v21.0"
+  WEBHOOK_PATH: "/api/v1/webhook/whatsapp"
+  MAX_RETRIES: "3"
+  OUTBOUND_STREAM: "messages:outbound"
+  INBOUND_STREAM: "messages:inbound"
+  STATUS_STREAM: "messages:status"
+
+  # ─── Intelligence Service ──────────────────────
+  QDRANT_HOST: "qdrant.vartmap.svc.cluster.local"
+  QDRANT_PORT: "6333"
+  EMBEDDING_MODEL: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+  AI_DAILY_BUDGET_USD: "50"
+  RULE_ENGINE_CONFIDENCE_THRESHOLD: "0.6"
+  CACHE_SIMILARITY_THRESHOLD: "0.92"
+  MAX_AI_RESPONSE_TOKENS: "300"
+
+  # ─── Automation ─────────────────────────────────
+  TEMPORAL_ADDRESS: "temporal.vartmap.svc.cluster.local:7233"
+  TEMPORAL_NAMESPACE: "vartmap"
+
+  # ─── External APIs ─────────────────────────────
+  AGMARKNET_BASE_URL: "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070"
+  IMD_API_URL: "https://api.openweathermap.org/data/2.5"
+  OPEN_METEO_URL: "https://api.open-meteo.com/v1/forecast"
+  SOIL_HEALTH_PORTAL: "https://soilhealth.dac.gov.in"
+  RAZORPAY_API_URL: "https://api.razorpay.com/v1"
+  EXOTEL_API_URL: "https://api.exotel.com/v1"
+
+  # ─── Media Storage ─────────────────────────────
+  S3_BUCKET: "vartmap-media-production"
+  S3_REGION: "ap-south-1"
+  CDN_BASE_URL: "https://media.vartmap.in"
+
+  # ─── Limits ────────────────────────────────────
+  FREE_TEXT_LIMIT: "10"
+  FREE_IMAGE_LIMIT: "1"
+  FREE_VOICE_LIMIT: "3"
+  PREMIUM_TEXT_LIMIT: "50"
+  PREMIUM_IMAGE_LIMIT: "5"
+  PREMIUM_VOICE_LIMIT: "15"
+  RATE_LIMIT_PER_HOUR: "30"
+  RATE_LIMIT_PER_MINUTE: "10"

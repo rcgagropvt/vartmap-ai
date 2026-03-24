@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: vartmap
+data:
+  WA_API_VERSION: "v21.0"
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+  FARMER_RATE_LIMIT_PER_MINUTE: "30"
+  FARMER_DAILY_LIMIT: "200"
+  FARMER_AI_QUERIES_PER_DAY: "20"
+  FARMER_IMAGE_ANALYSES_PER_DAY: "5"
+  AI_MONTHLY_BUDGET_INR: "15000"
+  BSUID_ENABLED: "true"
+  QDRANT_HOST: "qdrant"
+  QDRANT_PORT: "6333"
+  QDRANT_COLLECTION: "krishi_knowledge"
+  EMBEDDING_MODEL: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+  CACHE_SIMILARITY_THRESHOLD: "0.92"
+  CACHE_TTL_SECONDS: "3600"
+  INTELLIGENCE_SERVICE_URL: "http://intelligence-service:8000"
+  AUTOMATION_SERVICE_URL: "http://automation-worker:8001"
+  WA_GATEWAY_URL: "http://whatsapp-gateway:3000"
+  TEMPORAL_HOST: "temporal:7233"
+  REDIS_URL: "redis://redis:6379"

@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: automation-worker
+  namespace: vartmap
+  labels:
+    app: automation-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: automation-worker
+  template:
+    metadata:
+      labels:
+        app: automation-worker
+    spec:
+      containers:
+        - name: automation-worker
+          image: vartmap/automation-worker:latest
+          envFrom:
+            - configMapRef:
+                name: app-config
+            - secretRef:
+                name: vartmap-secrets
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

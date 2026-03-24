@@ -1,0 +1,31 @@
+state_code,state_name,district_name,district_name_hi,latitude,longitude
+UP,Uttar Pradesh,Agra,आगरा,27.1767,78.0081
+UP,Uttar Pradesh,Aligarh,अलीगढ़,27.8974,78.0880
+UP,Uttar Pradesh,Prayagraj,प्रयागराज,25.4358,81.8463
+UP,Uttar Pradesh,Ambedkar Nagar,अम्बेडकर नगर,26.4500,82.6800
+UP,Uttar Pradesh,Amethi,अमेठी,26.1544,81.8131
+UP,Uttar Pradesh,Amroha,अमरोहा,28.9044,78.4675
+UP,Uttar Pradesh,Auraiya,औरैया,26.4655,79.5091
+UP,Uttar Pradesh,Ayodhya,अयोध्या,26.7922,82.1998
+UP,Uttar Pradesh,Azamgarh,आज़मगढ़,26.0735,83.1854
+UP,Uttar Pradesh,Baghpat,बागपत,28.9500,77.2167
+UP,Uttar Pradesh,Bahraich,बहराइच,27.5745,81.5959
+UP,Uttar Pradesh,Ballia,बलिया,25.7615,84.1487
+UP,Uttar Pradesh,Balrampur,बलरामपुर,27.4337,82.1804
+UP,Uttar Pradesh,Banda,बांदा,25.4758,80.3363
+UP,Uttar Pradesh,Barabanki,बाराबंकी,26.9258,81.1728
+UP,Uttar Pradesh,Bareilly,बरेली,28.3670,79.4304
+UP,Uttar Pradesh,Basti,बस्ती,26.8015,82.7283
+UP,Uttar Pradesh,Bhadohi,भदोही,25.3955,82.5699
+UP,Uttar Pradesh,Bijnor,बिजनौर,29.3724,78.1355
+UP,Uttar Pradesh,Budaun,बदायूँ,28.0483,79.1200
+MP,Madhya Pradesh,Bhopal,भोपाल,23.2599,77.4126
+MP,Madhya Pradesh,Indore,इंदौर,22.7196,75.8577
+MP,Madhya Pradesh,Jabalpur,जबलपुर,23.1815,79.9864
+MH,Maharashtra,Pune,पुणे,18.5204,73.8567
+MH,Maharashtra,Nagpur,नागपुर,21.1458,79.0882
+RJ,Rajasthan,Jaipur,जयपुर,26.9124,75.7873
+RJ,Rajasthan,Jodhpur,जोधपुर,26.2389,73.0243
+BR,Bihar,Patna,पटना,25.6093,85.1376
+BR,Bihar,Gaya,गया,24.7955,84.9994
+BR,Bihar,Muzaffarpur,मुज़फ़्फ़रपुर,26.1225,85.3906

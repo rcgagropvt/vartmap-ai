@@ -1,0 +1,497 @@
+# ═══════════════════════════════════════════════════════════════
+# VartMap — Prometheus Alert Rules
+#
+# Organized by priority:
+#   1. CRITICAL: Immediate action required (page on-call)
+#   2. WARNING: Investigate within 1 hour
+#   3. INFO: Awareness, no immediate action
+#
+# Every alert maps to a runbook in docs/runbooks/
+# ═══════════════════════════════════════════════════════════════
+
+groups:
+
+  # ═══════════════════════════════════════════════════════════
+  # GROUP 1: WHATSAPP WEBHOOK HEALTH (CRITICAL)
+  # If webhooks fail, farmers get no responses.
+  # ═══════════════════════════════════════════════════════════
+  - name: vartmap_webhook_health
+    rules:
+
+      - alert: WebhookEndpointDown
+        expr: up{job="whatsapp-gateway"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: whatsapp-gateway
+          team: engineering
+        annotations:
+          summary: "WhatsApp Gateway is DOWN"
+          description: "No whatsapp-gateway pods are responding to scrapes for > 1 minute. Farmers cannot send or receive messages."
+          runbook: "https://docs.vartmap.in/runbooks/webhook-failure"
+          impact: "ALL farmer messaging is offline"
+
+      - alert: WebhookHighErrorRate
+        expr: |
+          (
+            rate(webhook_errors_total{job="whatsapp-gateway"}[5m])
+            /
+            rate(webhook_requests_total{job="whatsapp-gateway"}[5m])
+          ) > 0.01
+        for: 2m
+        labels:
+          severity: critical
+          service: whatsapp-gateway
+          team: engineering
+        annotations:
+          summary: "Webhook error rate > 1%"
+          description: "{{ $value | humanizePercentage }} of incoming webhooks are failing. Check signature verification, database connectivity, and Redis availability."
+          runbook: "https://docs.vartmap.in/runbooks/webhook-failure"
+
+      - alert: WebhookHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(webhook_processing_duration_seconds_bucket{job="whatsapp-gateway"}[5m])
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: whatsapp-gateway
+          team: engineering
+        annotations:
+          summary: "Webhook P95 latency > 500ms"
+          description: "P95 webhook processing time is {{ $value | humanizeDuration }}. Target is < 200ms for the immediate 200 OK. Check Redis and DB latency."
+
+      - alert: WebhookSignatureFailures
+        expr: rate(webhook_signature_failures_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          service: whatsapp-gateway
+          team: security
+        annotations:
+          summary: "Webhook signature verification failures detected"
+          description: "{{ $value }} signature failures per second. Could indicate: (1) META_APP_SECRET mismatch, (2) replay attack, (3) Meta API change."
+
+      - alert: OutboundMessageQueueBacklog
+        expr: redis_stream_length{stream="messages:outbound"} > 500
+        for: 3m
+        labels:
+          severity: warning
+          service: whatsapp-gateway
+          team: engineering
+        annotations:
+          summary: "Outbound message queue backlog > 500"
+          description: "{{ $value }} messages waiting to be sent. Gateway consumers may be slow or Meta API may be rate-limiting us."
+
+      - alert: InboundMessageQueueBacklog
+        expr: redis_stream_length{stream="messages:inbound"} > 1000
+        for: 5m
+        labels:
+          severity: critical
+          service: intelligence-service
+          team: engineering
+        annotations:
+          summary: "Inbound message queue backlog > 1000"
+          description: "{{ $value }} farmer messages waiting to be processed. Intelligence service may be down or overwhelmed."
+          runbook: "https://docs.vartmap.in/runbooks/queue-backlog"
+
+  # ═══════════════════════════════════════════════════════════
+  # GROUP 2: AI / INTELLIGENCE ENGINE
+  # ═══════════════════════════════════════════════════════════
+  - name: vartmap_intelligence
+    rules:
+
+      - alert: IntelligenceServiceDown
+        expr: up{job="intelligence-service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: intelligence-service
+          team: engineering
+        annotations:
+          summary: "Intelligence Service is DOWN"
+          description: "System operating in fallback mode. Rule-based flows still work, but AI queries, image analysis, and voice processing are unavailable."
+          runbook: "https://docs.vartmap.in/runbooks/ai-service-down"
+          impact: "No image analysis, no AI Q&A, no voice transcription"
+
+      - alert: AIResponseLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            rate(ai_response_duration_seconds_bucket{job="intelligence-service"}[5m])
+          ) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: intelligence-service
+          team: engineering
+        annotations:
+          summary: "AI P95 response latency > 5 seconds"
+          description: "P95 AI response time is {{ $value | humanizeDuration }}. Target: < 3s. Check OpenAI API latency and Qdrant search times."
+
+      - alert: AIBudgetWarning
+        expr: ai_daily_cost_usd > (ai_daily_budget_usd * 0.8)
+        for: 0m
+        labels:
+          severity: warning
+          service: intelligence-service
+          team: engineering
+        annotations:
+          summary: "AI daily budget 80% consumed"
+          description: "Today's AI spend: ${{ $value | humanize }}. Budget: ${{ $labels.budget | humanize }}. At this rate, budget will be exhausted and system will switch to rule-based only."
+          runbook: "https://docs.vartmap.in/runbooks/budget-exceeded"
+
+      - alert: AIBudgetExceeded
+        expr: ai_daily_cost_usd >= ai_daily_budget_usd
+        for: 0m
+        labels:
+          severity: critical
+          service: intelligence-service
+          team: engineering
+        annotations:
+          summary: "AI daily budget EXCEEDED — fallback mode activated"
+          description: "AI spend: ${{ $value | humanize }} has exceeded budget. All AI queries routed to rule-based engine. Image analysis and complex Q&A unavailable until budget resets at midnight UTC."
+          runbook: "https://docs.vartmap.in/runbooks/budget-exceeded"
+
+      - alert: RuleEngineHandlingRateLow
+        expr: |
+          (
+            rate(messages_processed_total{layer="rule_based"}[1h])
+            /
+            rate(messages_processed_total[1h])
+          ) < 0.5
+        for: 30m
+        labels:
+          severity: warning
+          service: intelligence-service
+          team: engineering
+        annotations:
+          summary: "Rule engine handling < 50% of queries (target: 70%+)"
+          description: "Only {{ $value | humanizePercentage }} of messages handled by rules. Too many queries reaching AI. Check rule patterns and add new keyword mappings."
+
+      - alert: CacheHitRateLow
+        expr: |
+          (
+            rate(cache_hits_total[1h])
+            /
+            (rate(cache_hits_total[1h]) + rate(cache_misses_total[1h]))
+          ) < 0.3
+        for: 1h
+        labels:
+          severity: info
+          service: intelligence-service
+          team: engineering
+        annotations:
+          summary: "Semantic cache hit rate < 30% (target: 40%+)"
+          description: "Cache hit rate: {{ $value | humanizePercentage }}. Low cache hits mean more expensive AI calls. Check if queries are diversifying or cache TTL is too short."
+
+      - alert: QdrantDown
+        expr: up{job="qdrant"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: qdrant
+          team: engineering
+        annotations:
+          summary: "Qdrant vector database is DOWN"
+          description: "RAG pipeline and semantic cache are non-functional. AI queries will fail or return poor results."
+
+      - alert: ImageAnalysisAccuracyLow
+        expr: |
+          (
+            rate(image_analysis_feedback_positive_total[24h])
+            /
+            rate(image_analysis_feedback_total[24h])
+          ) < 0.7
+        for: 0m
+        labels:
+          severity: warning
+          service: intelligence-service
+          team: agronomist
+        annotations:
+          summary: "Image analysis positive feedback < 70%"
+          description: "Only {{ $value | humanizePercentage }} positive farmer feedback on image analysis. Review recent analyses and adjust prompts."
+
+  # ═══════════════════════════════════════════════════════════
+  # GROUP 3: FARMER ENGAGEMENT & ONBOARDING
+  # ═══════════════════════════════════════════════════════════
+  - name: vartmap_farmer_engagement
+    rules:
+
+      - alert: OnboardingCompletionRateLow
+        expr: |
+          (
+            rate(onboarding_completed_total[24h])
+            /
+            rate(onboarding_started_total[24h])
+          ) < 0.5
+        for: 0m
+        labels:
+          severity: warning
+          service: intelligence-service
+          team: product
+        annotations:
+          summary: "Onboarding completion rate < 50% (target: 75%+)"
+          description: "Only {{ $value | humanizePercentage }} of farmers who start onboarding are completing it. Check which step has highest drop-off."
+
+      - alert: DailyActiveUsersDropped
+        expr: |
+          farmer_active_today < (farmer_active_yesterday * 0.7)
+        for: 0m
+        labels:
+          severity: warning
+          team: product
+        annotations:
+          summary: "DAU dropped > 30% compared to yesterday"
+          description: "Today: {{ $value }} active farmers. This is a significant drop. Check if there's a service issue or engagement problem."
+
+      - alert: HighSpamRate
+        expr: rate(spam_blocks_total[1h]) > 10
+        for: 5m
+        labels:
+          severity: info
+          service: intelligence-service
+          team: support
+        annotations:
+          summary: "High spam blocking rate: {{ $value }}/hour"
+          description: "More than 10 farmers blocked per hour. Review if legitimate farmers are being caught."
+
+  # ═══════════════════════════════════════════════════════════
+  # GROUP 4: DISEASE OUTBREAK DETECTION
+  # ═══════════════════════════════════════════════════════════
+  - name: vartmap_disease_outbreak
+    rules:
+
+      - alert: DiseaseOutbreakDetected
+        expr: |
+          sum by (district, disease_name) (
+            increase(disease_detection_total[48h])
+          ) >= 5
+        for: 0m
+        labels:
+          severity: warning
+          service: intelligence-service
+          team: agronomist
+        annotations:
+          summary: "Disease outbreak: {{ $labels.disease_name }} in {{ $labels.district }}"
+          description: "{{ $value }} cases of {{ $labels.disease_name }} detected in {{ $labels.district }} district within 48 hours. Threshold: 5 cases triggers regional alert."
+          runbook: "https://docs.vartmap.in/runbooks/disease-outbreak-response"
+          action: "Send prevention advisory to ALL farmers in {{ $labels.district }} growing affected crop."
+
+  # ═══════════════════════════════════════════════════════════
+  # GROUP 5: WHATSAPP COST TRACKING
+  # ═══════════════════════════════════════════════════════════
+  - name: vartmap_cost_tracking
+    rules:
+
+      - alert: WhatsAppDailySpendHigh
+        expr: whatsapp_daily_cost_inr > 50000
+        for: 0m
+        labels:
+          severity: warning
+          team: marketing
+        annotations:
+          summary: "WhatsApp daily spend > ₹50,000"
+          description: "Today's WA messaging cost: ₹{{ $value | humanize }}. Check if campaigns are within budget."
+
+      - alert: MarketingTemplateHighBlockRate
+        expr: |
+          (
+            whatsapp_template_block_rate{category="MARKETING"} > 0.03
+          )
+        for: 0m
+        labels:
+          severity: critical
+          team: marketing
+        annotations:
+          summary: "Marketing template block rate > 3%"
+          description: "Template '{{ $labels.template_name }}' has {{ $value | humanizePercentage }} block rate. Meta will throttle this template. Pause campaign immediately."
+
+  # ═══════════════════════════════════════════════════════════
+  # GROUP 6: INFRASTRUCTURE HEALTH
+  # ═══════════════════════════════════════════════════════════
+  - name: vartmap_infrastructure
+    rules:
+
+      - alert: PostgreSQLDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: postgres
+          team: engineering
+        annotations:
+          summary: "PostgreSQL database is DOWN"
+          description: "Primary database unreachable. ALL services affected."
+
+      - alert: PostgreSQLConnectionsHigh
+        expr: |
+          pg_stat_activity_count / pg_settings_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: postgres
+          team: engineering
+        annotations:
+          summary: "PostgreSQL connections at {{ $value | humanizePercentage }} capacity"
+          description: "Connection pool nearing limit. Check for connection leaks or scale up max_connections."
+
+      - alert: PostgreSQLReplicationLag
+        expr: pg_replication_lag_seconds > 30
+        for: 2m
+        labels:
+          severity: warning
+          service: postgres
+          team: engineering
+        annotations:
+          summary: "PostgreSQL replication lag > 30s"
+          description: "Read replicas are {{ $value | humanizeDuration }} behind primary. Analytics queries may return stale data."
+
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: redis
+          team: engineering
+        annotations:
+          summary: "Redis is DOWN"
+          description: "Cache, sessions, rate limiting, and message queues are all affected."
+
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+          team: engineering
+        annotations:
+          summary: "Redis memory usage > 85%"
+          description: "Redis using {{ $value | humanizePercentage }} of available memory. Evictions may start. Check for large keys or increase memory."
+
+      - alert: DiskSpaceRunningLow
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.15
+        for: 10m
+        labels:
+          severity: warning
+          team: engineering
+        annotations:
+          summary: "Node {{ $labels.instance }} disk space < 15%"
+          description: "Root filesystem at {{ $value | humanizePercentage }} free. Clean up logs, images, or expand volume."
+
+      - alert: PodCrashLooping
+        expr: rate(kube_pod_container_status_restarts_total{namespace="vartmap"}[15m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          team: engineering
+        annotations:
+          summary: "Pod {{ $labels.pod }} is crash-looping"
+          description: "Container {{ $labels.container }} in pod {{ $labels.pod }} restarting frequently. Check pod logs."
+
+      - alert: PodMemoryNearLimit
+        expr: |
+          (
+            container_memory_usage_bytes{namespace="vartmap"}
+            /
+            container_spec_memory_limit_bytes{namespace="vartmap"}
+          ) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          team: engineering
+        annotations:
+          summary: "Pod {{ $labels.pod }} memory > 90% of limit"
+          description: "Container {{ $labels.container }} using {{ $value | humanizePercentage }} of memory limit. OOMKill risk."
+
+  # ═══════════════════════════════════════════════════════════
+  # GROUP 7: REWARD & COMMERCE
+  # ═══════════════════════════════════════════════════════════
+  - name: vartmap_rewards_commerce
+    rules:
+
+      - alert: RewardFraudDetected
+        expr: reward_fraud_flags_total > 0
+        for: 0m
+        labels:
+          severity: warning
+          team: sales
+        annotations:
+          summary: "Reward fraud flag raised"
+          description: "{{ $value }} fraud patterns detected. Check reward fraud dashboard for details."
+
+      - alert: RewardBudgetNearingLimit
+        expr: |
+          (reward_campaign_budget_spent / reward_campaign_budget_total) > 0.9
+        for: 0m
+        labels:
+          severity: warning
+          team: marketing
+        annotations:
+          summary: "Reward campaign '{{ $labels.campaign_name }}' at 90% budget"
+          description: "Campaign has spent ₹{{ $labels.spent }} of ₹{{ $labels.total }} budget."
+
+      - alert: NonRedemptionZoneDetected
+        expr: |
+          sum by (district) (
+            increase(reward_entries_total[7d])
+          ) == 0
+          AND
+          sum by (district) (
+            farmer_count
+          ) > 100
+        for: 0m
+        labels:
+          severity: info
+          team: sales
+        annotations:
+          summary: "Non-redemption zone: {{ $labels.district }}"
+          description: "{{ $labels.district }} has > 100 registered farmers but zero reward participation in 7 days. Check if dealers are informed."
+
+      - alert: DealerInactive
+        expr: |
+          (time() - dealer_last_active_timestamp) > 1209600
+        for: 0m
+        labels:
+          severity: info
+          team: sales
+        annotations:
+          summary: "Dealer {{ $labels.dealer_name }} inactive > 14 days"
+          description: "Dealer in {{ $labels.district }} has had no activity for 14 days. May need follow-up."
+
+  # ═══════════════════════════════════════════════════════════
+  # GROUP 8: SOIL DATA & EXTERNAL APIS
+  # ═══════════════════════════════════════════════════════════
+  - name: vartmap_external_services
+    rules:
+
+      - alert: SoilDataScrapingFailed
+        expr: soil_scraping_last_success_timestamp < (time() - 2592000)
+        for: 0m
+        labels:
+          severity: warning
+          team: engineering
+        annotations:
+          summary: "Soil health data not refreshed in > 30 days"
+          description: "Last successful scrape: {{ $value | humanizeTimestamp }}. SHC portal may have changed or scraper may be broken."
+
+      - alert: MandiPriceAPIDown
+        expr: mandi_api_errors_total > 10
+        for: 15m
+        labels:
+          severity: warning
+          team: engineering
+        annotations:
+          summary: "Mandi price API returning errors"
+          description: "{{ $value }} errors in last 15 minutes from data.gov.in API. Farmers getting stale prices."
+
+      - alert: WeatherAPIDown
+        expr: weather_api_errors_total > 10
+        for: 15m
+        labels:
+          severity: warning
+          team: engineering
+        annotations:
+          summary: "Weather API returning errors"
+          description: "{{ $value }} errors from weather API. Smart spray window and weather alerts affected."

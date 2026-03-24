@@ -1,0 +1,8 @@
+{
+  "email": "admin@vartmap.in",
+  "name": "VartMap Super Admin",
+  "role": "super_admin",
+  "password_hash_note": "Set via environment variable ADMIN_INITIAL_PASSWORD at first deploy; seed_loader hashes with bcrypt",
+  "permissions": ["*"],
+  "is_active": true
+}

@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: automation-worker
+  namespace: vartmap
+  labels:
+    app.kubernetes.io/name: automation-worker
+    app.kubernetes.io/component: automation
+    app.kubernetes.io/part-of: vartmap
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: automation-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: automation-worker
+    spec:
+      containers:
+        - name: worker
+          image: REGISTRY/vartmap/automation-service:IMAGE_TAG
+          command: ["python", "-m", "src.worker"]
+          envFrom:
+            - configMapRef:
+                name: vartmap-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: vartmap-secrets
+                  key: database-url
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: vartmap-secrets
+                  key: redis-url
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false

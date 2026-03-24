@@ -1,0 +1,55 @@
+.PHONY: dev build migrate seed test lint deploy
+
+# ── Development ────────────────────────────────────────────
+dev:
+	docker compose up -d postgres redis qdrant temporal temporal-ui
+	@echo "Waiting for services..."
+	sleep 5
+	$(MAKE) migrate
+	$(MAKE) seed
+
+dev-all:
+	docker compose up --build
+
+# ── Database ───────────────────────────────────────────────
+migrate:
+	cd database && bash migrate.sh
+
+seed:
+	cd database && python3 seed_loader.py
+
+# ── Build ──────────────────────────────────────────────────
+build:
+	docker compose build
+
+build-prod:
+	docker build -t vartmap/whatsapp-gateway ./services/whatsapp-gateway
+	docker build -t vartmap/intelligence-service ./services/intelligence-service
+	docker build -t vartmap/admin-api ./services/admin-api
+	docker build -t vartmap/automation-worker ./services/automation-worker
+	docker build -t vartmap/analytics-pipeline ./services/analytics-pipeline
+
+# ── Test ───────────────────────────────────────────────────
+test:
+	cd services/whatsapp-gateway && npm test
+	cd services/intelligence-service && pytest
+	cd services/admin-api && npm test
+
+# ── Lint ───────────────────────────────────────────────────
+lint:
+	cd services/whatsapp-gateway && npm run lint
+	cd services/intelligence-service && ruff check src/
+	cd services/admin-api && npm run lint
+
+# ── Deploy ─────────────────────────────────────────────────
+deploy-staging:
+	kubectl apply -k infra/kubernetes/overlays/staging/
+
+deploy-production:
+	kubectl apply -k infra/kubernetes/overlays/production/
+
+# ── Cleanup ────────────────────────────────────────────────
+clean:
+	docker compose down -v
+	rm -rf services/whatsapp-gateway/dist
+	rm -rf services/admin-api/dist

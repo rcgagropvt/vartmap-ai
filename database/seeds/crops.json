@@ -1,0 +1,110 @@
+[
+  {
+    "name": "Rice",
+    "name_hi": "धान",
+    "category": "cereal",
+    "seasons": ["kharif"],
+    "major_states": ["UP", "WB", "PB", "HR", "BR", "AP", "TN", "OR"],
+    "typical_duration_days": 120,
+    "msp_2025_per_quintal": 2320
+  },
+  {
+    "name": "Wheat",
+    "name_hi": "गेहूँ",
+    "category": "cereal",
+    "seasons": ["rabi"],
+    "major_states": ["UP", "PB", "HR", "MP", "RJ", "BR"],
+    "typical_duration_days": 140,
+    "msp_2025_per_quintal": 2425
+  },
+  {
+    "name": "Maize",
+    "name_hi": "मक्का",
+    "category": "cereal",
+    "seasons": ["kharif", "rabi"],
+    "major_states": ["KA", "RJ", "MP", "BR", "UP", "MH"],
+    "typical_duration_days": 100,
+    "msp_2025_per_quintal": 2225
+  },
+  {
+    "name": "Sugarcane",
+    "name_hi": "गन्ना",
+    "category": "cash_crop",
+    "seasons": ["perennial"],
+    "major_states": ["UP", "MH", "KA", "TN"],
+    "typical_duration_days": 365,
+    "msp_2025_per_quintal": 340
+  },
+  {
+    "name": "Cotton",
+    "name_hi": "कपास",
+    "category": "fibre",
+    "seasons": ["kharif"],
+    "major_states": ["GJ", "MH", "TG", "RJ", "HR", "MP"],
+    "typical_duration_days": 165,
+    "msp_2025_per_quintal": 7121
+  },
+  {
+    "name": "Soybean",
+    "name_hi": "सोयाबीन",
+    "category": "oilseed",
+    "seasons": ["kharif"],
+    "major_states": ["MP", "MH", "RJ"],
+    "typical_duration_days": 100,
+    "msp_2025_per_quintal": 4892
+  },
+  {
+    "name": "Mustard",
+    "name_hi": "सरसों",
+    "category": "oilseed",
+    "seasons": ["rabi"],
+    "major_states": ["RJ", "MP", "UP", "HR"],
+    "typical_duration_days": 130,
+    "msp_2025_per_quintal": 5950
+  },
+  {
+    "name": "Chickpea",
+    "name_hi": "चना",
+    "category": "pulse",
+    "seasons": ["rabi"],
+    "major_states": ["MP", "RJ", "MH", "UP", "KA"],
+    "typical_duration_days": 110,
+    "msp_2025_per_quintal": 5650
+  },
+  {
+    "name": "Pigeon Pea",
+    "name_hi": "अरहर",
+    "category": "pulse",
+    "seasons": ["kharif"],
+    "major_states": ["MH", "UP", "MP", "KA", "GJ"],
+    "typical_duration_days": 180,
+    "msp_2025_per_quintal": 7550
+  },
+  {
+    "name": "Potato",
+    "name_hi": "आलू",
+    "category": "vegetable",
+    "seasons": ["rabi"],
+    "major_states": ["UP", "WB", "BR", "GJ"],
+    "typical_duration_days": 90,
+    "msp_2025_per_quintal": null
+  },
+  {
+    "name": "Onion",
+    "name_hi": "प्याज",
+    "category": "vegetable",
+    "seasons": ["rabi", "kharif"],
+    "major_states": ["MH", "MP", "KA", "RJ", "GJ"],
+    "typical_duration_days": 110,
+    "msp_2025_per_quintal": null
+  },
+  {
+    "name": "Tomato",
+    "name_hi": "टमाटर",
+    "category": "vegetable",
+    "seasons": ["kharif", "rabi", "zaid"],
+    "major_states": ["MH", "MP", "KA", "AP", "OR"],
+    "typical_duration_days": 75,
+    "msp_2025_per_quintal": null
+  }
+]

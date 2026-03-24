@@ -1,0 +1,58 @@
+# monitoring/alerts.yml — Grafana/Prometheus alert rules
+
+groups:
+  - name: vartmap_critical
+    rules:
+      # Webhook health
+      - alert: WebhookFailureRate
+        expr: rate(webhook_errors_total[5m]) / rate(webhook_requests_total[5m]) > 0.01
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "WhatsApp webhook failure rate > 1%"
+          
+      # AI service health
+      - alert: AIServiceDown
+        expr: up{job="intelligence-service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Intelligence service is down — system in fallback mode"
+
+      # AI budget
+      - alert: AIBudgetWarning
+        expr: ai_daily_cost_usd > (ai_daily_budget_usd * 0.8)
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI daily budget 80% consumed"
+
+      # Queue depth
+      - alert: MessageQueueBacklog
+        expr: redis_stream_length{stream="messages:inbound"} > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Inbound message queue backlog > 1000"
+
+      # Response latency
+      - alert: HighResponseLatency
+        expr: histogram_quantile(0.95, rate(response_time_seconds_bucket[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 response latency > 5 seconds"
+
+      # Disease outbreak
+      - alert: DiseaseOutbreakDetected
+        expr: sum by (district, disease) (increase(disease_detections_total[48h])) > 5
+        for: 0m
+        labels:
+          severity: info
+        annotations:
+          summary: "{{ $labels.disease }} outbreak detected in {{ $labels.district }}"

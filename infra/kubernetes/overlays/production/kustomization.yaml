@@ -1,0 +1,64 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: vartmap
+
+resources:
+  - ../../base/namespace.yaml
+  - ../../base/configmap.yaml
+  - ../../base/external-secrets.yaml
+  - ../../base/whatsapp-gateway.yaml
+  - ../../base/intelligence-service.yaml
+  - ../../base/admin-api.yaml
+  - ../../base/automation-worker.yaml
+  - ../../base/analytics-pipeline.yaml
+  - ../../base/redis.yaml
+  - ../../base/qdrant.yaml
+  - ../../base/temporal.yaml
+  - ../../base/ingress.yaml
+
+images:
+  - name: vartmap/whatsapp-gateway
+    newName: 123456789.dkr.ecr.ap-south-1.amazonaws.com/vartmap/whatsapp-gateway
+    newTag: latest
+  - name: vartmap/intelligence-service
+    newName: 123456789.dkr.ecr.ap-south-1.amazonaws.com/vartmap/intelligence-service
+    newTag: latest
+  - name: vartmap/admin-api
+    newName: 123456789.dkr.ecr.ap-south-1.amazonaws.com/vartmap/admin-api
+    newTag: latest
+  - name: vartmap/automation-worker
+    newName: 123456789.dkr.ecr.ap-south-1.amazonaws.com/vartmap/automation-worker
+    newTag: latest
+  - name: vartmap/analytics-pipeline
+    newName: 123456789.dkr.ecr.ap-south-1.amazonaws.com/vartmap/analytics-pipeline
+    newTag: latest
+
+patches:
+  - target:
+      kind: Deployment
+      name: whatsapp-gateway
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 3
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 500m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: 2000m
+  - target:
+      kind: Deployment
+      name: intelligence-service
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 3
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 2Gi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 4Gi
+v

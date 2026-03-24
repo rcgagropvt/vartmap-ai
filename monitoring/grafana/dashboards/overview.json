@@ -1,0 +1,45 @@
+{
+  "dashboard": {
+    "title": "VartMap – System Overview",
+    "uid": "vartmap-overview",
+    "timezone": "Asia/Kolkata",
+    "panels": [
+      {
+        "title": "Active Farmers Today",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+        "targets": [{ "expr": "count(count by (farmer_id) (usage_tracking_created_today))" }]
+      },
+      {
+        "title": "Messages Processed (1h)",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+        "targets": [{ "expr": "sum(increase(messages_processed_total[1h]))" }]
+      },
+      {
+        "title": "AI Budget Used (Month)",
+        "type": "gauge",
+        "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+        "targets": [{ "expr": "ai_monthly_spend_inr / ai_monthly_budget_inr" }]
+      },
+      {
+        "title": "Webhook Latency P95",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+        "targets": [{ "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job='whatsapp-gateway'}[5m]))" }]
+      },
+      {
+        "title": "Feature Usage Distribution",
+        "type": "piechart",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+        "targets": [{ "expr": "sum by (feature) (increase(usage_requests_total[24h]))" }]
+      },
+      {
+        "title": "Farmer Registrations (7d)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+        "targets": [{ "expr": "sum(increase(farmer_registrations_total[1d]))" }]
+      }
+    ]
+  }
+}
