@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VartMap Krishi Sahayak - Admin Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; color: #333; }
+        
+        /* Login Page */
+        .login-container {
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; background: linear-gradient(135deg, #2d8a4e, #1a5c2e);
+        }
+        .login-box {
+            background: white; padding: 40px; border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2); width: 400px; text-align: center;
+        }
+        .login-box h1 { color: #2d8a4e; margin-bottom: 8px; font-size: 24px; }
+        .login-box p { color: #666; margin-bottom: 24px; }
+        .login-box input {
+            width: 100%; padding: 12px 16px; margin-bottom: 16px; border: 1px solid #ddd;
+            border-radius: 8px; font-size: 14px; outline: none;
+        }
+        .login-box input:focus { border-color: #2d8a4e; }
+        .login-box button {
+            width: 100%; padding: 12px; background: #2d8a4e; color: white;
+            border: none; border-radius: 8px; font-size: 16px; cursor: pointer;
+        }
+        .login-box button:hover { background: #1a5c2e; }
+        .error-msg { color: #e74c3c; font-size: 13px; margin-bottom: 12px; display: none; }
+
+        /* Dashboard */
+        .dashboard { display: none; }
+        .topbar {
+            background: #2d8a4e; color: white; padding: 16px 24px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .topbar h2 { font-size: 20px; }
+        .topbar button {
+            background: rgba(255,255,255,0.2); color: white; border: none;
+            padding: 8px 16px; border-radius: 6px; cursor: pointer;
+        }
+        .topbar button:hover { background: rgba(255,255,255,0.3); }
+
+        .content { padding: 24px; max-width: 1200px; margin: 0 auto; }
+
+        .stats-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px; margin-bottom: 24px;
+        }
+        .stat-card {
+            background: white; padding: 24px; border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        }
+        .stat-card .label { color: #888; font-size: 13px; text-transform: uppercase; }
+        .stat-card .value { font-size: 32px; font-weight: bold; color: #2d8a4e; margin: 8px 0; }
+        .stat-card .sub { color: #999; font-size: 12px; }
+
+        .section {
+            background: white; border-radius: 10px; padding: 24px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08); margin-bottom: 24px;
+        }
+        .section h3 { margin-bottom: 16px; color: #333; }
+
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 12px; background: #f8f9fa; border-bottom: 2px solid #eee; font-size: 13px; color: #666; }
+        td { padding: 12px; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
+        tr:hover { background: #f8fff8; }
+
+        .badge {
+            padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600;
+        }
+        .badge-active { background: #d4edda; color: #155724; }
+        .badge-new { background: #fff3cd; color: #856404; }
+        .badge-complete { background: #cce5ff; color: #004085; }
+
+        .services-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 16px;
+        }
+        .service-card {
+            background: white; padding: 20px; border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08); border-left: 4px solid #ccc;
+        }
+        .service-card.healthy { border-left-color: #2d8a4e; }
+        .service-card.unhealthy { border-left-color: #e74c3c; }
+        .service-card .name { font-weight: 600; font-size: 16px; }
+        .service-card .url { color: #888; font-size: 12px; margin: 4px 0; }
+        .service-card .status { font-size: 13px; margin-top: 8px; }
+        .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+        .dot-green { background: #2d8a4e; }
+        .dot-red { background: #e74c3c; }
+        .dot-yellow { background: #f39c12; }
+
+        .tabs { display: flex; gap: 8px; margin-bottom: 24px; }
+        .tab {
+            padding: 10px 20px; background: white; border: 1px solid #ddd;
+            border-radius: 8px; cursor: pointer; font-size: 14px;
+        }
+        .tab.active { background: #2d8a4e; color: white; border-color: #2d8a4e; }
+
+        .loading { text-align: center; padding: 40px; color: #888; }
+
+        @media (max-width: 768px) {
+            .stats-grid { grid-template-columns: 1fr; }
+            .services-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Login Page -->
+<div class="login-container" id="loginPage">
+    <div class="login-box">
+        <h1>VartMap Krishi Sahayak</h1>
+        <p>Admin Dashboard</p>
+        <div class="error-msg" id="loginError">Invalid email or password</div>
+        <input type="email" id="email" placeholder="Email address" value="">
+        <input type="password" id="password" placeholder="Password" value="">
+        <button onclick="login()">Sign In</button>
+    </div>
+</div>
+
+<!-- Dashboard -->
+<div class="dashboard" id="dashboard">
+    <div class="topbar">
+        <h2>VartMap Krishi Sahayak</h2>
+        <div>
+            <span id="userName" style="margin-right: 16px;"></span>
+            <button onclick="logout()">Logout</button>
+        </div>
+    </div>
+
+    <div class="content">
+        <div class="tabs">
+            <div class="tab active" onclick="showTab('overview')">Overview</div>
+            <div class="tab" onclick="showTab('farmers')">Farmers</div>
+            <div class="tab" onclick="showTab('services')">Services</div>
+        </div>
+
+        <!-- Overview Tab -->
+        <div id="tab-overview">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="label">Total Farmers</div>
+                    <div class="value" id="totalFarmers">-</div>
+                    <div class="sub">Registered on platform</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Conversations (24h)</div>
+                    <div class="value" id="conversations24h">-</div>
+                    <div class="sub">Messages in last 24 hours</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Active Farmers (24h)</div>
+                    <div class="value" id="activeFarmers">-</div>
+                    <div class="sub">Unique farmers today</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Farmers Tab -->
+        <div id="tab-farmers" style="display:none;">
+            <div class="section">
+                <h3>Registered Farmers</h3>
+                <div id="farmersTable"><div class="loading">Loading...</div></div>
+            </div>
+        </div>
+
+        <!-- Services Tab -->
+        <div id="tab-services" style="display:none;">
+            <div class="services-grid" id="servicesGrid">
+                <div class="loading">Checking services...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const API_URL = 'https://vartmap-admin-api.onrender.com';
+    const SERVICES = [
+        { name: 'WhatsApp Gateway', url: 'https://vartmap-whatsapp-gateway.onrender.com/health' },
+        { name: 'Intelligence Service', url: 'https://vartmap-intelligence.onrender.com/health' },
+        { name: 'Admin API', url: 'https://vartmap-admin-api.onrender.com/health' }
+    ];
+
+    let token = localStorage.getItem('vartmap_token');
+    let user = JSON.parse(localStorage.getItem('vartmap_user') || 'null');
+
+    if (token && user) {
+        showDashboard();
+    }
+
+    async function login() {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const errorEl = document.getElementById('loginError');
+        errorEl.style.display = 'none';
+
+        try {
+            const res = await fetch(`${API_URL}/api/v1/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+            const data = await res.json();
+
+            if (res.ok && data.token) {
+                token = data.token;
+                user = data.user;
+                localStorage.setItem('vartmap_token', token);
+                localStorage.setItem('vartmap_user', JSON.stringify(user));
+                showDashboard();
+            } else {
+                errorEl.textContent = data.error || 'Login failed';
+                errorEl.style.display = 'block';
+            }
+        } catch (err) {
+            errorEl.textContent = 'Connection error. Please try again.';
+            errorEl.style.display = 'block';
+        }
+    }
+
+    function logout() {
+        token = null;
+        user = null;
+        localStorage.removeItem('vartmap_token');
+        localStorage.removeItem('vartmap_user');
+        document.getElementById('loginPage').style.display = 'flex';
+        document.getElementById('dashboard').style.display = 'none';
+    }
+
+    function showDashboard() {
+        document.getElementById('loginPage').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+        document.getElementById('userName').textContent = user?.name || user?.email || '';
+        loadDashboard();
+    }
+
+    async function loadDashboard() {
+        try {
+            const res = await fetch(`${API_URL}/api/v1/dashboard`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.status === 401) return logout();
+            const data = await res.json();
+            document.getElementById('totalFarmers').textContent = data.total_farmers || 0;
+            document.getElementById('conversations24h').textContent = data.conversations_24h || 0;
+            document.getElementById('activeFarmers').textContent = data.active_farmers_24h || 0;
+        } catch (err) {
+            console.error('Dashboard load error:', err);
+        }
+    }
+
+    async function loadFarmers() {
+        try {
+            const res = await fetch(`${API_URL}/api/v1/farmers`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.status === 401) return logout();
+            const data = await res.json();
+
+            if (!data.farmers || data.farmers.length === 0) {
+                document.getElementById('farmersTable').innerHTML = '<p style="color:#888; text-align:center; padding:20px;">No farmers registered yet</p>';
+                return;
+            }
+
+            let html = '<table><thead><tr><th>Name</th><th>Phone</th><th>Village</th><th>Crops</th><th>Stage</th><th>Status</th></tr></thead><tbody>';
+            for (const f of data.farmers) {
+                const stage = f.onboarding_stage || 'new';
+                const badgeClass = stage === 'complete' ? 'badge-complete' : stage === 'new' ? 'badge-new' : 'badge-active';
+                html += `<tr>
+                    <td>${f.name || '-'}</td>
+                    <td>${f.phone || '-'}</td>
+                    <td>${f.village || '-'}</td>
+                    <td>${(f.crops || []).join(', ') || '-'}</td>
+                    <td><span class="badge ${badgeClass}">${stage}</span></td>
+                    <td>${f.status || '-'}</td>
+                </tr>`;
+            }
+            html += '</tbody></table>';
+            document.getElementById('farmersTable').innerHTML = html;
+        } catch (err) {
+            document.getElementById('farmersTable').innerHTML = '<p style="color:#e74c3c;">Error loading farmers</p>';
+        }
+    }
+
+    async function loadServices() {
+        const grid = document.getElementById('servicesGrid');
+        let html = '';
+
+        for (const svc of SERVICES) {
+            try {
+                const res = await fetch(svc.url);
+                const data = await res.json();
+                const healthy = data.status === 'healthy';
+                html += `<div class="service-card ${healthy ? 'healthy' : 'unhealthy'}">
+                    <div class="name">${svc.name}</div>
+                    <div class="url">${svc.url.replace('/health', '')}</div>
+                    <div class="status">
+                        <span class="dot ${healthy ? 'dot-green' : 'dot-red'}"></span>
+                        ${healthy ? 'Healthy' : 'Unhealthy'}
+                    </div>
+                    <div style="margin-top:8px; font-size:12px; color:#888;">
+                        DB: ${data.database || 'N/A'} | Redis: ${data.redis || 'N/A'}
+                    </div>
+                </div>`;
+            } catch (err) {
+                html += `<div class="service-card unhealthy">
+                    <div class="name">${svc.name}</div>
+                    <div class="url">${svc.url.replace('/health', '')}</div>
+                    <div class="status"><span class="dot dot-red"></span> Unreachable</div>
+                </div>`;
+            }
+        }
+        grid.innerHTML = html;
+    }
+
+    function showTab(tab) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        event.target.classList.add('active');
+        document.getElementById('tab-overview').style.display = tab === 'overview' ? 'block' : 'none';
+        document.getElementById('tab-farmers').style.display = tab === 'farmers' ? 'block' : 'none';
+        document.getElementById('tab-services').style.display = tab === 'services' ? 'block' : 'none';
+
+        if (tab === 'farmers') loadFarmers();
+        if (tab === 'services') loadServices();
+    }
+
+    // Auto refresh every 60 seconds
+    setInterval(loadDashboard, 60000);
+</script>
+
+</body>
+</html>
