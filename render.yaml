@@ -1,0 +1,71 @@
+services:
+  - type: web
+    name: vartmap-whatsapp-gateway
+    runtime: node
+    region: singapore
+    plan: free
+    buildCommand: cd services/whatsapp-gateway && npm install
+    startCommand: cd services/whatsapp-gateway && node src/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: WA_PHONE_NUMBER_ID
+        sync: false
+      - key: WA_BUSINESS_ACCOUNT_ID
+        sync: false
+      - key: WA_ACCESS_TOKEN
+        sync: false
+      - key: WA_APP_SECRET
+        sync: false
+      - key: WA_VERIFY_TOKEN
+        sync: false
+      - key: INTELLIGENCE_SERVICE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+
+  - type: web
+    name: vartmap-intelligence
+    runtime: python
+    region: singapore
+    plan: free
+    buildCommand: cd services/intelligence-service && pip install -r requirements.txt
+    startCommand: cd services/intelligence-service && uvicorn src.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENWEATHER_API_KEY
+        sync: false
+      - key: DATA_GOV_API_KEY
+        sync: false
+
+  - type: web
+    name: vartmap-admin-api
+    runtime: node
+    region: singapore
+    plan: free
+    buildCommand: cd services/admin-api && npm install
+    startCommand: cd services/admin-api && node src/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3002"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
