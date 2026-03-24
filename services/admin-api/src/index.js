@@ -1,3 +1,6 @@
+// ============================================================
+// VartMap Admin API - Complete Enterprise Backend
+// ============================================================
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -5,6 +8,7 @@ const morgan = require('morgan');
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -17,20 +21,20 @@ app.use(express.json({ limit: '10mb' }));
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
-  max: 10
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000
 });
 
-// Auth middleware
+// ─── AUTH MIDDLEWARE ───
 const auth = (req, res, next) => {
   const token = req.headers.authorization?.replace('Bearer ', '');
   if (!token) return res.status(401).json({ error: 'No token' });
-  try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
-    next();
-  } catch { res.status(401).json({ error: 'Invalid token' }); }
+  try { req.user = jwt.verify(token, process.env.JWT_SECRET); next(); }
+  catch { res.status(401).json({ error: 'Invalid token' }); }
 };
 
-// Health
+// ─── HEALTH ───
 app.get('/health', async (req, res) => {
   try {
     const r = await pool.query('SELECT NOW()');
@@ -38,128 +42,218 @@ app.get('/health', async (req, res) => {
   } catch (e) { res.status(500).json({ status: 'unhealthy', error: e.message }); }
 });
 
-// ===== AUTH =====
+// ─── AUTH ───
 app.post('/api/v1/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     const r = await pool.query('SELECT * FROM admin_users WHERE email=$1 AND status=$2', [email, 'active']);
     if (!r.rows.length) return res.status(401).json({ error: 'Invalid credentials' });
     const user = r.rows[0];
-    const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!await bcrypt.compare(password, user.password_hash)) return res.status(401).json({ error: 'Invalid credentials' });
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, process.env.JWT_SECRET, { expiresIn: '24h' });
     await pool.query('UPDATE admin_users SET last_login_at=NOW() WHERE id=$1', [user.id]);
     res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ===== DASHBOARD =====
+// ─── DASHBOARD ───
 app.get('/api/v1/dashboard', auth, async (req, res) => {
   try {
-    const farmers = await pool.query('SELECT COUNT(*) FROM farmers');
-    const conv24 = await pool.query("SELECT COUNT(*) FROM conversations WHERE created_at > NOW() - INTERVAL '24 hours'");
-    const active24 = await pool.query("SELECT COUNT(DISTINCT farmer_id) FROM conversations WHERE created_at > NOW() - INTERVAL '24 hours'");
-    const conv7d = await pool.query("SELECT COUNT(*) FROM conversations WHERE created_at > NOW() - INTERVAL '7 days'");
-    const newFarmers7d = await pool.query("SELECT COUNT(*) FROM farmers WHERE created_at > NOW() - INTERVAL '7 days'");
-    const templates = await pool.query('SELECT COUNT(*) FROM message_templates');
-    const campaigns = await pool.query("SELECT COUNT(*) FROM campaigns WHERE status='active' OR status='running'");
-    const modPending = await pool.query("SELECT COUNT(*) FROM moderation_queue WHERE status='pending'");
-
+    const [farmers, conv24, active24, templates, campaigns, modPending, totalRewards, orders, schemes, spinWheels, chats] = await Promise.all([
+      pool.query('SELECT COUNT(*) FROM farmers'),
+      pool.query("SELECT COUNT(*) FROM conversations WHERE created_at > NOW() - INTERVAL '24 hours'"),
+      pool.query("SELECT COUNT(DISTINCT farmer_id) FROM conversations WHERE created_at > NOW() - INTERVAL '24 hours'"),
+      pool.query('SELECT COUNT(*) FROM message_templates'),
+      pool.query("SELECT COUNT(*) FROM campaigns WHERE status='active'"),
+      pool.query("SELECT COUNT(*) FROM moderation_queue WHERE status='pending'"),
+      pool.query('SELECT COALESCE(SUM(points),0) as total FROM rewards'),
+      pool.query('SELECT COUNT(*) FROM orders'),
+      pool.query("SELECT COUNT(*) FROM government_schemes WHERE status='active'"),
+      pool.query("SELECT COUNT(*) FROM spin_wheels WHERE status='active'"),
+      pool.query("SELECT COUNT(*) FROM wa_chat_sessions WHERE status='open'")
+    ]);
     res.json({
       total_farmers: +farmers.rows[0].count,
       conversations_24h: +conv24.rows[0].count,
       active_farmers_24h: +active24.rows[0].count,
-      conversations_7d: +conv7d.rows[0].count,
-      new_farmers_7d: +newFarmers7d.rows[0].count,
       total_templates: +templates.rows[0].count,
       active_campaigns: +campaigns.rows[0].count,
-      moderation_pending: +modPending.rows[0].count
+      moderation_pending: +modPending.rows[0].count,
+      total_rewards_points: +totalRewards.rows[0].total,
+      total_orders: +orders.rows[0].count,
+      active_schemes: +schemes.rows[0].count,
+      active_spin_wheels: +spinWheels.rows[0].count,
+      open_chats: +chats.rows[0].count
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ===== FARMERS =====
+// ─── FARMERS (Full CRUD) ───
 app.get('/api/v1/farmers', auth, async (req, res) => {
   try {
-    const { limit = 50, offset = 0, search, status, stage } = req.query;
-    let where = 'WHERE 1=1';
-    const params = [];
-    let i = 1;
-    if (search) { where += ` AND (name ILIKE $${i} OR phone ILIKE $${i} OR village ILIKE $${i})`; params.push(`%${search}%`); i++; }
-    if (status) { where += ` AND status=$${i}`; params.push(status); i++; }
-    if (stage) { where += ` AND onboarding_stage=$${i}`; params.push(stage); i++; }
-    const r = await pool.query(`SELECT * FROM farmers ${where} ORDER BY created_at DESC LIMIT $${i} OFFSET $${i+1}`, [...params, +limit, +offset]);
-    const total = await pool.query(`SELECT COUNT(*) FROM farmers ${where}`, params);
-    res.json({ farmers: r.rows, total: +total.rows[0].count, limit: +limit, offset: +offset });
+    const { search, status, district, crop, limit = 50, offset = 0 } = req.query;
+    let q = 'SELECT f.*, d.district_name, d.state_name FROM farmers f LEFT JOIN districts_master d ON f.district_id=d.id WHERE 1=1';
+    const p = [];
+    if (search) { p.push('%' + search + '%'); q += ` AND (f.name ILIKE $${p.length} OR f.phone ILIKE $${p.length} OR f.village ILIKE $${p.length})`; }
+    if (status) { p.push(status); q += ` AND f.status=$${p.length}`; }
+    if (district) { p.push('%' + district + '%'); q += ` AND d.district_name ILIKE $${p.length}`; }
+    if (crop) { p.push('%' + crop + '%'); q += ` AND f.crops::text ILIKE $${p.length}`; }
+    q += ' ORDER BY f.created_at DESC';
+    p.push(+limit); q += ` LIMIT $${p.length}`;
+    p.push(+offset); q += ` OFFSET $${p.length}`;
+    const result = await pool.query(q, p);
+    const total = await pool.query('SELECT COUNT(*) FROM farmers');
+    res.json({ farmers: result.rows, total: +total.rows[0].count, limit: +limit, offset: +offset });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/api/v1/farmers/:id', auth, async (req, res) => {
   try {
-    const r = await pool.query('SELECT * FROM farmers WHERE id=$1', [req.params.id]);
-    if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
-    const convos = await pool.query('SELECT * FROM conversations WHERE farmer_id=$1 ORDER BY created_at DESC LIMIT 50', [req.params.id]);
-    res.json({ farmer: r.rows[0], conversations: convos.rows });
+    const f = await pool.query('SELECT f.*, d.district_name, d.state_name FROM farmers f LEFT JOIN districts_master d ON f.district_id=d.id WHERE f.id=$1', [req.params.id]);
+    if (!f.rows.length) return res.status(404).json({ error: 'Farmer not found' });
+    const [conv, loyalty, spins, soil] = await Promise.all([
+      pool.query('SELECT * FROM conversations WHERE farmer_id=$1 ORDER BY created_at DESC LIMIT 20', [req.params.id]),
+      pool.query('SELECT * FROM farmer_loyalty WHERE farmer_id=$1', [req.params.id]),
+      pool.query('SELECT sr.*, sw.name as wheel_name FROM spin_results sr JOIN spin_wheels sw ON sr.wheel_id=sw.id WHERE sr.farmer_id=$1 ORDER BY sr.created_at DESC', [req.params.id]),
+      pool.query('SELECT * FROM soil_health_cards WHERE farmer_id=$1 ORDER BY sample_date DESC', [req.params.id])
+    ]);
+    res.json({ farmer: f.rows[0], conversations: conv.rows, loyalty: loyalty.rows[0] || null, spin_history: spins.rows, soil_cards: soil.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.put('/api/v1/farmers/:id', auth, async (req, res) => {
+app.post('/api/v1/farmers', auth, async (req, res) => {
   try {
-    const { name, language, village, pin_code, crops, status, land_holding_acres } = req.body;
+    const { phone, name, language, district_id, village, pin_code, land_holding_acres, crops, soil_type, irrigation_type, farming_type } = req.body;
+    const bsu = 'BSU' + Date.now().toString(36).toUpperCase();
+    const ref = 'REF' + crypto.randomBytes(4).toString('hex').toUpperCase();
     const r = await pool.query(
-      `UPDATE farmers SET name=COALESCE($1,name), language=COALESCE($2,language), village=COALESCE($3,village),
-       pin_code=COALESCE($4,pin_code), crops=COALESCE($5,crops), status=COALESCE($6,status),
-       land_holding_acres=COALESCE($7,land_holding_acres), updated_at=NOW() WHERE id=$8 RETURNING *`,
-      [name, language, village, pin_code, crops, status, land_holding_acres, req.params.id]
+      `INSERT INTO farmers (phone, bsu_id, name, language, district_id, village, pin_code, land_holding_acres, crops, soil_type, irrigation_type, farming_type, referral_code, status, onboarding_stage)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'active','completed') RETURNING *`,
+      [phone, bsu, name, language || 'hi', district_id, village, pin_code, land_holding_acres, crops || '{}', soil_type, irrigation_type, farming_type, ref]
     );
     res.json({ farmer: r.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ===== CONVERSATIONS / REPLY =====
-app.get('/api/v1/conversations', auth, async (req, res) => {
+app.put('/api/v1/farmers/:id', auth, async (req, res) => {
   try {
-    const { limit = 50, offset = 0, farmer_id } = req.query;
-    let where = farmer_id ? 'WHERE c.farmer_id=$1' : '';
-    const params = farmer_id ? [farmer_id] : [];
-    const i = params.length + 1;
-    const r = await pool.query(
-      `SELECT c.*, f.name as farmer_name, f.phone as farmer_phone FROM conversations c
-       LEFT JOIN farmers f ON c.farmer_id=f.id ${where} ORDER BY c.created_at DESC LIMIT $${i} OFFSET $${i+1}`,
-      [...params, +limit, +offset]
-    );
-    res.json({ conversations: r.rows });
+    const fields = ['name', 'phone', 'language', 'district_id', 'village', 'pin_code', 'land_holding_acres', 'crops', 'soil_type', 'irrigation_type', 'farming_type', 'status'];
+    const sets = []; const vals = [];
+    fields.forEach(f => { if (req.body[f] !== undefined) { vals.push(req.body[f]); sets.push(`${f}=$${vals.length}`); } });
+    if (!sets.length) return res.status(400).json({ error: 'No fields to update' });
+    vals.push(req.params.id);
+    const r = await pool.query(`UPDATE farmers SET ${sets.join(',')} WHERE id=$${vals.length} RETURNING *`, vals);
+    res.json({ farmer: r.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/v1/conversations/reply', auth, async (req, res) => {
+// ─── WHATSAPP CHAT (Full CRM) ───
+app.get('/api/v1/chats', auth, async (req, res) => {
   try {
-    const { farmer_id, message } = req.body;
-    if (!farmer_id || !message) return res.status(400).json({ error: 'farmer_id and message required' });
-
-    // Store outbound message
-    const r = await pool.query(
-      `INSERT INTO conversations (farmer_id, channel, direction, message_type, content, response_type, status, created_at)
-       VALUES ($1, 'whatsapp', 'outbound', 'text', $2, 'manual_reply', 'pending', NOW()) RETURNING *`,
-      [farmer_id, message]
-    );
-
-    // Get farmer phone
-    const farmer = await pool.query('SELECT phone FROM farmers WHERE id=$1', [farmer_id]);
-    if (!farmer.rows.length) return res.status(404).json({ error: 'Farmer not found' });
-
-    // Send via WhatsApp Gateway
-    const gatewayUrl = process.env.WA_GATEWAY_URL || process.env.INTELLIGENCE_SERVICE_URL;
-    // For now just store it, actual sending will be done via gateway
-    
-    res.json({ conversation: r.rows[0], status: 'queued' });
+    const { status, priority, search, limit = 50, offset = 0 } = req.query;
+    let q = `SELECT cs.*, f.name as farmer_name, f.phone as farmer_phone, f.village, a.name as assigned_name
+             FROM wa_chat_sessions cs
+             JOIN farmers f ON cs.farmer_id=f.id
+             LEFT JOIN admin_users a ON cs.admin_id=a.id WHERE 1=1`;
+    const p = [];
+    if (status) { p.push(status); q += ` AND cs.status=$${p.length}`; }
+    if (priority) { p.push(priority); q += ` AND cs.priority=$${p.length}`; }
+    if (search) { p.push('%' + search + '%'); q += ` AND (f.name ILIKE $${p.length} OR f.phone ILIKE $${p.length})`; }
+    q += ' ORDER BY cs.last_message_at DESC';
+    p.push(+limit); q += ` LIMIT $${p.length}`;
+    p.push(+offset); q += ` OFFSET $${p.length}`;
+    const r = await pool.query(q, p);
+    const total = await pool.query("SELECT COUNT(*) FROM wa_chat_sessions");
+    res.json({ chats: r.rows, total: +total.rows[0].count });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ===== TEMPLATES =====
+app.get('/api/v1/chats/:id/messages', auth, async (req, res) => {
+  try {
+    const { limit = 100, before } = req.query;
+    let q = 'SELECT m.*, f.name as farmer_name, a.name as admin_name FROM wa_messages m LEFT JOIN farmers f ON m.farmer_id=f.id LEFT JOIN admin_users a ON m.sender_id=a.id WHERE m.session_id=$1';
+    const p = [req.params.id];
+    if (before) { p.push(before); q += ` AND m.created_at < $${p.length}`; }
+    q += ' ORDER BY m.created_at DESC';
+    p.push(+limit); q += ` LIMIT $${p.length}`;
+    const r = await pool.query(q, p);
+    await pool.query('UPDATE wa_chat_sessions SET unread_count=0 WHERE id=$1', [req.params.id]);
+    res.json({ messages: r.rows.reverse() });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/v1/chats/:id/send', auth, async (req, res) => {
+  try {
+    const { content, message_type = 'text', media_url, template_id } = req.body;
+    const session = await pool.query('SELECT * FROM wa_chat_sessions WHERE id=$1', [req.params.id]);
+    if (!session.rows.length) return res.status(404).json({ error: 'Chat not found' });
+    const s = session.rows[0];
+    const msg = await pool.query(
+      `INSERT INTO wa_messages (session_id, farmer_id, direction, sender_type, sender_id, message_type, content, media_url, template_id)
+       VALUES ($1,$2,'outbound','admin',$3,$4,$5,$6,$7) RETURNING *`,
+      [req.params.id, s.farmer_id, req.user.id, message_type, content, media_url, template_id]
+    );
+    await pool.query('UPDATE wa_chat_sessions SET last_message_at=NOW() WHERE id=$1', [req.params.id]);
+    // Also log in conversations table
+    await pool.query(
+      `INSERT INTO conversations (farmer_id, channel, direction, message_type, content, status) VALUES ($1,'whatsapp','outbound',$2,$3,'sent')`,
+      [s.farmer_id, message_type, content]
+    );
+    // Forward to WhatsApp Gateway
+    if (process.env.WA_GATEWAY_URL && process.env.WA_GATEWAY_URL !== 'placeholder') {
+      try {
+        const axios = require('axios');
+        const farmer = await pool.query('SELECT phone FROM farmers WHERE id=$1', [s.farmer_id]);
+        if (farmer.rows.length) {
+          await axios.post(process.env.WA_GATEWAY_URL + '/api/v1/send', {
+            phone: farmer.rows[0].phone, message: content, type: message_type
+          }, { timeout: 5000 });
+        }
+      } catch (e) { console.error('WA send error:', e.message); }
+    }
+    res.json({ message: msg.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/v1/chats/:id/assign', auth, async (req, res) => {
+  try {
+    const { admin_id, priority, tags, notes, status } = req.body;
+    const sets = []; const vals = [];
+    if (admin_id) { vals.push(admin_id); sets.push(`admin_id=$${vals.length}`); }
+    if (priority) { vals.push(priority); sets.push(`priority=$${vals.length}`); }
+    if (tags) { vals.push(tags); sets.push(`tags=$${vals.length}`); }
+    if (notes !== undefined) { vals.push(notes); sets.push(`notes=$${vals.length}`); }
+    if (status) { vals.push(status); sets.push(`status=$${vals.length}`); }
+    vals.push(req.params.id);
+    const r = await pool.query(`UPDATE wa_chat_sessions SET ${sets.join(',')} WHERE id=$${vals.length} RETURNING *`, vals);
+    res.json({ chat: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/v1/chats/start', auth, async (req, res) => {
+  try {
+    const { farmer_id } = req.body;
+    const existing = await pool.query("SELECT * FROM wa_chat_sessions WHERE farmer_id=$1 AND status != 'closed' ORDER BY created_at DESC LIMIT 1", [farmer_id]);
+    if (existing.rows.length) return res.json({ chat: existing.rows[0] });
+    const r = await pool.query(
+      `INSERT INTO wa_chat_sessions (farmer_id, admin_id, status) VALUES ($1,$2,'assigned') RETURNING *`,
+      [farmer_id, req.user.id]
+    );
+    res.json({ chat: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── TEMPLATES (Full CRUD) ───
 app.get('/api/v1/templates', auth, async (req, res) => {
   try {
-    const r = await pool.query('SELECT * FROM message_templates ORDER BY created_at DESC');
+    const { category, language, status } = req.query;
+    let q = 'SELECT * FROM message_templates WHERE 1=1';
+    const p = [];
+    if (category) { p.push(category); q += ` AND category=$${p.length}`; }
+    if (language) { p.push(language); q += ` AND language=$${p.length}`; }
+    if (status) { p.push(status); q += ` AND status=$${p.length}`; }
+    q += ' ORDER BY created_at DESC';
+    const r = await pool.query(q, p);
     res.json({ templates: r.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -168,9 +262,8 @@ app.post('/api/v1/templates', auth, async (req, res) => {
   try {
     const { name, language, category, template_text, variables, wa_template_name } = req.body;
     const r = await pool.query(
-      `INSERT INTO message_templates (name, language, category, template_text, variables, wa_template_name, status, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,'draft',NOW()) RETURNING *`,
-      [name, language || 'hi', category, template_text, variables || [], wa_template_name]
+      `INSERT INTO message_templates (name, language, category, template_text, variables, wa_template_name, status) VALUES ($1,$2,$3,$4,$5,$6,'active') RETURNING *`,
+      [name, language || 'hi', category, template_text, variables || '{}', wa_template_name]
     );
     res.json({ template: r.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -178,12 +271,12 @@ app.post('/api/v1/templates', auth, async (req, res) => {
 
 app.put('/api/v1/templates/:id', auth, async (req, res) => {
   try {
-    const { name, language, category, template_text, variables, wa_template_name, wa_approved, status } = req.body;
+    const { name, language, category, template_text, variables, wa_template_name, status } = req.body;
     const r = await pool.query(
       `UPDATE message_templates SET name=COALESCE($1,name), language=COALESCE($2,language), category=COALESCE($3,category),
        template_text=COALESCE($4,template_text), variables=COALESCE($5,variables), wa_template_name=COALESCE($6,wa_template_name),
-       wa_approved=COALESCE($7,wa_approved), status=COALESCE($8,status), updated_at=NOW() WHERE id=$9 RETURNING *`,
-      [name, language, category, template_text, variables, wa_template_name, wa_approved, status, req.params.id]
+       status=COALESCE($7,status) WHERE id=$8 RETURNING *`,
+      [name, language, category, template_text, variables, wa_template_name, status, req.params.id]
     );
     res.json({ template: r.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -196,12 +289,10 @@ app.delete('/api/v1/templates/:id', auth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ===== CAMPAIGNS =====
+// ─── CAMPAIGNS ───
 app.get('/api/v1/campaigns', auth, async (req, res) => {
   try {
-    const r = await pool.query(
-      `SELECT c.*, t.name as template_name FROM campaigns c LEFT JOIN message_templates t ON c.template_id=t.id ORDER BY c.created_at DESC`
-    );
+    const r = await pool.query('SELECT c.*, t.name as template_name FROM campaigns c LEFT JOIN message_templates t ON c.template_id=t.id ORDER BY c.created_at DESC');
     res.json({ campaigns: r.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -209,44 +300,266 @@ app.get('/api/v1/campaigns', auth, async (req, res) => {
 app.post('/api/v1/campaigns', auth, async (req, res) => {
   try {
     const { name, template_id, target_criteria, scheduled_at } = req.body;
-    // Count target farmers
     let targetCount = 0;
-    const criteria = target_criteria || {};
-    let where = "WHERE status='active'";
-    if (criteria.district) where += ` AND district_id='${criteria.district}'`;
-    if (criteria.crop) where += ` AND '${criteria.crop}'=ANY(crops)`;
-    if (criteria.stage) where += ` AND onboarding_stage='${criteria.stage}'`;
-    const count = await pool.query(`SELECT COUNT(*) FROM farmers ${where}`);
-    targetCount = +count.rows[0].count;
-
+    if (target_criteria) {
+      let cq = 'SELECT COUNT(*) FROM farmers WHERE status=\'active\'';
+      if (target_criteria.district) cq += ` AND district_id IN (SELECT id FROM districts_master WHERE district_name ILIKE '%${target_criteria.district}%')`;
+      if (target_criteria.crop) cq += ` AND crops::text ILIKE '%${target_criteria.crop}%'`;
+      if (target_criteria.language) cq += ` AND language='${target_criteria.language}'`;
+      const tc = await pool.query(cq);
+      targetCount = +tc.rows[0].count;
+    }
     const r = await pool.query(
-      `INSERT INTO campaigns (name, template_id, target_criteria, target_count, status, scheduled_at, created_by, created_at)
-       VALUES ($1,$2,$3,$4,'draft',$5,$6,NOW()) RETURNING *`,
-      [name, template_id, criteria, targetCount, scheduled_at, req.user.id]
+      `INSERT INTO campaigns (name, template_id, target_criteria, target_count, scheduled_at, created_by, status)
+       VALUES ($1,$2,$3,$4,$5,$6,'draft') RETURNING *`,
+      [name, template_id, JSON.stringify(target_criteria || {}), targetCount, scheduled_at, req.user.id]
     );
     res.json({ campaign: r.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.put('/api/v1/campaigns/:id/status', auth, async (req, res) => {
+app.put('/api/v1/campaigns/:id', auth, async (req, res) => {
   try {
-    const { status } = req.body;
-    const r = await pool.query('UPDATE campaigns SET status=$1, updated_at=NOW() WHERE id=$2 RETURNING *', [status, req.params.id]);
+    const { name, template_id, target_criteria, status, scheduled_at } = req.body;
+    const r = await pool.query(
+      `UPDATE campaigns SET name=COALESCE($1,name), template_id=COALESCE($2,template_id),
+       target_criteria=COALESCE($3,target_criteria), status=COALESCE($4,status),
+       scheduled_at=COALESCE($5,scheduled_at) WHERE id=$6 RETURNING *`,
+      [name, template_id, target_criteria ? JSON.stringify(target_criteria) : null, status, scheduled_at, req.params.id]
+    );
     res.json({ campaign: r.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+// ─── SPIN WHEELS (Digicides-style) ───
+app.get('/api/v1/spin-wheels', auth, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT * FROM spin_wheels ORDER BY created_at DESC');
+    for (let w of r.rows) {
+      const segs = await pool.query('SELECT * FROM spin_wheel_segments WHERE wheel_id=$1 ORDER BY sort_order', [w.id]);
+      w.segments = segs.rows;
+      const stats = await pool.query('SELECT COUNT(*) as total_spins, COUNT(CASE WHEN status!=\'better_luck\' THEN 1 END) as winners FROM spin_results WHERE wheel_id=$1', [w.id]);
+      w.stats = stats.rows[0];
+    }
+    res.json({ wheels: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
-// ===== REWARDS =====
+app.post('/api/v1/spin-wheels', auth, async (req, res) => {
+  try {
+    const { name, description, type, start_date, end_date, max_spins_per_farmer, total_budget, segments } = req.body;
+    const w = await pool.query(
+      `INSERT INTO spin_wheels (name, description, type, start_date, end_date, max_spins_per_farmer, total_budget, created_by, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'draft') RETURNING *`,
+      [name, description, type || 'spin_wheel', start_date, end_date, max_spins_per_farmer || 1, total_budget || 0, req.user.id]
+    );
+    if (segments && segments.length) {
+      for (let i = 0; i < segments.length; i++) {
+        const s = segments[i];
+        await pool.query(
+          `INSERT INTO spin_wheel_segments (wheel_id, label, prize_type, prize_value, prize_description, color, probability, max_winners, sort_order)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [w.rows[0].id, s.label, s.prize_type, s.prize_value || 0, s.prize_description, s.color || '#4CAF50', s.probability, s.max_winners || 0, i]
+        );
+      }
+    }
+    res.json({ wheel: w.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/v1/spin-wheels/:id', auth, async (req, res) => {
+  try {
+    const { name, description, status, start_date, end_date, max_spins_per_farmer, total_budget } = req.body;
+    const r = await pool.query(
+      `UPDATE spin_wheels SET name=COALESCE($1,name), description=COALESCE($2,description), status=COALESCE($3,status),
+       start_date=COALESCE($4,start_date), end_date=COALESCE($5,end_date),
+       max_spins_per_farmer=COALESCE($6,max_spins_per_farmer), total_budget=COALESCE($7,total_budget) WHERE id=$8 RETURNING *`,
+      [name, description, status, start_date, end_date, max_spins_per_farmer, total_budget, req.params.id]
+    );
+    res.json({ wheel: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/v1/spin-wheels/:id/results', auth, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT sr.*, f.name as farmer_name, f.phone as farmer_phone FROM spin_results sr
+       JOIN farmers f ON sr.farmer_id=f.id WHERE sr.wheel_id=$1 ORDER BY sr.created_at DESC`,
+      [req.params.id]
+    );
+    res.json({ results: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── LOYALTY SYSTEM ───
+app.get('/api/v1/loyalty/programs', auth, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT * FROM loyalty_programs ORDER BY created_at DESC');
+    for (let p of r.rows) {
+      const stats = await pool.query('SELECT COUNT(*) as members, COALESCE(SUM(available_points),0) as total_available FROM farmer_loyalty WHERE program_id=$1', [p.id]);
+      p.stats = stats.rows[0];
+    }
+    res.json({ programs: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/v1/loyalty/programs', auth, async (req, res) => {
+  try {
+    const { name, description, points_per_purchase, points_per_referral, points_per_interaction, min_redeem_points, point_value_inr, tiers } = req.body;
+    const r = await pool.query(
+      `INSERT INTO loyalty_programs (name, description, points_per_purchase, points_per_referral, points_per_interaction, min_redeem_points, point_value_inr, tiers)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [name, description, points_per_purchase || 1, points_per_referral || 10, points_per_interaction || 0.5, min_redeem_points || 100, point_value_inr || 0.10, JSON.stringify(tiers || [])]
+    );
+    res.json({ program: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/v1/loyalty/leaderboard', auth, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT fl.*, f.name, f.phone, f.village FROM farmer_loyalty fl
+       JOIN farmers f ON fl.farmer_id=f.id ORDER BY fl.lifetime_points DESC LIMIT 50`
+    );
+    res.json({ leaderboard: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/v1/loyalty/award', auth, async (req, res) => {
+  try {
+    const { farmer_id, points, source, description } = req.body;
+    const existing = await pool.query('SELECT * FROM farmer_loyalty WHERE farmer_id=$1', [farmer_id]);
+    let fl;
+    if (existing.rows.length) {
+      fl = await pool.query(
+        `UPDATE farmer_loyalty SET total_points=total_points+$1, available_points=available_points+$1, lifetime_points=lifetime_points+$1 WHERE farmer_id=$2 RETURNING *`,
+        [points, farmer_id]
+      );
+    } else {
+      fl = await pool.query(
+        `INSERT INTO farmer_loyalty (farmer_id, total_points, available_points, lifetime_points) VALUES ($1,$2,$2,$2) RETURNING *`,
+        [farmer_id, points]
+      );
+    }
+    await pool.query(
+      `INSERT INTO loyalty_transactions (farmer_id, type, points, balance_after, source, description)
+       VALUES ($1,'earn',$2,$3,$4,$5)`,
+      [farmer_id, points, fl.rows[0].available_points, source || 'manual', description || 'Admin award']
+    );
+    res.json({ loyalty: fl.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── COUPON CODES ───
+app.get('/api/v1/coupons', auth, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT * FROM coupon_campaigns ORDER BY created_at DESC');
+    for (let c of r.rows) {
+      const stats = await pool.query('SELECT COUNT(*) as total_codes, COUNT(CASE WHEN status=\'used\' THEN 1 END) as used FROM coupon_codes WHERE campaign_id=$1', [c.id]);
+      c.stats = stats.rows[0];
+    }
+    res.json({ campaigns: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/v1/coupons', auth, async (req, res) => {
+  try {
+    const { name, code_prefix, discount_type, discount_value, max_uses, min_purchase, start_date, end_date, generate_count } = req.body;
+    const camp = await pool.query(
+      `INSERT INTO coupon_campaigns (name, code_prefix, discount_type, discount_value, max_uses, min_purchase, start_date, end_date)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [name, code_prefix || 'VART', discount_type || 'percentage', discount_value, max_uses || 0, min_purchase || 0, start_date, end_date]
+    );
+    const codes = [];
+    const count = generate_count || 10;
+    for (let i = 0; i < count; i++) {
+      const code = (code_prefix || 'VART') + crypto.randomBytes(4).toString('hex').toUpperCase();
+      await pool.query('INSERT INTO coupon_codes (campaign_id, code) VALUES ($1,$2)', [camp.rows[0].id, code]);
+      codes.push(code);
+    }
+    res.json({ campaign: camp.rows[0], codes_generated: count, sample_codes: codes.slice(0, 5) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── SOIL NUTRIENT DATA ───
+app.get('/api/v1/soil-data', auth, async (req, res) => {
+  try {
+    const { state, district, block, village, soil_type } = req.query;
+    let q = 'SELECT * FROM soil_nutrient_data WHERE 1=1';
+    const p = [];
+    if (state) { p.push('%' + state + '%'); q += ` AND state_name ILIKE $${p.length}`; }
+    if (district) { p.push('%' + district + '%'); q += ` AND district_name ILIKE $${p.length}`; }
+    if (block) { p.push('%' + block + '%'); q += ` AND block_name ILIKE $${p.length}`; }
+    if (village) { p.push('%' + village + '%'); q += ` AND village_name ILIKE $${p.length}`; }
+    if (soil_type) { p.push('%' + soil_type + '%'); q += ` AND soil_type ILIKE $${p.length}`; }
+    q += ' ORDER BY state_name, district_name, block_name LIMIT 200';
+    const r = await pool.query(q, p);
+    res.json({ data: r.rows, count: r.rows.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/v1/soil-data', auth, async (req, res) => {
+  try {
+    const d = req.body;
+    const r = await pool.query(
+      `INSERT INTO soil_nutrient_data (state_name, state_code, district_name, block_name, village_name, sample_year, total_samples,
+       nitrogen_low_pct, nitrogen_medium_pct, nitrogen_high_pct,
+       phosphorus_low_pct, phosphorus_medium_pct, phosphorus_high_pct,
+       potassium_low_pct, potassium_medium_pct, potassium_high_pct,
+       organic_carbon_low_pct, organic_carbon_medium_pct, organic_carbon_high_pct,
+       avg_ph, avg_ec, avg_sulphur, avg_zinc, avg_boron, avg_iron, avg_manganese, avg_copper,
+       soil_type, recommendations, source) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30) RETURNING *`,
+      [d.state_name, d.state_code, d.district_name, d.block_name, d.village_name, d.sample_year, d.total_samples || 0,
+       d.nitrogen_low_pct || 0, d.nitrogen_medium_pct || 0, d.nitrogen_high_pct || 0,
+       d.phosphorus_low_pct || 0, d.phosphorus_medium_pct || 0, d.phosphorus_high_pct || 0,
+       d.potassium_low_pct || 0, d.potassium_medium_pct || 0, d.potassium_high_pct || 0,
+       d.organic_carbon_low_pct || 0, d.organic_carbon_medium_pct || 0, d.organic_carbon_high_pct || 0,
+       d.avg_ph, d.avg_ec, d.avg_sulphur, d.avg_zinc, d.avg_boron, d.avg_iron, d.avg_manganese, d.avg_copper,
+       d.soil_type, JSON.stringify(d.recommendations || {}), d.source || 'manual']
+    );
+    res.json({ data: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/v1/soil-data/bulk', auth, async (req, res) => {
+  try {
+    const { records } = req.body;
+    let inserted = 0;
+    for (const d of records) {
+      await pool.query(
+        `INSERT INTO soil_nutrient_data (state_name, state_code, district_name, block_name, village_name, sample_year, total_samples,
+         nitrogen_low_pct, nitrogen_medium_pct, nitrogen_high_pct,
+         phosphorus_low_pct, phosphorus_medium_pct, phosphorus_high_pct,
+         potassium_low_pct, potassium_medium_pct, potassium_high_pct,
+         organic_carbon_low_pct, organic_carbon_medium_pct, organic_carbon_high_pct,
+         avg_ph, soil_type, source) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
+        [d.state_name, d.state_code, d.district_name, d.block_name, d.village_name, d.sample_year, d.total_samples || 0,
+         d.nitrogen_low_pct || 0, d.nitrogen_medium_pct || 0, d.nitrogen_high_pct || 0,
+         d.phosphorus_low_pct || 0, d.phosphorus_medium_pct || 0, d.phosphorus_high_pct || 0,
+         d.potassium_low_pct || 0, d.potassium_medium_pct || 0, d.potassium_high_pct || 0,
+         d.organic_carbon_low_pct || 0, d.organic_carbon_medium_pct || 0, d.organic_carbon_high_pct || 0,
+         d.avg_ph, d.soil_type, 'bulk_upload']
+      );
+      inserted++;
+    }
+    res.json({ inserted, total: records.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/v1/soil-data/summary', auth, async (req, res) => {
+  try {
+    const states = await pool.query('SELECT DISTINCT state_name, COUNT(*) as records FROM soil_nutrient_data GROUP BY state_name ORDER BY state_name');
+    const districts = await pool.query('SELECT DISTINCT district_name, state_name, COUNT(*) as records FROM soil_nutrient_data GROUP BY district_name, state_name ORDER BY state_name, district_name');
+    const total = await pool.query('SELECT COUNT(*) FROM soil_nutrient_data');
+    res.json({ total: +total.rows[0].count, states: states.rows, districts: districts.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── REWARDS (Points-based) ───
 app.get('/api/v1/rewards', auth, async (req, res) => {
   try {
-    const r = await pool.query(
-      `SELECT r.*, f.name as farmer_name, f.phone as farmer_phone FROM rewards r
-       LEFT JOIN farmers f ON r.farmer_id=f.id ORDER BY r.created_at DESC LIMIT 100`
-    );
-    const stats = await pool.query(
-      `SELECT type, COUNT(*) as count, SUM(points) as total_points FROM rewards GROUP BY type`
-    );
-    res.json({ rewards: r.rows, stats: stats.rows });
+    const r = await pool.query('SELECT r.*, f.name as farmer_name, f.phone FROM rewards r LEFT JOIN farmers f ON r.farmer_id=f.id ORDER BY r.created_at DESC LIMIT 100');
+    const stats = await pool.query("SELECT COUNT(*) as total, COALESCE(SUM(points),0) as total_points, COUNT(CASE WHEN status='earned' THEN 1 END) as pending FROM rewards");
+    res.json({ rewards: r.rows, stats: stats.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -254,58 +567,33 @@ app.post('/api/v1/rewards', auth, async (req, res) => {
   try {
     const { farmer_id, type, points, description } = req.body;
     const r = await pool.query(
-      `INSERT INTO rewards (farmer_id, type, points, description, status, created_at)
-       VALUES ($1,$2,$3,$4,'earned',NOW()) RETURNING *`,
-      [farmer_id, type, points, description]
+      `INSERT INTO rewards (farmer_id, type, points, description, status) VALUES ($1,$2,$3,$4,'earned') RETURNING *`,
+      [farmer_id, type || 'bonus', points, description]
     );
     res.json({ reward: r.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ===== REFERRALS =====
+// ─── REFERRALS ───
 app.get('/api/v1/referrals', auth, async (req, res) => {
   try {
-    const codes = await pool.query(
-      `SELECT rc.*, f.name as farmer_name, f.phone as farmer_phone FROM referral_codes rc
-       LEFT JOIN farmers f ON rc.farmer_id=f.id ORDER BY rc.created_at DESC`
-    );
-    const referrals = await pool.query(
-      `SELECT r.*, f1.name as referrer_name, f2.name as referee_name FROM referrals r
-       LEFT JOIN farmers f1 ON r.referrer_id=f1.id LEFT JOIN farmers f2 ON r.referee_id=f2.id ORDER BY r.created_at DESC LIMIT 100`
-    );
-    res.json({ codes: codes.rows, referrals: referrals.rows });
+    const codes = await pool.query('SELECT rc.*, f.name as farmer_name, f.phone FROM referral_codes rc LEFT JOIN farmers f ON rc.farmer_id=f.id ORDER BY rc.created_at DESC');
+    const refs = await pool.query('SELECT r.*, f1.name as referrer_name, f2.name as referee_name FROM referrals r LEFT JOIN farmers f1 ON r.referrer_id=f1.id LEFT JOIN farmers f2 ON r.referee_id=f2.id ORDER BY r.created_at DESC LIMIT 100');
+    res.json({ codes: codes.rows, referrals: refs.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ===== MODERATION =====
-app.get('/api/v1/moderation', auth, async (req, res) => {
-  try {
-    const { status = 'pending' } = req.query;
-    const r = await pool.query(
-      `SELECT mq.*, f.name as farmer_name, f.phone as farmer_phone FROM moderation_queue mq
-       LEFT JOIN farmers f ON mq.farmer_id=f.id WHERE mq.status=$1 ORDER BY mq.priority DESC, mq.created_at ASC`,
-      [status]
-    );
-    res.json({ items: r.rows });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/v1/moderation/:id/action', auth, async (req, res) => {
-  try {
-    const { action, reason } = req.body;
-    await pool.query(
-      `INSERT INTO moderation_actions (queue_id, action, reason, action_by, created_at) VALUES ($1,$2,$3,$4,NOW())`,
-      [req.params.id, action, reason, req.user.id]
-    );
-    await pool.query('UPDATE moderation_queue SET status=$1, updated_at=NOW() WHERE id=$2', [action === 'approve' ? 'approved' : 'rejected', req.params.id]);
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// ===== SCHEMES =====
+// ─── GOVERNMENT SCHEMES ───
 app.get('/api/v1/schemes', auth, async (req, res) => {
   try {
-    const r = await pool.query('SELECT * FROM government_schemes ORDER BY created_at DESC');
+    const { status, level, state } = req.query;
+    let q = 'SELECT * FROM government_schemes WHERE 1=1';
+    const p = [];
+    if (status) { p.push(status); q += ` AND status=$${p.length}`; }
+    if (level) { p.push(level); q += ` AND level=$${p.length}`; }
+    if (state) { p.push(state); q += ` AND state_code=$${p.length}`; }
+    q += ' ORDER BY created_at DESC';
+    const r = await pool.query(q, p);
     res.json({ schemes: r.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -314,49 +602,215 @@ app.post('/api/v1/schemes', auth, async (req, res) => {
   try {
     const { name, name_hi, department, level, state_code, description, description_hi, eligibility, benefits, benefits_hi, application_url, helpline, deadline } = req.body;
     const r = await pool.query(
-      `INSERT INTO government_schemes (name,name_hi,department,level,state_code,description,description_hi,eligibility,benefits,benefits_hi,application_url,helpline,deadline,status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'active') RETURNING *`,
-      [name, name_hi, department, level || 'central', state_code, description, description_hi, eligibility || {}, benefits, benefits_hi, application_url, helpline, deadline]
+      `INSERT INTO government_schemes (name, name_hi, department, level, state_code, description, description_hi, eligibility, benefits, benefits_hi, application_url, helpline, deadline)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+      [name, name_hi, department, level || 'central', state_code, description, description_hi, JSON.stringify(eligibility || {}), benefits, benefits_hi, application_url, helpline, deadline]
     );
     res.json({ scheme: r.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ===== MANDI PRICES =====
-app.get('/api/v1/mandi-prices', auth, async (req, res) => {
+app.put('/api/v1/schemes/:id', auth, async (req, res) => {
   try {
-    const { commodity, market, date } = req.query;
-    let where = 'WHERE 1=1';
-    const params = [];
-    let i = 1;
-    if (commodity) { where += ` AND commodity ILIKE $${i}`; params.push(`%${commodity}%`); i++; }
-    if (market) { where += ` AND market_name ILIKE $${i}`; params.push(`%${market}%`); i++; }
-    const r = await pool.query(`SELECT * FROM mandi_prices ${where} ORDER BY price_date DESC, commodity LIMIT 200`, params);
-    res.json({ prices: r.rows });
+    const { name, name_hi, department, level, state_code, description, description_hi, eligibility, benefits, benefits_hi, application_url, helpline, deadline, status } = req.body;
+    const r = await pool.query(
+      `UPDATE government_schemes SET name=COALESCE($1,name), name_hi=COALESCE($2,name_hi), department=COALESCE($3,department),
+       level=COALESCE($4,level), state_code=COALESCE($5,state_code), description=COALESCE($6,description),
+       description_hi=COALESCE($7,description_hi), benefits=COALESCE($8,benefits), benefits_hi=COALESCE($9,benefits_hi),
+       application_url=COALESCE($10,application_url), helpline=COALESCE($11,helpline), deadline=COALESCE($12,deadline),
+       status=COALESCE($13,status) WHERE id=$14 RETURNING *`,
+      [name, name_hi, department, level, state_code, description, description_hi, benefits, benefits_hi, application_url, helpline, deadline, status, req.params.id]
+    );
+    res.json({ scheme: r.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ===== PRODUCTS =====
+// ─── PRODUCTS ───
 app.get('/api/v1/products', auth, async (req, res) => {
   try {
-    const r = await pool.query('SELECT * FROM products ORDER BY created_at DESC');
+    const { search, category, brand } = req.query;
+    let q = 'SELECT * FROM products WHERE 1=1';
+    const p = [];
+    if (search) { p.push('%' + search + '%'); q += ` AND (name ILIKE $${p.length} OR brand ILIKE $${p.length})`; }
+    if (category) { p.push(category); q += ` AND category=$${p.length}`; }
+    if (brand) { p.push(brand); q += ` AND brand=$${p.length}`; }
+    q += ' ORDER BY created_at DESC';
+    const r = await pool.query(q, p);
     res.json({ products: r.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/v1/products', auth, async (req, res) => {
   try {
-    const { name, brand, category, subcategory, registration_number, active_ingredients, dosage, application_method, target_crops, target_pests, safety_info } = req.body;
+    const { name, brand, category, subcategory, registration_number, active_ingredients, dosage, application_method, target_crops, target_pests, safety_info, image_url } = req.body;
     const r = await pool.query(
-      `INSERT INTO products (name,brand,category,subcategory,registration_number,active_ingredients,dosage,application_method,target_crops,target_pests,safety_info,verified,status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,false,'active') RETURNING *`,
-      [name, brand, category, subcategory, registration_number, active_ingredients || {}, dosage, application_method, target_crops || [], target_pests || [], safety_info]
+      `INSERT INTO products (name, brand, category, subcategory, registration_number, active_ingredients, dosage, application_method, target_crops, target_pests, safety_info, image_url, verified, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,true,'active') RETURNING *`,
+      [name, brand, category, subcategory, registration_number, JSON.stringify(active_ingredients || {}), dosage, application_method, target_crops || '{}', target_pests || '{}', safety_info, image_url]
     );
     res.json({ product: r.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ===== AUDIT LOG =====
+// ─── MANDI PRICES ───
+app.get('/api/v1/mandi-prices', auth, async (req, res) => {
+  try {
+    const { commodity, market, state, date } = req.query;
+    let q = 'SELECT * FROM mandi_prices WHERE 1=1';
+    const p = [];
+    if (commodity) { p.push('%' + commodity + '%'); q += ` AND commodity ILIKE $${p.length}`; }
+    if (market) { p.push('%' + market + '%'); q += ` AND market_name ILIKE $${p.length}`; }
+    if (state) { p.push('%' + state + '%'); q += ` AND state ILIKE $${p.length}`; }
+    if (date) { p.push(date); q += ` AND price_date=$${p.length}`; }
+    q += ' ORDER BY price_date DESC, commodity LIMIT 200';
+    const r = await pool.query(q, p);
+    res.json({ prices: r.rows, count: r.rows.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/v1/mandi-prices', auth, async (req, res) => {
+  try {
+    const { commodity, variety, market_name, district, state, min_price, max_price, modal_price, unit, price_date } = req.body;
+    const r = await pool.query(
+      `INSERT INTO mandi_prices (commodity, variety, market_name, district, state, min_price, max_price, modal_price, unit, price_date)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [commodity, variety, market_name, district, state, min_price, max_price, modal_price, unit || 'quintal', price_date]
+    );
+    res.json({ price: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── MODERATION ───
+app.get('/api/v1/moderation', auth, async (req, res) => {
+  try {
+    const { status } = req.query;
+    let q = `SELECT mq.*, f.name as farmer_name, f.phone FROM moderation_queue mq
+             LEFT JOIN farmers f ON mq.farmer_id=f.id WHERE 1=1`;
+    const p = [];
+    if (status) { p.push(status); q += ` AND mq.status=$${p.length}`; }
+    q += ' ORDER BY mq.created_at DESC LIMIT 100';
+    const r = await pool.query(q, p);
+    res.json({ items: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/v1/moderation/:id/action', auth, async (req, res) => {
+  try {
+    const { action, reason } = req.body;
+    await pool.query('UPDATE moderation_queue SET status=$1 WHERE id=$2', [action === 'approve' ? 'approved' : 'rejected', req.params.id]);
+    await pool.query(
+      `INSERT INTO moderation_actions (queue_id, action, reason, action_by) VALUES ($1,$2,$3,$4)`,
+      [req.params.id, action, reason, req.user.id]
+    );
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── ORDERS ───
+app.get('/api/v1/orders', auth, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT o.*, f.name as farmer_name, f.phone, d.name as dealer_name, p.name as product_name
+       FROM orders o LEFT JOIN farmers f ON o.farmer_id=f.id LEFT JOIN dealers d ON o.dealer_id=d.id
+       LEFT JOIN products p ON o.product_id=p.id ORDER BY o.created_at DESC LIMIT 100`
+    );
+    res.json({ orders: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── DEALERS ───
+app.get('/api/v1/dealers', auth, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT d.*, dm.district_name FROM dealers d LEFT JOIN districts_master dm ON d.district_id=dm.id ORDER BY d.created_at DESC');
+    res.json({ dealers: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/v1/dealers', auth, async (req, res) => {
+  try {
+    const { name, phone, district_id, address, license_number } = req.body;
+    const r = await pool.query(
+      `INSERT INTO dealers (name, phone, district_id, address, license_number, verified, status) VALUES ($1,$2,$3,$4,$5,true,'active') RETURNING *`,
+      [name, phone, district_id, address, license_number]
+    );
+    res.json({ dealer: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── FIELD AGENTS ───
+app.get('/api/v1/field-agents', auth, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT fa.*, dm.district_name FROM field_agents fa LEFT JOIN districts_master dm ON fa.district_id=dm.id ORDER BY fa.created_at DESC');
+    res.json({ agents: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/v1/field-agents', auth, async (req, res) => {
+  try {
+    const { name, phone, email, district_id, area_villages, role } = req.body;
+    const r = await pool.query(
+      `INSERT INTO field_agents (name, phone, email, district_id, area_villages, role, status) VALUES ($1,$2,$3,$4,$5,$6,'active') RETURNING *`,
+      [name, phone, email, district_id, area_villages || '{}', role || 'field_agent']
+    );
+    res.json({ agent: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── NOTIFICATIONS LOG ───
+app.get('/api/v1/notifications', auth, async (req, res) => {
+  try {
+    const { channel, type, status } = req.query;
+    let q = 'SELECT nl.*, f.name as farmer_name FROM notification_logs nl LEFT JOIN farmers f ON nl.farmer_id=f.id WHERE 1=1';
+    const p = [];
+    if (channel) { p.push(channel); q += ` AND nl.channel=$${p.length}`; }
+    if (type) { p.push(type); q += ` AND nl.type=$${p.length}`; }
+    if (status) { p.push(status); q += ` AND nl.status=$${p.length}`; }
+    q += ' ORDER BY nl.created_at DESC LIMIT 100';
+    const r = await pool.query(q, p);
+    res.json({ notifications: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── ANALYTICS ───
+app.get('/api/v1/analytics/overview', auth, async (req, res) => {
+  try {
+    const days = req.query.days || 30;
+    const [daily, byIntent, byChannel, growth] = await Promise.all([
+      pool.query(`SELECT DATE(created_at) as date, COUNT(*) as conversations, COUNT(DISTINCT farmer_id) as active_farmers
+                  FROM conversations WHERE created_at > NOW() - INTERVAL '${+days} days' GROUP BY DATE(created_at) ORDER BY date`),
+      pool.query(`SELECT intent, COUNT(*) as count FROM conversations WHERE intent IS NOT NULL AND created_at > NOW() - INTERVAL '${+days} days' GROUP BY intent ORDER BY count DESC LIMIT 10`),
+      pool.query(`SELECT channel, COUNT(*) as count FROM conversations WHERE created_at > NOW() - INTERVAL '${+days} days' GROUP BY channel`),
+      pool.query(`SELECT DATE(created_at) as date, COUNT(*) as new_farmers FROM farmers WHERE created_at > NOW() - INTERVAL '${+days} days' GROUP BY DATE(created_at) ORDER BY date`)
+    ]);
+    res.json({ daily: daily.rows, by_intent: byIntent.rows, by_channel: byChannel.rows, farmer_growth: growth.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/v1/analytics/usage', auth, async (req, res) => {
+  try {
+    const [daily, byFeature, costs] = await Promise.all([
+      pool.query("SELECT DATE(created_at) as date, COUNT(*) as count FROM usage_tracking WHERE created_at > NOW() - INTERVAL '30 days' GROUP BY DATE(created_at) ORDER BY date"),
+      pool.query("SELECT feature, COUNT(*) as count, COALESCE(SUM(cost_inr),0) as total_cost FROM usage_tracking WHERE created_at > NOW() - INTERVAL '30 days' GROUP BY feature ORDER BY count DESC"),
+      pool.query("SELECT DATE(created_at) as date, COALESCE(SUM(cost_inr),0) as cost FROM usage_tracking WHERE created_at > NOW() - INTERVAL '30 days' GROUP BY DATE(created_at) ORDER BY date")
+    ]);
+    res.json({ daily: daily.rows, by_feature: byFeature.rows, costs: costs.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── DISTRICTS ───
+app.get('/api/v1/districts', auth, async (req, res) => {
+  try {
+    const { state } = req.query;
+    let q = 'SELECT * FROM districts_master WHERE active=true';
+    const p = [];
+    if (state) { p.push('%' + state + '%'); q += ` AND state_name ILIKE $${p.length}`; }
+    q += ' ORDER BY state_name, district_name';
+    const r = await pool.query(q, p);
+    res.json({ districts: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── AUDIT LOG ───
 app.get('/api/v1/audit-log', auth, async (req, res) => {
   try {
     const r = await pool.query('SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 100');
@@ -364,18 +818,25 @@ app.get('/api/v1/audit-log', auth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ===== USAGE / ANALYTICS =====
-app.get('/api/v1/analytics/usage', auth, async (req, res) => {
+// ─── ADMIN USERS ───
+app.get('/api/v1/admin-users', auth, async (req, res) => {
   try {
-    const daily = await pool.query(
-      `SELECT DATE(created_at) as date, COUNT(*) as count, SUM(tokens_used) as tokens, SUM(cost_inr) as cost
-       FROM usage_tracking WHERE created_at > NOW() - INTERVAL '30 days' GROUP BY DATE(created_at) ORDER BY date`
-    );
-    const byFeature = await pool.query(
-      `SELECT feature, COUNT(*) as count FROM usage_tracking WHERE created_at > NOW() - INTERVAL '30 days' GROUP BY feature ORDER BY count DESC`
-    );
-    res.json({ daily: daily.rows, by_feature: byFeature.rows });
+    const r = await pool.query('SELECT id, email, name, role, status, last_login_at, created_at FROM admin_users ORDER BY created_at');
+    res.json({ users: r.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.listen(PORT, () => console.log(`Admin API on port ${PORT}`));
+app.post('/api/v1/admin-users', auth, async (req, res) => {
+  try {
+    const { email, password, name, role } = req.body;
+    const hash = await bcrypt.hash(password, 12);
+    const r = await pool.query(
+      `INSERT INTO admin_users (email, password_hash, name, role, status) VALUES ($1,$2,$3,$4,'active') RETURNING id, email, name, role`,
+      [email, hash, name, role || 'viewer']
+    );
+    res.json({ user: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── START SERVER ───
+app.listen(PORT, () => console.log(`VartMap Admin API running on port ${PORT}`));
