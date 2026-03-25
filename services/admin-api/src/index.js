@@ -59,34 +59,56 @@ app.post('/api/v1/auth/login', async (req, res) => {
 // ─── DASHBOARD ───
 app.get('/api/v1/dashboard', auth, async (req, res) => {
   try {
-    const [farmers, conv24, active24, templates, campaigns, modPending, totalRewards, orders, schemes, spinWheels, chats] = await Promise.all([
-      pool.query('SELECT COUNT(*) FROM farmers'),
-      pool.query("SELECT COUNT(*) FROM conversations WHERE created_at > NOW() - INTERVAL '24 hours'"),
-      pool.query("SELECT COUNT(DISTINCT farmer_id) FROM conversations WHERE created_at > NOW() - INTERVAL '24 hours'"),
-      pool.query('SELECT COUNT(*) FROM message_templates'),
-      pool.query("SELECT COUNT(*) FROM campaigns WHERE status='active'"),
-      pool.query("SELECT COUNT(*) FROM moderation_queue WHERE status='pending'"),
-      pool.query('SELECT COALESCE(SUM(points),0) as total FROM rewards'),
-      pool.query('SELECT COUNT(*) FROM orders'),
-      pool.query("SELECT COUNT(*) FROM government_schemes WHERE status='active'"),
-      pool.query("SELECT COUNT(*) FROM spin_wheels WHERE status='active'"),
-      pool.query("SELECT COUNT(*) FROM wa_chat_sessions WHERE status='open'")
+    // Helper: run query safely, return 0 if table doesn't exist
+    const safeCount = async (query) => {
+      try {
+        const r = await pool.query(query);
+        return +(r.rows[0].count || r.rows[0].total || 0);
+      } catch (e) { return 0; }
+    };
+
+    const [
+      total_farmers,
+      conversations_24h,
+      active_farmers_24h,
+      total_templates,
+      active_campaigns,
+      moderation_pending,
+      total_rewards_points,
+      total_orders,
+      active_schemes,
+      active_spin_wheels,
+      open_chats
+    ] = await Promise.all([
+      safeCount('SELECT COUNT(*) FROM farmers'),
+      safeCount("SELECT COUNT(*) FROM conversations WHERE created_at > NOW() - INTERVAL '24 hours'"),
+      safeCount("SELECT COUNT(DISTINCT farmer_id) FROM conversations WHERE created_at > NOW() - INTERVAL '24 hours'"),
+      safeCount('SELECT COUNT(*) FROM message_templates'),
+      safeCount("SELECT COUNT(*) FROM campaigns WHERE status='active'"),
+      safeCount("SELECT COUNT(*) FROM moderation_queue WHERE status='pending'"),
+      safeCount('SELECT COALESCE(SUM(points),0) as total FROM rewards'),
+      safeCount('SELECT COUNT(*) FROM orders'),
+      safeCount("SELECT COUNT(*) FROM government_schemes WHERE status='active'"),
+      safeCount("SELECT COUNT(*) FROM spin_wheels WHERE status='active'"),
+      safeCount("SELECT COUNT(*) FROM wa_chat_sessions WHERE status IN ('open','active','assigned')")
     ]);
+
     res.json({
-      total_farmers: +farmers.rows[0].count,
-      conversations_24h: +conv24.rows[0].count,
-      active_farmers_24h: +active24.rows[0].count,
-      total_templates: +templates.rows[0].count,
-      active_campaigns: +campaigns.rows[0].count,
-      moderation_pending: +modPending.rows[0].count,
-      total_rewards_points: +totalRewards.rows[0].total,
-      total_orders: +orders.rows[0].count,
-      active_schemes: +schemes.rows[0].count,
-      active_spin_wheels: +spinWheels.rows[0].count,
-      open_chats: +chats.rows[0].count
+      total_farmers,
+      conversations_24h,
+      active_farmers_24h,
+      total_templates,
+      active_campaigns,
+      moderation_pending,
+      total_rewards_points,
+      total_orders,
+      active_schemes,
+      active_spin_wheels,
+      open_chats
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
 
 // ─── FARMERS (Full CRUD) ───
 app.get('/api/v1/farmers', auth, async (req, res) => {
