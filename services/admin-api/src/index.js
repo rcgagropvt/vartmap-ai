@@ -236,7 +236,6 @@ app.post('/api/v1/chats/:id/send', auth, async (req, res) => {
 
     if (!content) return res.status(400).json({ error: 'content is required' });
 
-    // Get session + farmer phone
     const session = await pool.query(
       `SELECT s.*, f.phone, f.name as farmer_name, f.id as farmer_id
        FROM wa_chat_sessions s
@@ -250,7 +249,6 @@ app.post('/api/v1/chats/:id/send', auth, async (req, res) => {
     const farmerPhone = session.rows[0].phone;
     const farmerId = session.rows[0].farmer_id;
 
-    // Store message in DB
     const msg = await pool.query(
       `INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, sender_id, message_type, content, wa_status, created_at)
        VALUES (gen_random_uuid(), $1, $2, 'outbound', 'admin', $3, 'text', $4, 'sending', NOW())
@@ -258,36 +256,25 @@ app.post('/api/v1/chats/:id/send', auth, async (req, res) => {
       [sessionId, farmerId, req.user.id, content]
     );
 
-    // Update session
     await pool.query(
       'UPDATE wa_chat_sessions SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1',
       [sessionId]
     );
 
-    // Send via WhatsApp Gateway
     const gatewayUrl = process.env.GATEWAY_URL || 'https://vartmap-whatsapp-gateway.onrender.com';
     try {
-      const waResponse = await axios.post(`${gatewayUrl}/api/v1/send-message`, {
+      await axios.post(`${gatewayUrl}/api/v1/send-message`, {
         phone: farmerPhone,
         message: content,
         session_id: sessionId,
         farmer_id: farmerId
       });
 
-      // Update message status to sent
-      await pool.query(
-        "UPDATE wa_messages SET wa_status = 'sent' WHERE id = $1",
-        [msg.rows[0].id]
-      );
-
+      await pool.query("UPDATE wa_messages SET wa_status = 'sent' WHERE id = $1", [msg.rows[0].id]);
       res.json({ success: true, message: msg.rows[0], wa_delivered: true });
     } catch (waErr) {
       console.error('WhatsApp send failed:', waErr.response?.data || waErr.message);
-      // Update message status to failed
-      await pool.query(
-        "UPDATE wa_messages SET wa_status = 'failed' WHERE id = $1",
-        [msg.rows[0].id]
-      );
+      await pool.query("UPDATE wa_messages SET wa_status = 'failed' WHERE id = $1", [msg.rows[0].id]);
       res.json({ success: true, message: msg.rows[0], wa_delivered: false, wa_error: waErr.message });
     }
   } catch (err) {
@@ -295,6 +282,7 @@ app.post('/api/v1/chats/:id/send', auth, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 
 app.put('/api/v1/chats/:id/assign', auth, async (req, res) => {

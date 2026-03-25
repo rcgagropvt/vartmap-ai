@@ -454,37 +454,29 @@ async function sendChatMsg(id) {
   if (!content) return;
   inp.value = '';
   const msgs = document.getElementById('chatMessages');
-  // Remove "No messages yet" empty state if present
   const emptyEl = msgs.querySelector('.empty');
   if (emptyEl) emptyEl.remove();
   msgs.innerHTML += `<div class="msg outbound"><div class="msg-sender">${USER.name}</div><div>${content}</div><div class="msg-time">sending...</div></div>`;
   msgs.scrollTop = msgs.scrollHeight;
   try {
     const r = await api('/api/v1/chats/' + id + '/send', { method: 'POST', body: JSON.stringify({ content }) });
-    if (r.wa_delivered) {
-      console.log('Message delivered to WhatsApp');
-    } else {
-      console.warn('Message saved but WhatsApp delivery failed:', r.wa_error);
-    }
-    // Refresh messages after 1 second
+    if (r.wa_delivered) console.log('Message delivered to WhatsApp');
+    else console.warn('Saved but WA failed:', r.wa_error);
     setTimeout(() => openChatSession(id), 1000);
   } catch (e) { console.error('Send error:', e); }
 }
 
-// Auto-refresh chat messages every 5 seconds
 setInterval(() => {
   if (currentChat && currentPage === 'chats') {
     api('/api/v1/chats/' + currentChat + '/messages').then(d => {
       const msgs = document.getElementById('chatMessages');
       if (!msgs) return;
       const currentCount = msgs.querySelectorAll('.msg').length;
-      if (d.messages.length !== currentCount) {
-        // New messages arrived, refresh
-        openChatSession(currentChat);
-      }
+      if (d.messages.length !== currentCount) openChatSession(currentChat);
     }).catch(() => {});
   }
 }, 5000);
+
 
 async function closeChat(id) { await api('/api/v1/chats/' + id + '/assign', { method: 'PUT', body: JSON.stringify({ status: 'closed' }) }); loadChats(); }
 async function assignChat(id) { await api('/api/v1/chats/' + id + '/assign', { method: 'PUT', body: JSON.stringify({ admin_id: USER.id, status: 'assigned' }) }); }
