@@ -1039,6 +1039,7 @@ async function loadSoilData() {
           <div class="search-box"><i class="fas fa-search"></i><input id="soilSearch" placeholder="Search district..." onkeydown="if(event.key==='Enter')searchSoil()"></div>
           <button class="btn btn-sm btn-primary" onclick="addSoilModal()"><i class="fas fa-plus"></i> Add Data</button>
           <button class="btn btn-sm btn-accent" onclick="bulkSoilModal()"><i class="fas fa-upload"></i> Bulk Upload</button>
+          <button class="btn btn-sm btn-primary" onclick="fetchSoilLive()" style="background:var(--info)"><i class="fas fa-cloud-download-alt"></i> Fetch from Govt DB</button>
         </div>
       </div>
       <div style="overflow-x:auto">
@@ -1127,21 +1128,69 @@ async function uploadBulkSoil() {
   } catch (e) { alert('Invalid JSON: ' + e.message); }
 }
 
+async function fetchSoilLive() {
+  try {
+    const r = await fetch('https://vartmap-intelligence.onrender.com/api/v1/load-soil-data').then(r => r.json());
+    alert(r.message + '\nStates: ' + r.states_covered.join(', '));
+    loadSoilData();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
 // ─── 13. SCHEMES ───
 async function loadSchemes() {
   const el = document.getElementById('pageContent');
+  el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
   try {
     const d = await api('/api/v1/schemes');
     el.innerHTML = `
-    <div class="table-wrap">
-      <div class="table-header"><h3>Government Schemes (${d.schemes.length})</h3><button class="btn btn-primary btn-sm" onclick="newSchemeModal()"><i class="fas fa-plus"></i> Add Scheme</button></div>
-      <table><tr><th>Name</th><th>Hindi Name</th><th>Department</th><th>Level</th><th>Deadline</th><th>Status</th><th>Actions</th></tr>
-      ${d.schemes.map(s => `<tr><td><strong>${s.name}</strong></td><td>${s.name_hi || '-'}</td><td>${s.department || '-'}</td><td>${s.level}</td><td>${fmtDate(s.deadline)}</td><td><span class="status ${s.status}">${s.status}</span></td>
-      <td><button class="btn btn-sm btn-outline" onclick="editScheme('${s.id}','${encodeURIComponent(JSON.stringify(s))}')"><i class="fas fa-edit"></i></button></td></tr>`).join('')}
-      </table>
-    </div>`;
+    <div class="flex justify-between items-center mb-16 flex-wrap gap-10">
+      <h3>${d.schemes.length} Government Schemes</h3>
+      <div class="flex gap-10">
+        <button class="btn btn-accent btn-sm" onclick="fetchSchemesLive()"><i class="fas fa-cloud-download-alt"></i> Fetch from Govt Database</button>
+        <button class="btn btn-primary btn-sm" onclick="newSchemeModal()"><i class="fas fa-plus"></i> Add Scheme</button>
+      </div>
+    </div>
+    <div id="schemeFetchResult" style="display:none;margin-bottom:16px"></div>
+    ${d.schemes.map(s => `
+    <div class="table-wrap mb-16" style="border-left:4px solid var(--primary)">
+      <div style="padding:20px">
+        <div class="flex justify-between items-center flex-wrap gap-10">
+          <div>
+            <h3 style="font-size:16px;margin-bottom:4px">${s.name}</h3>
+            ${s.name_hi ? `<p style="font-size:13px;color:var(--primary)">${s.name_hi}</p>` : ''}
+          </div>
+          <div class="flex gap-10 items-center">
+            <span class="status ${s.status}">${s.status}</span>
+            <span class="tag">${s.level}</span>
+            <button class="btn btn-sm btn-outline" onclick="editScheme('${s.id}','${encodeURIComponent(JSON.stringify(s))}')"><i class="fas fa-edit"></i></button>
+          </div>
+        </div>
+        <p style="font-size:13px;color:var(--text-light);margin-top:8px">${s.description || ''}</p>
+        ${s.description_hi ? `<p style="font-size:12px;color:var(--text-light);margin-top:4px">${s.description_hi}</p>` : ''}
+        <div style="margin-top:12px;display:flex;gap:16px;flex-wrap:wrap;font-size:13px">
+          ${s.benefits ? `<div><strong>Benefits:</strong> ${s.benefits}</div>` : ''}
+          ${s.department ? `<div><strong>Dept:</strong> ${s.department}</div>` : ''}
+          ${s.helpline ? `<div><strong>Helpline:</strong> ${s.helpline}</div>` : ''}
+          ${s.application_url ? `<div><a href="${s.application_url}" target="_blank" style="color:var(--info)"><i class="fas fa-external-link-alt"></i> Apply Online</a></div>` : ''}
+          ${s.deadline ? `<div><strong>Deadline:</strong> ${fmtDate(s.deadline)}</div>` : ''}
+        </div>
+      </div>
+    </div>
+    `).join('')}
+    ${!d.schemes.length ? '<div class="empty"><i class="fas fa-university"></i><p>No schemes yet. Click "Fetch from Govt Database" to load all major schemes.</p></div>' : ''}`;
   } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
 }
+
+async function fetchSchemesLive() {
+  const el = document.getElementById('schemeFetchResult');
+  if (el) { el.style.display = 'block'; el.innerHTML = '<div style="padding:12px;background:var(--bg);border-radius:8px"><i class="fas fa-spinner fa-spin"></i> Loading schemes from government database...</div>'; }
+  try {
+    const r = await fetch('https://vartmap-intelligence.onrender.com/api/v1/load-schemes').then(r => r.json());
+    if (el) el.innerHTML = `<div style="padding:12px;background:#E8F5E9;border-radius:8px;font-size:13px"><strong><i class="fas fa-check-circle" style="color:#2E7D32"></i> ${r.message}</strong></div>`;
+    setTimeout(() => loadSchemes(), 1500);
+  } catch (e) { if (el) el.innerHTML = '<div style="padding:12px;background:#FFEBEE;border-radius:8px">Error: ' + e.message + '</div>'; }
+}
+
 
 function newSchemeModal() {
   openModal('Add Government Scheme', `
@@ -1222,19 +1271,80 @@ async function createProduct() {
 // ─── 15. MANDI PRICES ───
 async function loadMandi() {
   const el = document.getElementById('pageContent');
+  el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
   try {
     const d = await api('/api/v1/mandi-prices');
     el.innerHTML = `
-    <div class="table-wrap">
-      <div class="table-header"><h3>Mandi Prices (${d.count})</h3>
-        <div class="table-actions"><div class="search-box"><i class="fas fa-search"></i><input id="mandiSearch" placeholder="Search commodity..." onkeydown="if(event.key==='Enter')searchMandi()"></div><button class="btn btn-primary btn-sm" onclick="newMandiModal()"><i class="fas fa-plus"></i> Add Price</button></div>
+    <div class="stats-grid mb-24">
+      <div class="stat-card"><div class="stat-value">${d.count}</div><div class="stat-label">Total Price Records</div></div>
+      <div class="stat-card accent"><div class="stat-icon"><i class="fas fa-sync" style="color:var(--accent)"></i></div><div class="stat-value" style="font-size:16px">Fetch Live Prices</div><div class="stat-label"><button class="btn btn-accent btn-sm" onclick="fetchMandiLive('','',100)" style="margin-top:6px"><i class="fas fa-download"></i> Fetch 100 Latest</button></div></div>
+      <div class="stat-card info"><div class="stat-icon"><i class="fas fa-download" style="color:var(--info)"></i></div><div class="stat-value" style="font-size:16px">Bulk Fetch</div><div class="stat-label"><button class="btn btn-sm btn-outline" onclick="fetchMandiLive('','',500)" style="margin-top:6px"><i class="fas fa-download"></i> Fetch 500</button></div></div>
+    </div>
+    <div class="table-wrap mb-24">
+      <div class="table-header">
+        <h3><i class="fas fa-chart-line"></i> Fetch by State / Commodity</h3>
       </div>
-      <table><tr><th>Commodity</th><th>Variety</th><th>Market</th><th>District</th><th>State</th><th>Min ₹</th><th>Max ₹</th><th>Modal ₹</th><th>Date</th></tr>
-      ${d.prices.map(p => `<tr><td><strong>${p.commodity}</strong></td><td>${p.variety || '-'}</td><td>${p.market_name || '-'}</td><td>${p.district || '-'}</td><td>${p.state || '-'}</td><td>${p.min_price || '-'}</td><td>${p.max_price || '-'}</td><td><strong>${p.modal_price || '-'}</strong></td><td>${fmtDate(p.price_date)}</td></tr>`).join('')}
-      </table>
+      <div style="padding:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div class="form-group" style="margin:0"><label>State</label><select id="mandiState"><option value="">All States</option>
+          <option>Andhra Pradesh</option><option>Bihar</option><option>Chhattisgarh</option><option>Gujarat</option><option>Haryana</option><option>Himachal Pradesh</option>
+          <option>Jharkhand</option><option>Karnataka</option><option>Kerala</option><option>Madhya Pradesh</option><option>Maharashtra</option><option>Odisha</option>
+          <option>Punjab</option><option>Rajasthan</option><option>Tamil Nadu</option><option>Telangana</option><option>Uttar Pradesh</option><option>Uttarakhand</option><option>West Bengal</option>
+        </select></div>
+        <div class="form-group" style="margin:0"><label>Commodity</label><select id="mandiComm"><option value="">All Commodities</option>
+          <option>Wheat</option><option>Rice</option><option>Paddy(Dhan)</option><option>Maize</option><option>Bajra</option><option>Jowar</option><option>Barley</option>
+          <option>Potato</option><option>Onion</option><option>Tomato</option><option>Soyabean</option><option>Cotton</option><option>Groundnut</option><option>Mustard</option>
+          <option>Chilli</option><option>Turmeric</option><option>Sugar</option><option>Gram</option><option>Arhar</option><option>Moong</option><option>Masoor</option>
+        </select></div>
+        <div class="form-group" style="margin:0"><label>Records</label><select id="mandiLimit"><option value="50">50</option><option value="100" selected>100</option><option value="200">200</option><option value="500">500</option></select></div>
+        <button class="btn btn-primary" onclick="fetchMandiByFilter()"><i class="fas fa-cloud-download-alt"></i> Fetch from Govt API</button>
+      </div>
+      <div id="fetchResult" style="padding:0 16px 16px;display:none"></div>
+    </div>
+    <div class="table-wrap">
+      <div class="table-header"><h3>Mandi Prices in Database (${d.count})</h3>
+        <div class="table-actions"><div class="search-box"><i class="fas fa-search"></i><input id="mandiSearch" placeholder="Search commodity..." onkeydown="if(event.key==='Enter')filterMandiTable(this.value)"></div><button class="btn btn-primary btn-sm" onclick="newMandiModal()"><i class="fas fa-plus"></i> Add Price</button></div>
+      </div>
+      <div style="overflow-x:auto">
+      <table id="mandiTable"><tr><th>Commodity</th><th>Variety</th><th>Market</th><th>District</th><th>State</th><th>Min ₹</th><th>Max ₹</th><th>Modal ₹</th><th>Date</th></tr>
+      ${d.prices.map(p => `<tr><td><strong>${p.commodity}</strong></td><td>${p.variety || '-'}</td><td>${p.market_name || '-'}</td><td>${p.district || '-'}</td><td>${p.state || '-'}</td><td>${p.min_price || '-'}</td><td>${p.max_price || '-'}</td><td><strong>₹${p.modal_price || '-'}</strong></td><td>${fmtDate(p.price_date)}</td></tr>`).join('')}
+      </table></div>
     </div>`;
-  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error loading mandi prices</p></div>'; }
 }
+
+async function fetchMandiLive(state, commodity, limit) {
+  const resultEl = document.getElementById('fetchResult');
+  if (resultEl) { resultEl.style.display = 'block'; resultEl.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Fetching live prices from data.gov.in...</p>'; }
+  try {
+    let url = `https://vartmap-intelligence.onrender.com/api/v1/fetch-mandi-prices?limit=${limit || 100}`;
+    if (state) url += '&state=' + encodeURIComponent(state);
+    if (commodity) url += '&commodity=' + encodeURIComponent(commodity);
+    const r = await fetch(url).then(r => r.json());
+    if (resultEl) {
+      resultEl.innerHTML = `<div style="padding:12px;background:#E8F5E9;border-radius:8px;font-size:13px">
+        <strong><i class="fas fa-check-circle" style="color:#2E7D32"></i> ${r.message}</strong><br>
+        Fetched: ${r.fetched} · Inserted: ${r.inserted} into database
+        ${r.sample && r.sample.length ? '<br>Sample: ' + r.sample.map(s => s.commodity + ' ₹' + s.modal_price + ' (' + s.market + ')').join(', ') : ''}
+      </div>`;
+    }
+    setTimeout(() => loadMandi(), 2000);
+  } catch (e) {
+    if (resultEl) resultEl.innerHTML = '<div style="padding:12px;background:#FFEBEE;border-radius:8px"><strong>Error:</strong> ' + e.message + '</div>';
+  }
+}
+
+async function fetchMandiByFilter() {
+  const state = document.getElementById('mandiState').value;
+  const commodity = document.getElementById('mandiComm').value;
+  const limit = document.getElementById('mandiLimit').value;
+  fetchMandiLive(state, commodity, limit);
+}
+
+function filterMandiTable(q) {
+  const rows = document.querySelectorAll('#mandiTable tr');
+  rows.forEach((r, i) => { if (i === 0) return; r.style.display = r.textContent.toLowerCase().includes(q.toLowerCase()) ? '' : 'none'; });
+}
+
 
 async function searchMandi() { navigate('mandi-prices'); }
 
