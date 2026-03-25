@@ -734,7 +734,285 @@ async function createCampaign() {
 
 async function updateCampaignStatus(id, status) { await api('/api/v1/campaigns/' + id, { method: 'PUT', body: JSON.stringify({ status }) }); loadCampaigns(); }
 // ─── 7. SPIN WHEELS ───
-undefined
+// ─── 7. SPIN WHEELS ───
+async function loadSpinWheels() {
+  const el = document.getElementById('pageContent');
+  el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
+  try {
+    const d = await api('/api/v1/spin-wheels');
+    el.innerHTML = `
+    <div class="stats-grid mb-24">
+      <div class="stat-card"><div class="stat-icon"><i class="fas fa-dharmachakra"></i></div><div class="stat-value">${d.wheels.length}</div><div class="stat-label">Total Wheels</div></div>
+      <div class="stat-card accent"><div class="stat-icon"><i class="fas fa-play-circle" style="color:var(--accent)"></i></div><div class="stat-value">${d.wheels.filter(w=>w.status==='active').length}</div><div class="stat-label">Active Wheels</div></div>
+      <div class="stat-card info"><div class="stat-icon"><i class="fas fa-trophy" style="color:var(--info)"></i></div><div class="stat-value">${d.wheels.reduce((a,w)=>a+(w.stats?.winners||0),0)}</div><div class="stat-label">Total Winners</div></div>
+      <div class="stat-card danger"><div class="stat-icon"><i class="fas fa-rupee-sign" style="color:var(--danger)"></i></div><div class="stat-value">₹${d.wheels.reduce((a,w)=>a+(w.spent_budget||0),0)}</div><div class="stat-label">Total Spent</div></div>
+    </div>
+    <div class="flex justify-between items-center mb-16">
+      <h3>Spin Wheels & Lucky Draw</h3>
+      <button class="btn btn-primary" onclick="newSpinWheelModal()"><i class="fas fa-plus"></i> Create New Wheel</button>
+    </div>
+    ${d.wheels.length ? d.wheels.map(w => `
+    <div class="table-wrap mb-24" style="border-left:4px solid ${w.status==='active'?'var(--primary-light)':w.status==='paused'?'var(--accent)':'var(--border)'}">
+      <div style="padding:24px">
+        <div class="flex justify-between items-center mb-16 flex-wrap gap-10">
+          <div>
+            <h3 style="font-size:18px;margin-bottom:4px">${w.name} <span class="status ${w.status}">${w.status}</span></h3>
+            <p style="font-size:13px;color:var(--text-light)">${w.description || ''}</p>
+            <div style="font-size:12px;color:var(--text-light);margin-top:6px">
+              <i class="fas fa-calendar"></i> ${fmtDate(w.start_date)} → ${fmtDate(w.end_date)} · 
+              <i class="fas fa-sync"></i> Max ${w.max_spins_per_farmer} spin/farmer · 
+              <i class="fas fa-wallet"></i> Budget: ₹${w.total_budget} (Spent: ₹${w.spent_budget || 0})
+            </div>
+          </div>
+          <div class="flex gap-10 flex-wrap">
+            ${w.status === 'draft' ? `<button class="btn btn-sm btn-primary" onclick="activateWheel('${w.id}')"><i class="fas fa-play"></i> Activate</button>` : ''}
+            ${w.status === 'active' ? `<button class="btn btn-sm btn-accent" onclick="pauseWheel('${w.id}')"><i class="fas fa-pause"></i> Pause</button>` : ''}
+            ${w.status === 'paused' ? `<button class="btn btn-sm btn-primary" onclick="activateWheel('${w.id}')"><i class="fas fa-play"></i> Resume</button>` : ''}
+            <button class="btn btn-sm btn-outline" onclick="testSpinWheel('${w.id}')"><i class="fas fa-play-circle"></i> Test Spin</button>
+            <button class="btn btn-sm btn-outline" onclick="editWheelSegments('${w.id}','${encodeURIComponent(JSON.stringify(w))}')"><i class="fas fa-cog"></i> Edit Segments</button>
+            <button class="btn btn-sm btn-outline" onclick="viewWheelResults('${w.id}','${w.name}')"><i class="fas fa-list"></i> Results</button>
+            <button class="btn btn-sm btn-outline" onclick="shareWheelLink('${w.id}')"><i class="fas fa-share-alt"></i> Share Link</button>
+          </div>
+        </div>
+        <div class="wheel-container">
+          <div class="wheel-visual" style="position:relative">
+            <div class="wheel-pointer"><i class="fas fa-caret-down"></i></div>
+            <canvas id="canvas-${w.id}" class="wheel-canvas" width="320" height="320" style="cursor:pointer" onclick="testSpinWheel('${w.id}')"></canvas>
+            <div style="text-align:center;margin-top:8px;font-size:12px;color:var(--text-light)">Click wheel to test spin</div>
+          </div>
+          <div class="wheel-config" style="flex:1;min-width:320px">
+            <h4 style="margin-bottom:12px"><i class="fas fa-puzzle-piece"></i> Segments (${w.segments.length})</h4>
+            <div class="segment-list">
+              ${w.segments.map(s => `
+                <div class="segment-item">
+                  <div class="segment-color" style="background:${s.color}"></div>
+                  <div class="segment-info" style="flex:1">
+                    <strong>${s.label}</strong>
+                    <small>${s.prize_type} · ₹${s.prize_value} · Prob: ${(s.probability * 100).toFixed(1)}%</small>
+                  </div>
+                  <div style="text-align:right;font-size:12px">
+                    <div style="font-weight:700;color:${s.current_winners >= (s.max_winners||9999) ? 'var(--danger)' : 'var(--primary)'}">${s.current_winners}/${s.max_winners || '∞'}</div>
+                    <small>winners</small>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+            <div style="margin-top:16px;padding:14px;background:var(--bg);border-radius:10px">
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;text-align:center">
+                <div><div style="font-size:22px;font-weight:700;color:var(--primary)">${w.stats?.total_spins || 0}</div><div style="font-size:11px;color:var(--text-light)">Total Spins</div></div>
+                <div><div style="font-size:22px;font-weight:700;color:var(--accent)">${w.stats?.winners || 0}</div><div style="font-size:11px;color:var(--text-light)">Winners</div></div>
+                <div><div style="font-size:22px;font-weight:700;color:var(--info)">₹${w.spent_budget || 0}</div><div style="font-size:11px;color:var(--text-light)">Spent</div></div>
+              </div>
+              <div style="margin-top:10px">
+                <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px"><span>Budget Used</span><span>${w.total_budget ? Math.round(((w.spent_budget||0)/w.total_budget)*100) : 0}%</span></div>
+                <div style="height:8px;background:#E5E7EB;border-radius:4px;overflow:hidden"><div style="height:100%;background:linear-gradient(90deg,var(--primary),var(--accent));width:${w.total_budget ? Math.min(((w.spent_budget||0)/w.total_budget)*100,100) : 0}%;border-radius:4px"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    `).join('') : '<div class="empty"><i class="fas fa-dharmachakra" style="font-size:64px;opacity:.2"></i><p style="margin-top:16px">No spin wheels yet. Create your first lucky draw!</p></div>'}`;
+    // Draw wheels
+    d.wheels.forEach(w => { if (w.segments.length) drawWheel('canvas-' + w.id, w.segments); });
+  } catch (e) { el.innerHTML = '<div class="empty"><i class="fas fa-exclamation-triangle"></i><p>Error loading spin wheels</p></div>'; }
+}
+
+function drawWheel(canvasId, segments) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const cx = 160, cy = 160, r = 150;
+  const total = segments.length;
+  const arc = (2 * Math.PI) / total;
+  
+  // Clear
+  ctx.clearRect(0, 0, 320, 320);
+  
+  // Shadow
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.15)';
+  ctx.shadowBlur = 20;
+  ctx.beginPath(); ctx.arc(cx, cy, r + 2, 0, 2 * Math.PI);
+  ctx.fillStyle = '#fff'; ctx.fill();
+  ctx.restore();
+  
+  // Segments
+  segments.forEach((s, i) => {
+    const start = i * arc - Math.PI / 2;
+    // Fill
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, start, start + arc);
+    ctx.closePath();
+    ctx.fillStyle = s.color || ['#E91E63','#9C27B0','#2196F3','#00BCD4','#4CAF50','#FF9800','#795548','#607D8B'][i % 8];
+    ctx.fill();
+    // Border
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
+    // Label
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(start + arc / 2);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 11px Inter'; ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 3;
+    ctx.fillText(s.label.replace(/[🎉🎁⭐🏷️🍀]/g,'').trim().substring(0, 14), r * 0.65, 4);
+    ctx.restore();
+  });
+  
+  // Center circle
+  ctx.beginPath(); ctx.arc(cx, cy, 28, 0, 2 * Math.PI);
+  const grad = ctx.createRadialGradient(cx, cy, 5, cx, cy, 28);
+  grad.addColorStop(0, '#fff'); grad.addColorStop(1, '#f0f0f0');
+  ctx.fillStyle = grad; ctx.fill();
+  ctx.strokeStyle = '#ddd'; ctx.lineWidth = 2; ctx.stroke();
+  // Center text
+  ctx.fillStyle = '#333'; ctx.font = 'bold 11px Inter'; ctx.textAlign = 'center';
+  ctx.fillText('SPIN', cx, cy + 4);
+  
+  // Outer ring
+  ctx.beginPath(); ctx.arc(cx, cy, r + 2, 0, 2 * Math.PI);
+  ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 4; ctx.stroke();
+  
+  // Dots around edge
+  for (let i = 0; i < 24; i++) {
+    const angle = (i / 24) * 2 * Math.PI;
+    const dx = cx + (r + 6) * Math.cos(angle);
+    const dy = cy + (r + 6) * Math.sin(angle);
+    ctx.beginPath(); ctx.arc(dx, dy, 3, 0, 2 * Math.PI);
+    ctx.fillStyle = i % 2 === 0 ? '#FFD700' : '#FF6B6B'; ctx.fill();
+  }
+}
+
+// Animated spin test
+function testSpinWheel(wheelId) {
+  const canvas = document.getElementById('canvas-' + wheelId);
+  if (!canvas || canvas.dataset.spinning === 'true') return;
+  canvas.dataset.spinning = 'true';
+  
+  // Random result angle
+  const totalRotation = 360 * 5 + Math.random() * 360; // 5 full rotations + random
+  const duration = 4000;
+  const start = performance.now();
+  let currentRotation = 0;
+  
+  // Get original canvas content
+  const ctx = canvas.getContext('2d');
+  const imageData = ctx.getImageData(0, 0, 320, 320);
+  
+  function animate(now) {
+    const elapsed = now - start;
+    const progress = Math.min(elapsed / duration, 1);
+    // Ease out cubic
+    const eased = 1 - Math.pow(1 - progress, 3);
+    currentRotation = totalRotation * eased;
+    
+    ctx.save();
+    ctx.clearRect(0, 0, 320, 320);
+    ctx.translate(160, 160);
+    ctx.rotate((currentRotation * Math.PI) / 180);
+    ctx.translate(-160, -160);
+    ctx.putImageData(imageData, 0, 0);
+    ctx.restore();
+    
+    if (progress < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      canvas.dataset.spinning = 'false';
+      // Show result
+      const segCount = canvas.parentElement.parentElement.querySelectorAll('.segment-item').length || 8;
+      const segAngle = 360 / segCount;
+      const finalAngle = currentRotation % 360;
+      const winIdx = Math.floor(((360 - finalAngle + 90) % 360) / segAngle) % segCount;
+      const segItems = canvas.parentElement.parentElement.querySelectorAll('.segment-item');
+      if (segItems[winIdx]) {
+        const label = segItems[winIdx].querySelector('strong').textContent;
+        // Flash animation
+        segItems[winIdx].style.background = '#E8F5E9';
+        segItems[winIdx].style.transform = 'scale(1.05)';
+        segItems[winIdx].style.transition = 'all 0.3s';
+        setTimeout(() => {
+          segItems[winIdx].style.background = '';
+          segItems[winIdx].style.transform = '';
+          alert('🎉 Test Result: ' + label + '\n\n(This is a test spin - no actual prize awarded)');
+        }, 500);
+      }
+    }
+  }
+  
+  requestAnimationFrame(animate);
+}
+
+function editWheelSegments(id, encoded) {
+  const w = JSON.parse(decodeURIComponent(encoded));
+  let segsHtml = w.segments.map((s, i) => `
+    <div class="segment-row" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center;padding:8px;background:var(--bg);border-radius:8px">
+      <input type="color" value="${s.color}" class="seg-color" style="width:36px;height:36px;border:none;cursor:pointer;border-radius:6px">
+      <input value="${s.label}" placeholder="Label" style="flex:1;min-width:100px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-label">
+      <select style="padding:8px;border:1px solid var(--border);border-radius:6px;width:90px" class="seg-type">
+        <option value="cash" ${s.prize_type==='cash'?'selected':''}>Cash</option>
+        <option value="discount" ${s.prize_type==='discount'?'selected':''}>Discount</option>
+        <option value="points" ${s.prize_type==='points'?'selected':''}>Points</option>
+        <option value="product" ${s.prize_type==='product'?'selected':''}>Product</option>
+        <option value="better_luck" ${s.prize_type==='better_luck'?'selected':''}>No Prize</option>
+      </select>
+      <input value="${s.prize_value}" placeholder="Value" type="number" style="width:70px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-value">
+      <input value="${s.probability}" placeholder="Prob" style="width:60px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-prob">
+      <input value="${s.max_winners||''}" placeholder="Max" type="number" style="width:60px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-max">
+    </div>
+  `).join('');
+  
+  openModal('Edit Segments: ' + w.name, `
+    <div style="margin-bottom:12px;padding:12px;background:#FFF3E0;border-radius:8px;font-size:13px">
+      <i class="fas fa-info-circle" style="color:var(--accent)"></i> Probabilities should add up to 1.0 (100%). Current total: <strong id="probTotal">${w.segments.reduce((a,s)=>a+s.probability,0).toFixed(2)}</strong>
+    </div>
+    <div id="segmentsList">${segsHtml}</div>
+    <button class="btn btn-sm btn-outline mt-16" onclick="addSegmentRow()"><i class="fas fa-plus"></i> Add Segment</button>
+  `, `<button class="btn btn-primary" onclick="saveWheelSegments('${id}')"><i class="fas fa-save"></i> Save Segments</button>`);
+}
+
+async function saveWheelSegments(wheelId) {
+  const segs = [];
+  document.querySelectorAll('.segment-row').forEach((row, i) => {
+    const label = row.querySelector('.seg-label').value;
+    if (label) segs.push({
+      label,
+      prize_type: row.querySelector('.seg-type').value,
+      prize_value: +row.querySelector('.seg-value').value || 0,
+      probability: +row.querySelector('.seg-prob').value || 0.1,
+      color: row.querySelector('.seg-color').value,
+      max_winners: +row.querySelector('.seg-max').value || null,
+      position: i + 1
+    });
+  });
+  
+  // Validate probabilities
+  const total = segs.reduce((a, s) => a + s.probability, 0);
+  if (Math.abs(total - 1.0) > 0.05) {
+    if (!confirm(`Probabilities total ${total.toFixed(2)} (should be 1.0). Save anyway?`)) return;
+  }
+  
+  await api('/api/v1/spin-wheels/' + wheelId + '/segments', { method: 'PUT', body: JSON.stringify({ segments: segs }) });
+  closeModal();
+  loadSpinWheels();
+}
+
+function shareWheelLink(wheelId) {
+  const link = window.location.origin + '/spin/' + wheelId;
+  openModal('Share Spin Wheel', `
+    <p style="margin-bottom:12px;font-size:13px">Share this link with farmers via WhatsApp to let them spin:</p>
+    <div style="padding:14px;background:var(--bg);border-radius:10px;font-family:monospace;font-size:14px;word-break:break-all;margin-bottom:16px">${link}</div>
+    <p style="font-size:13px;color:var(--text-light)">Or send via WhatsApp broadcast to all eligible farmers from the Campaigns page.</p>
+    <div style="margin-top:16px">
+      <h4 style="margin-bottom:8px">WhatsApp Message Template:</h4>
+      <div style="padding:14px;background:#DCF8C6;border-radius:10px;font-size:13px">
+        🎉 <strong>Kisan Lucky Draw!</strong><br><br>
+        Spin the wheel and win exciting prizes!<br>
+        💰 Cash prizes up to ₹500<br>
+        ⭐ Loyalty points<br>
+        🏷️ Discount coupons<br><br>
+        👉 Spin now: ${link}<br><br>
+        🙏 VartMap Krishi Sahayak
+      </div>
+    </div>
+  `, `<button class="btn btn-primary" onclick="navigator.clipboard.writeText('${link}');alert('Link copied!')"><i class="fas fa-copy"></i> Copy Link</button>`);
+}
 
 function drawWheel(canvasId, segments) {
   const canvas = document.getElementById(canvasId);
