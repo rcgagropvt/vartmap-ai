@@ -1014,6 +1014,127 @@ function shareWheelLink(wheelId) {
   `, `<button class="btn btn-primary" onclick="navigator.clipboard.writeText('${link}');alert('Link copied!')"><i class="fas fa-copy"></i> Copy Link</button>`);
 }
 
+// ─── PRIZE FULFILLMENT ───
+async function viewWheelResults(wheelId, wheelName) {
+  const el = document.getElementById('pageContent');
+  el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading prizes...</p></div>';
+  try {
+    const d = await api('/api/v1/prizes?wheel_id=' + wheelId);
+    const prizes = d.prizes || [];
+    const s = d.stats || {};
+    
+    el.innerHTML = `
+    <div class="flex justify-between items-center mb-16">
+      <div>
+        <h3><i class="fas fa-trophy"></i> Prize Fulfillment — ${wheelName || 'All Wheels'}</h3>
+        <p style="font-size:13px;color:var(--text-light)">Approve, reject, and track prize delivery</p>
+      </div>
+      <button class="btn btn-outline" onclick="loadSpinWheels()"><i class="fas fa-arrow-left"></i> Back to Wheels</button>
+    </div>
+
+    <div class="stats-grid mb-24">
+      <div class="stat-card accent"><div class="stat-icon"><i class="fas fa-clock" style="color:var(--accent)"></i></div><div class="stat-value">${s.pending_approval || 0}</div><div class="stat-label">Pending Approval</div></div>
+      <div class="stat-card info"><div class="stat-icon"><i class="fas fa-check-circle" style="color:var(--info)"></i></div><div class="stat-value">${s.verified || 0}</div><div class="stat-label">Verified</div></div>
+      <div class="stat-card"><div class="stat-icon"><i class="fas fa-rupee-sign"></i></div><div class="stat-value">₹${s.total_paid || 0}</div><div class="stat-label">Total Paid</div></div>
+      <div class="stat-card danger"><div class="stat-icon"><i class="fas fa-times-circle" style="color:var(--danger)"></i></div><div class="stat-value">${s.rejected || 0}</div><div class="stat-label">Rejected</div></div>
+    </div>
+
+    <div class="flex gap-10 mb-16 flex-wrap">
+      <button class="btn btn-sm ${!currentPrizeFilter ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','')">All</button>
+      <button class="btn btn-sm ${currentPrizeFilter==='won' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','won')">⏳ Pending</button>
+      <button class="btn btn-sm ${currentPrizeFilter==='verified' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','verified')">✅ Verified</button>
+      <button class="btn btn-sm ${currentPrizeFilter==='paid' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','paid')">💰 Paid</button>
+      <button class="btn btn-sm ${currentPrizeFilter==='delivered' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','delivered')">🎁 Delivered</button>
+      <button class="btn btn-sm ${currentPrizeFilter==='rejected' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','rejected')">❌ Rejected</button>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr>
+          <th>Farmer</th><th>Prize</th><th>Value</th><th>Status</th><th>Date</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+        ${prizes.length ? prizes.map(p => `
+          <tr>
+            <td>
+              <strong>${p.farmer_name || 'Unknown'}</strong><br>
+              <small style="color:var(--text-light)">${p.farmer_phone} ${p.village ? '· ' + p.village : ''}</small>
+            </td>
+            <td>
+              <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${p.segment_color || '#999'};margin-right:6px"></span>
+              ${p.segment_label || p.prize_type}
+            </td>
+            <td><strong>${p.prize_type === 'cash' ? '₹' + p.prize_value : p.prize_type === 'points' ? p.prize_value + ' pts' : p.prize_type === 'discount' ? p.prize_value + '%' : '-'}</strong></td>
+            <td><span class="status ${p.status === 'won' ? 'pending' : p.status === 'verified' ? 'active' : p.status === 'paid' || p.status === 'delivered' ? 'completed' : p.status === 'rejected' ? 'failed' : ''}">${p.status}</span>
+              ${p.coupon_code ? '<br><small style="color:var(--primary)">🏷️ ' + p.coupon_code + '</small>' : ''}
+              ${p.payment_reference ? '<br><small style="color:var(--info)">💳 ' + p.payment_reference + '</small>' : ''}
+            </td>
+            <td><small>${fmtDate(p.created_at)}</small>${p.paid_at ? '<br><small style="color:var(--primary)">Paid: ' + fmtDate(p.paid_at) + '</small>' : ''}</td>
+            <td>
+              ${p.status === 'won' && p.prize_type !== 'better_luck' ? `
+                <button class="btn btn-sm btn-primary" onclick="approvePrize('${p.id}')"><i class="fas fa-check"></i> Approve</button>
+                <button class="btn btn-sm btn-outline" style="color:var(--danger);border-color:var(--danger)" onclick="rejectPrize('${p.id}')"><i class="fas fa-times"></i> Reject</button>
+              ` : ''}
+              ${p.status === 'verified' ? `
+                <button class="btn btn-sm btn-primary" onclick="markPrizePaid('${p.id}','${p.prize_type}','${p.prize_value}','${p.farmer_name}')"><i class="fas fa-rupee-sign"></i> Mark Paid</button>
+              ` : ''}
+              ${p.status === 'paid' || p.status === 'delivered' ? '<span style="color:var(--primary)"><i class="fas fa-check-double"></i> Done</span>' : ''}
+              ${p.status === 'no_prize' ? '<span style="color:var(--text-light)">—</span>' : ''}
+              ${p.status === 'rejected' ? '<span style="color:var(--danger)" title="' + (p.rejection_reason || '') + '"><i class="fas fa-ban"></i> Rejected</span>' : ''}
+            </td>
+          </tr>
+        `).join('') : '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-light)">No prizes found</td></tr>'}
+        </tbody>
+      </table>
+    </div>`;
+  } catch (e) { el.innerHTML = '<div class="empty"><i class="fas fa-exclamation-triangle"></i><p>Error loading prizes</p></div>'; }
+}
+
+let currentPrizeFilter = '';
+function filterPrizes(wheelId, wheelName, status) {
+  currentPrizeFilter = status;
+  viewWheelResults(wheelId, wheelName);
+}
+
+async function approvePrize(prizeId) {
+  const notes = prompt('Add a note (optional):');
+  try {
+    const r = await api('/api/v1/prizes/' + prizeId + '/approve', {
+      method: 'PUT',
+      body: JSON.stringify({ notes: notes || '' })
+    });
+    if (r.coupon_code) alert('✅ Approved! Coupon generated: ' + r.coupon_code + '\nWhatsApp notification sent to farmer.');
+    else alert('✅ Approved! WhatsApp notification sent to farmer.');
+    viewWheelResults('', 'All Wheels');
+  } catch (e) { alert('Error: ' + (e.message || 'Failed to approve')); }
+}
+
+async function rejectPrize(prizeId) {
+  const reason = prompt('Enter rejection reason (required):');
+  if (!reason) return alert('Rejection reason is required');
+  try {
+    await api('/api/v1/prizes/' + prizeId + '/reject', {
+      method: 'PUT',
+      body: JSON.stringify({ reason })
+    });
+    alert('❌ Rejected. Farmer has been notified via WhatsApp.');
+    viewWheelResults('', 'All Wheels');
+  } catch (e) { alert('Error: ' + (e.message || 'Failed to reject')); }
+}
+
+async function markPrizePaid(prizeId, prizeType, value, farmerName) {
+  const method = prompt(`Payment method for ${farmerName} (₹${value}):\n\nOptions: UPI, Paytm, Bank Transfer, Cash, Coupon\n\nEnter method:`, 'UPI');
+  if (!method) return;
+  const reference = prompt('Payment reference / Transaction ID:', '');
+  try {
+    await api('/api/v1/prizes/' + prizeId + '/pay', {
+      method: 'PUT',
+      body: JSON.stringify({ payment_method: method, payment_reference: reference || '' })
+    });
+    alert('💰 Marked as ' + (prizeType === 'cash' ? 'Paid' : 'Delivered') + '! Farmer notified via WhatsApp.');
+    viewWheelResults('', 'All Wheels');
+  } catch (e) { alert('Error: ' + (e.message || 'Failed to update')); }
+}
 
 
 function newSpinWheelModal() {

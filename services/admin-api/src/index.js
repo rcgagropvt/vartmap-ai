@@ -1004,6 +1004,190 @@ app.post('/api/v1/send-wa-message', auth, async (req, res) => {
     res.status(500).json({ error: err.response?.data?.error || err.message });
   }
 });
+// ─── PRIZE FULFILLMENT (Digicides-style Admin Flow) ───
+
+// Get all spin results with filters
+app.get('/api/v1/prizes', auth, async (req, res) => {
+  try {
+    const { status, prize_type, wheel_id, limit = 100, offset = 0 } = req.query;
+    let q = `SELECT sr.*, f.name as farmer_name, f.phone as farmer_phone, f.village,
+             sw.name as wheel_name, sws.label as segment_label, sws.color as segment_color,
+             au.name as approved_by_name
+             FROM spin_results sr
+             JOIN farmers f ON sr.farmer_id = f.id
+             JOIN spin_wheels sw ON sr.wheel_id = sw.id
+             LEFT JOIN spin_wheel_segments sws ON sr.segment_id = sws.id
+             LEFT JOIN admin_users au ON sr.approved_by = au.id
+             WHERE 1=1`;
+    const p = [];
+    if (status) { p.push(status); q += ` AND sr.status = $${p.length}`; }
+    if (prize_type) { p.push(prize_type); q += ` AND sr.prize_type = $${p.length}`; }
+    if (wheel_id) { p.push(wheel_id); q += ` AND sr.wheel_id = $${p.length}`; }
+    q += ' ORDER BY sr.created_at DESC';
+    p.push(+limit); q += ` LIMIT $${p.length}`;
+    p.push(+offset); q += ` OFFSET $${p.length}`;
+    const r = await pool.query(q, p);
+
+    // Stats
+    const stats = await pool.query(`
+      SELECT 
+        COUNT(*) FILTER (WHERE status = 'won') as pending_approval,
+        COUNT(*) FILTER (WHERE status = 'verified') as verified,
+        COUNT(*) FILTER (WHERE status = 'paid' OR status = 'delivered') as fulfilled,
+        COUNT(*) FILTER (WHERE status = 'rejected') as rejected,
+        COUNT(*) FILTER (WHERE prize_type != 'better_luck') as total_winners,
+        COALESCE(SUM(prize_value) FILTER (WHERE status = 'paid' OR status = 'delivered'), 0) as total_paid,
+        COALESCE(SUM(prize_value) FILTER (WHERE status = 'won' OR status = 'verified'), 0) as total_pending
+      FROM spin_results
+    `);
+
+    res.json({ prizes: r.rows, stats: stats.rows[0], limit: +limit, offset: +offset });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Approve a prize
+app.put('/api/v1/prizes/:id/approve', auth, async (req, res) => {
+  try {
+    const { notes } = req.body;
+    const prize = await pool.query('SELECT sr.*, f.phone, f.name as farmer_name FROM spin_results sr JOIN farmers f ON sr.farmer_id = f.id WHERE sr.id = $1', [req.params.id]);
+    if (!prize.rows.length) return res.status(404).json({ error: 'Prize not found' });
+
+    const p = prize.rows[0];
+    if (p.status !== 'won') return res.status(400).json({ error: 'Can only approve prizes with status "won"' });
+
+    let couponCode = null;
+    let updateFields = `status = 'verified', approved_by = $1, approved_at = NOW(), notes = $2`;
+    let updateValues = [req.user.id, notes || null];
+
+    // Auto-generate discount coupon if prize_type is 'discount'
+    if (p.prize_type === 'discount') {
+      couponCode = 'VRTWIN' + crypto.randomBytes(4).toString('hex').toUpperCase();
+      updateFields += `, coupon_code = $${updateValues.length + 1}`;
+      updateValues.push(couponCode);
+
+      // Store in coupon_codes table
+      await pool.query(
+        `INSERT INTO coupon_codes (id, code, farmer_id, status, metadata, created_at)
+         VALUES (gen_random_uuid(), $1, $2, 'active', $3, NOW())`,
+        [couponCode, p.farmer_id, JSON.stringify({ source: 'spin_wheel', prize_id: req.params.id, discount_percent: p.prize_value })]
+      );
+    }
+
+    updateValues.push(req.params.id);
+    await pool.query(
+      `UPDATE spin_results SET ${updateFields} WHERE id = $${updateValues.length}`,
+      updateValues
+    );
+
+    // Send WhatsApp notification
+    try {
+      const gatewayUrl = process.env.GATEWAY_URL || 'https://vartmap-whatsapp-gateway.onrender.com';
+      let msg = '';
+      if (p.prize_type === 'cash') {
+        msg = `✅ Prize Approved!\n\nHi ${p.farmer_name}, your cash prize of ₹${p.prize_value} from the lucky draw has been approved!\n\nPlease reply with your UPI ID (e.g. name@upi) to receive the payment.\n\nRef: ${p.verification_code || p.id.slice(0,8)}\n\n🌾 VartMap Krishi Sahayak`;
+      } else if (p.prize_type === 'discount') {
+        msg = `✅ Prize Approved!\n\nHi ${p.farmer_name}, you won a ${p.prize_value}% discount!\n\n🏷️ Your Coupon Code: *${couponCode}*\n\nShow this code to your nearest dealer to avail the discount.\n\nRef: ${p.verification_code || p.id.slice(0,8)}\n\n🌾 VartMap Krishi Sahayak`;
+      } else if (p.prize_type === 'points') {
+        msg = `✅ Prize Approved!\n\nHi ${p.farmer_name}, ${p.prize_value} loyalty points have been added to your account!\n\nTotal points will be visible in your next interaction.\n\nRef: ${p.verification_code || p.id.slice(0,8)}\n\n🌾 VartMap Krishi Sahayak`;
+      }
+      if (msg) await axios.post(`${gatewayUrl}/api/v1/send-message`, { phone: p.phone, message: msg });
+    } catch(e) { console.error('Prize approval WhatsApp failed:', e.message); }
+
+    res.json({ success: true, coupon_code: couponCode });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Reject a prize
+app.put('/api/v1/prizes/:id/reject', auth, async (req, res) => {
+  try {
+    const { reason } = req.body;
+    if (!reason) return res.status(400).json({ error: 'Rejection reason is required' });
+
+    const prize = await pool.query('SELECT sr.*, f.phone, f.name as farmer_name FROM spin_results sr JOIN farmers f ON sr.farmer_id = f.id WHERE sr.id = $1', [req.params.id]);
+    if (!prize.rows.length) return res.status(404).json({ error: 'Prize not found' });
+
+    await pool.query(
+      `UPDATE spin_results SET status = 'rejected', rejection_reason = $1, approved_by = $2, approved_at = NOW() WHERE id = $3`,
+      [reason, req.user.id, req.params.id]
+    );
+
+    // Notify farmer
+    try {
+      const p = prize.rows[0];
+      const gatewayUrl = process.env.GATEWAY_URL || 'https://vartmap-whatsapp-gateway.onrender.com';
+      const msg = `Hi ${p.farmer_name}, unfortunately your prize claim could not be verified.\n\nReason: ${reason}\n\nPlease contact support for help.\n\n🌾 VartMap Krishi Sahayak`;
+      await axios.post(`${gatewayUrl}/api/v1/send-message`, { phone: p.phone, message: msg });
+    } catch(e) { console.error('Prize rejection WhatsApp failed:', e.message); }
+
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Mark prize as paid/delivered
+app.put('/api/v1/prizes/:id/pay', auth, async (req, res) => {
+  try {
+    const { payment_method, payment_reference, notes } = req.body;
+
+    const prize = await pool.query('SELECT sr.*, f.phone, f.name as farmer_name FROM spin_results sr JOIN farmers f ON sr.farmer_id = f.id WHERE sr.id = $1', [req.params.id]);
+    if (!prize.rows.length) return res.status(404).json({ error: 'Prize not found' });
+
+    const p = prize.rows[0];
+    const newStatus = (p.prize_type === 'cash') ? 'paid' : 'delivered';
+
+    await pool.query(
+      `UPDATE spin_results SET status = $1, payment_method = $2, payment_reference = $3, paid_at = NOW(), notes = COALESCE($4, notes) WHERE id = $5`,
+      [newStatus, payment_method || 'manual', payment_reference || null, notes || null, req.params.id]
+    );
+
+    // Update spent budget
+    if (p.prize_type === 'cash') {
+      await pool.query('UPDATE spin_wheels SET spent_budget = COALESCE(spent_budget,0) + $1 WHERE id = $2', [p.prize_value, p.wheel_id]);
+    }
+
+    // Notify farmer
+    try {
+      const gatewayUrl = process.env.GATEWAY_URL || 'https://vartmap-whatsapp-gateway.onrender.com';
+      let msg = '';
+      if (p.prize_type === 'cash') {
+        msg = `💰 Payment Sent!\n\nHi ${p.farmer_name}, ₹${p.prize_value} has been sent to your account!\n\nMethod: ${payment_method || 'UPI'}\nRef: ${payment_reference || p.id.slice(0,8)}\n\nThank you for participating! 🌾 VartMap Krishi Sahayak`;
+      } else {
+        msg = `🎁 Prize Delivered!\n\nHi ${p.farmer_name}, your prize "${p.prize_label || p.prize_type}" has been marked as delivered.\n\nRef: ${payment_reference || p.id.slice(0,8)}\n\nThank you! 🌾 VartMap Krishi Sahayak`;
+      }
+      await axios.post(`${gatewayUrl}/api/v1/send-message`, { phone: p.phone, message: msg });
+    } catch(e) { console.error('Prize payment WhatsApp failed:', e.message); }
+
+    res.json({ success: true, status: newStatus });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Farmer prize history (public - by phone)
+app.get('/api/v1/public/prizes/:phone', async (req, res) => {
+  try {
+    const phone = req.params.phone.replace(/[^0-9]/g, '');
+    const farmer = await pool.query('SELECT id, name, phone FROM farmers WHERE phone = $1', [phone]);
+    if (!farmer.rows.length) return res.status(404).json({ error: 'Farmer not found' });
+
+    const prizes = await pool.query(
+      `SELECT sr.id, sr.prize_type, sr.prize_value, sr.prize_label, sr.status, sr.coupon_code,
+              sr.payment_method, sr.payment_reference, sr.paid_at, sr.created_at, sr.verification_code,
+              sw.name as wheel_name, sws.label as segment_label, sws.color
+       FROM spin_results sr
+       JOIN spin_wheels sw ON sr.wheel_id = sw.id
+       LEFT JOIN spin_wheel_segments sws ON sr.segment_id = sws.id
+       WHERE sr.farmer_id = $1 AND sr.prize_type != 'better_luck'
+       ORDER BY sr.created_at DESC`,
+      [farmer.rows[0].id]
+    );
+
+    res.json({
+      farmer: { name: farmer.rows[0].name, phone: farmer.rows[0].phone },
+      prizes: prizes.rows,
+      total_won: prizes.rows.length,
+      total_value: prizes.rows.reduce((sum, p) => sum + parseFloat(p.prize_value || 0), 0)
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── PUBLIC SPIN WHEEL API (No auth required - Digicides-style flow) ───
 
 // Get wheel info (public)
