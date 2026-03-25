@@ -479,7 +479,10 @@ setInterval(() => {
 
 
 async function closeChat(id) { await api('/api/v1/chats/' + id + '/assign', { method: 'PUT', body: JSON.stringify({ status: 'closed' }) }); loadChats(); }
-async function assignChat(id) { await api('/api/v1/chats/' + id + '/assign', { method: 'PUT', body: JSON.stringify({ admin_id: USER.id, status: 'assigned' }) }); }
+async function assignChat(id) {
+  await api('/api/v1/chats/' + id + '/assign', { method: 'PUT', body: JSON.stringify({ admin_id: USER.id, status: 'assigned' }) });
+  loadChats();
+}
 function searchChats(q) {
   document.querySelectorAll('.chat-item').forEach(el => {
     el.style.display = el.textContent.toLowerCase().includes(q.toLowerCase()) ? 'block' : 'none';

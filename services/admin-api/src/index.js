@@ -283,35 +283,66 @@ app.post('/api/v1/chats/:id/send', auth, async (req, res) => {
   }
 });
 
-
-
 app.put('/api/v1/chats/:id/assign', auth, async (req, res) => {
   try {
-    const { admin_id, priority, tags, notes, status } = req.body;
-    const sets = []; const vals = [];
-    if (admin_id) { vals.push(admin_id); sets.push(`admin_id=$${vals.length}`); }
-    if (priority) { vals.push(priority); sets.push(`priority=$${vals.length}`); }
-    if (tags) { vals.push(tags); sets.push(`tags=$${vals.length}`); }
-    if (notes !== undefined) { vals.push(notes); sets.push(`notes=$${vals.length}`); }
-    if (status) { vals.push(status); sets.push(`status=$${vals.length}`); }
-    vals.push(req.params.id);
-    const r = await pool.query(`UPDATE wa_chat_sessions SET ${sets.join(',')} WHERE id=$${vals.length} RETURNING *`, vals);
-    res.json({ chat: r.rows[0] });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    const { admin_id, status } = req.body;
+    const updates = [];
+    const values = [];
+    let idx = 1;
+
+    if (admin_id) {
+      updates.push(`admin_id = $${idx++}`);
+      values.push(admin_id);
+    }
+    if (status) {
+      updates.push(`status = $${idx++}`);
+      values.push(status);
+    }
+    updates.push(`updated_at = NOW()`);
+    values.push(req.params.id);
+
+    const result = await pool.query(
+      `UPDATE wa_chat_sessions SET ${updates.join(', ')} WHERE id = $${idx} RETURNING *`,
+      values
+    );
+
+    if (!result.rows.length) return res.status(404).json({ error: 'Session not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Assign chat error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/v1/chats/start', auth, async (req, res) => {
   try {
     const { farmer_id } = req.body;
-    const existing = await pool.query("SELECT * FROM wa_chat_sessions WHERE farmer_id=$1 AND status != 'closed' ORDER BY created_at DESC LIMIT 1", [farmer_id]);
-    if (existing.rows.length) return res.json({ chat: existing.rows[0] });
-    const r = await pool.query(
-      `INSERT INTO wa_chat_sessions (farmer_id, admin_id, status) VALUES ($1,$2,'assigned') RETURNING *`,
+    if (!farmer_id) return res.status(400).json({ error: 'farmer_id required' });
+
+    // Check for existing active/assigned session
+    const existing = await pool.query(
+      "SELECT * FROM wa_chat_sessions WHERE farmer_id = $1 AND status IN ('active', 'assigned') ORDER BY created_at DESC LIMIT 1",
+      [farmer_id]
+    );
+
+    if (existing.rows.length > 0) {
+      return res.json({ session: existing.rows[0], existing: true });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO wa_chat_sessions (id, farmer_id, admin_id, status, last_message_at, created_at, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, 'active', NOW(), NOW(), NOW())
+       RETURNING *`,
       [farmer_id, req.user.id]
     );
-    res.json({ chat: r.rows[0] });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+
+    res.json({ session: result.rows[0], existing: false });
+  } catch (err) {
+    console.error('Start chat error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
+
 
 // ─── TEMPLATES (Full CRUD) ───
 app.get('/api/v1/templates', auth, async (req, res) => {
