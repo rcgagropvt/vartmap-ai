@@ -1014,6 +1014,249 @@ function shareWheelLink(wheelId) {
   `, `<button class="btn btn-primary" onclick="navigator.clipboard.writeText('${link}');alert('Link copied!')"><i class="fas fa-copy"></i> Copy Link</button>`);
 }
 
+async function loadLoyaltyProgram() {
+  const mainContent = document.getElementById('mainContent');
+  mainContent.innerHTML = '<div style="padding:40px;text-align:center"><div class="spinner"></div><p>Loading Loyalty Program...</p></div>';
+  try {
+    const [overview, tiers, catalog, redemptions, leaderboard] = await Promise.all([
+      api('/api/v1/loyalty/overview'),
+      api('/api/v1/loyalty/tiers'),
+      api('/api/v1/loyalty/catalog'),
+      api('/api/v1/loyalty/redemptions'),
+      api('/api/v1/loyalty/leaderboard')
+    ]);
+
+    mainContent.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+        <h2>🏆 Loyalty Program</h2>
+        <div>
+          <button onclick="showAddPointsModal()" style="padding:8px 16px;background:#10b981;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-right:8px">+ Award Points</button>
+          <button onclick="showAddCatalogModal()" style="padding:8px 16px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer">+ Add Reward</button>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px">
+        <div style="background:#fff;padding:20px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#10b981">${overview.total_members}</div>
+          <div style="color:#6b7280;font-size:13px">Total Members</div>
+        </div>
+        <div style="background:#fff;padding:20px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#3b82f6">${overview.total_points_issued?.toLocaleString()}</div>
+          <div style="color:#6b7280;font-size:13px">Points Issued</div>
+        </div>
+        <div style="background:#fff;padding:20px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#f59e0b">${overview.total_points_redeemed?.toLocaleString()}</div>
+          <div style="color:#6b7280;font-size:13px">Points Redeemed</div>
+        </div>
+        <div style="background:#fff;padding:20px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#ef4444">${overview.pending_redemptions}</div>
+          <div style="color:#6b7280;font-size:13px">Pending Redemptions</div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+        <button onclick="showLoyaltyTab('tiers')" id="tab-tiers" class="loyalty-tab active-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#1e293b;color:#fff">🏅 Tiers</button>
+        <button onclick="showLoyaltyTab('catalog')" id="tab-catalog" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">🎁 Rewards Catalog</button>
+        <button onclick="showLoyaltyTab('redemptions')" id="tab-redemptions" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">📋 Redemptions</button>
+        <button onclick="showLoyaltyTab('leaderboard')" id="tab-leaderboard" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">🏆 Leaderboard</button>
+        <button onclick="showLoyaltyTab('tierDist')" id="tab-tierDist" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">📊 Tier Distribution</button>
+      </div>
+
+      <div id="loyaltyTabContent"></div>
+    `;
+
+    // Store data globally for tab switching
+    window._loyaltyData = { tiers, catalog, redemptions, leaderboard, overview };
+    showLoyaltyTab('tiers');
+
+  } catch (e) {
+    mainContent.innerHTML = '<div style="padding:40px;text-align:center;color:red">Error loading loyalty program: ' + e.message + '</div>';
+  }
+}
+
+function showLoyaltyTab(tab) {
+  document.querySelectorAll('.loyalty-tab').forEach(b => { b.style.background = '#fff'; b.style.color = '#1e293b'; });
+  const activeBtn = document.getElementById('tab-' + tab);
+  if (activeBtn) { activeBtn.style.background = '#1e293b'; activeBtn.style.color = '#fff'; }
+
+  const container = document.getElementById('loyaltyTabContent');
+  const { tiers, catalog, redemptions, leaderboard, overview } = window._loyaltyData;
+
+  if (tab === 'tiers') {
+    container.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px">
+        ${tiers.map(t => `
+          <div style="background:linear-gradient(135deg,${t.color}22,${t.color}11);border:2px solid ${t.color};border-radius:12px;padding:24px;text-align:center">
+            <div style="font-size:48px">${t.icon}</div>
+            <h3 style="margin:8px 0;color:${t.color}">${t.name}</h3>
+            <div style="color:#6b7280;font-size:14px">${t.min_points} - ${t.max_points || '∞'} pts</div>
+            <div style="margin-top:8px;font-size:13px;color:#6b7280">Multiplier: ${t.multiplier}x</div>
+            <div style="margin-top:12px;text-align:left">
+              ${(t.benefits?.perks || []).map(p => '<div style="font-size:12px;padding:2px 0">✅ ' + p + '</div>').join('')}
+            </div>
+          </div>
+        `).join('')}
+      </div>`;
+  } else if (tab === 'catalog') {
+    container.innerHTML = `
+      <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:#f8fafc">
+            <th style="padding:12px;text-align:left">Reward</th>
+            <th style="padding:12px;text-align:left">Category</th>
+            <th style="padding:12px;text-align:center">Points</th>
+            <th style="padding:12px;text-align:center">Value</th>
+            <th style="padding:12px;text-align:center">Stock</th>
+            <th style="padding:12px;text-align:center">Redeemed</th>
+            <th style="padding:12px;text-align:center">Status</th>
+          </tr></thead>
+          <tbody>
+            ${catalog.map(c => `<tr style="border-top:1px solid #f1f5f9">
+              <td style="padding:12px;font-weight:500">${c.name}</td>
+              <td style="padding:12px"><span style="background:#e0e7ff;color:#4338ca;padding:2px 8px;border-radius:4px;font-size:12px">${c.category}</span></td>
+              <td style="padding:12px;text-align:center;font-weight:600;color:#f59e0b">${c.points_required}</td>
+              <td style="padding:12px;text-align:center">${c.value_inr ? '₹' + c.value_inr : '—'}</td>
+              <td style="padding:12px;text-align:center">${c.stock === -1 ? '∞' : c.stock}</td>
+              <td style="padding:12px;text-align:center">${c.redeemed_count}</td>
+              <td style="padding:12px;text-align:center">${c.active ? '<span style="color:#10b981">Active</span>' : '<span style="color:#ef4444">Inactive</span>'}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } else if (tab === 'redemptions') {
+    container.innerHTML = redemptions.length ? `
+      <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:#f8fafc">
+            <th style="padding:12px;text-align:left">Farmer</th>
+            <th style="padding:12px;text-align:left">Reward</th>
+            <th style="padding:12px;text-align:center">Points</th>
+            <th style="padding:12px;text-align:center">Status</th>
+            <th style="padding:12px;text-align:center">Date</th>
+            <th style="padding:12px;text-align:center">Actions</th>
+          </tr></thead>
+          <tbody>
+            ${redemptions.map(r => `<tr style="border-top:1px solid #f1f5f9">
+              <td style="padding:12px">${r.farmer_name || 'Unknown'}<br><small style="color:#6b7280">${r.farmer_phone || ''}</small></td>
+              <td style="padding:12px;font-weight:500">${r.item_name || 'Unknown'}</td>
+              <td style="padding:12px;text-align:center;font-weight:600">${r.points_spent}</td>
+              <td style="padding:12px;text-align:center"><span style="padding:2px 8px;border-radius:4px;font-size:12px;background:${r.status==='pending'?'#fef3c7;color:#92400e':r.status==='approved'?'#dbeafe;color:#1e40af':r.status==='delivered'?'#d1fae5;color:#065f46':'#fee2e2;color:#991b1b'}">${r.status}</span></td>
+              <td style="padding:12px;text-align:center;font-size:12px;color:#6b7280">${new Date(r.created_at).toLocaleDateString()}</td>
+              <td style="padding:12px;text-align:center">
+                ${r.status==='pending' ? `<button onclick="approveRedemption('${r.id}')" style="padding:4px 10px;background:#10b981;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;margin:2px">Approve</button><button onclick="rejectRedemption('${r.id}')" style="padding:4px 10px;background:#ef4444;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;margin:2px">Reject</button>` : ''}
+                ${r.status==='approved' ? `<button onclick="deliverRedemption('${r.id}')" style="padding:4px 10px;background:#3b82f6;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">Mark Delivered</button>` : ''}
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>` : '<div style="padding:40px;text-align:center;color:#6b7280">No redemption requests yet</div>';
+  } else if (tab === 'leaderboard') {
+    container.innerHTML = leaderboard.length ? `
+      <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:#f8fafc">
+            <th style="padding:12px;text-align:center">#</th>
+            <th style="padding:12px;text-align:left">Farmer</th>
+            <th style="padding:12px;text-align:center">Tier</th>
+            <th style="padding:12px;text-align:center">Current Points</th>
+            <th style="padding:12px;text-align:center">Lifetime Points</th>
+          </tr></thead>
+          <tbody>
+            ${leaderboard.map((f, i) => `<tr style="border-top:1px solid #f1f5f9">
+              <td style="padding:12px;text-align:center;font-weight:700;font-size:18px">${i < 3 ? ['🥇','🥈','🥉'][i] : i+1}</td>
+              <td style="padding:12px"><strong>${f.name}</strong><br><small style="color:#6b7280">${f.phone} · ${f.district || 'N/A'}</small></td>
+              <td style="padding:12px;text-align:center"><span style="color:${f.tier_color || '#666'}">${f.tier_icon || ''} ${f.tier_name || 'None'}</span></td>
+              <td style="padding:12px;text-align:center;font-weight:600;color:#f59e0b">${(f.loyalty_points||0).toLocaleString()}</td>
+              <td style="padding:12px;text-align:center;color:#6b7280">${(f.lifetime_points||0).toLocaleString()}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>` : '<div style="padding:40px;text-align:center;color:#6b7280">No farmers with points yet. Award points to get started!</div>';
+  } else if (tab === 'tierDist') {
+    const dist = overview.tier_distribution || [];
+    const total = dist.reduce((s, t) => s + (+t.count), 0) || 1;
+    container.innerHTML = `
+      <div style="background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
+        <h3 style="margin-bottom:16px">Tier Distribution</h3>
+        ${dist.map(t => `
+          <div style="margin-bottom:16px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+              <span>${t.icon} ${t.name}</span>
+              <span style="font-weight:600">${t.count} farmers</span>
+            </div>
+            <div style="background:#f1f5f9;border-radius:8px;height:24px;overflow:hidden">
+              <div style="background:${t.color};height:100%;width:${(+t.count/total*100)}%;border-radius:8px;transition:width 0.5s"></div>
+            </div>
+          </div>
+        `).join('')}
+      </div>`;
+  }
+}
+
+async function showAddPointsModal() {
+  const farmerId = prompt('Enter Farmer ID (UUID):');
+  if (!farmerId) return;
+  const points = prompt('Points to award:');
+  if (!points || isNaN(points)) return;
+  const desc = prompt('Reason (optional):') || 'Manual award';
+  try {
+    const result = await api('/api/v1/loyalty/points', {
+      method: 'POST',
+      body: JSON.stringify({ farmer_id: farmerId, points: +points, type: 'earn', source: 'manual', description: desc })
+    });
+    alert('Awarded ' + points + ' points! New balance: ' + result.new_balance + (result.tier ? ' | Tier: ' + result.tier.name : ''));
+    loadLoyaltyProgram();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function showAddCatalogModal() {
+  const name = prompt('Reward name:');
+  if (!name) return;
+  const points = prompt('Points required:');
+  if (!points) return;
+  const category = prompt('Category (recharge/coupon/physical):') || 'general';
+  const value = prompt('Value in ₹ (optional):') || null;
+  try {
+    await api('/api/v1/loyalty/catalog', {
+      method: 'POST',
+      body: JSON.stringify({ name, points_required: +points, category, value_inr: value ? +value : null, redemption_type: category })
+    });
+    alert('Reward added!');
+    loadLoyaltyProgram();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function approveRedemption(id) {
+  if (!confirm('Approve this redemption?')) return;
+  try {
+    await api('/api/v1/loyalty/redemptions/' + id + '/approve', { method: 'PUT' });
+    alert('Approved! WhatsApp notification sent.');
+    loadLoyaltyProgram();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function rejectRedemption(id) {
+  const reason = prompt('Rejection reason:');
+  if (!reason) return;
+  try {
+    await api('/api/v1/loyalty/redemptions/' + id + '/reject', { method: 'PUT', body: JSON.stringify({ reason }) });
+    alert('Rejected. Points refunded to farmer.');
+    loadLoyaltyProgram();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function deliverRedemption(id) {
+  const tracking = prompt('Tracking number (optional):') || null;
+  try {
+    await api('/api/v1/loyalty/redemptions/' + id + '/deliver', { method: 'PUT', body: JSON.stringify({ tracking_number: tracking }) });
+    alert('Marked as delivered!');
+    loadLoyaltyProgram();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+
 // ─── PRIZE FULFILLMENT ───
 async function viewWheelResults(wheelId, wheelName) {
   const el = document.getElementById('pageContent');

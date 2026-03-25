@@ -15,6 +15,11 @@ app.get('/my-prizes', (req, res) => {
     res.sendFile(path.join(__dirname, 'prizes.html'));
 });
 
+app.get('/my-loyalty', (req, res) => {
+    res.sendFile(path.join(__dirname, 'loyalty.html'));
+});
+
+
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });

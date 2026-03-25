@@ -453,6 +453,312 @@ app.put('/api/v1/campaigns/:id', auth, async (req, res) => {
     res.json({ campaign: r.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+// ==================== LOYALTY PROGRAM ====================
+
+// GET /api/v1/loyalty/overview - Dashboard stats
+app.get('/api/v1/loyalty/overview', auth, async (req, res) => {
+  try {
+    const [totalMembers, activeMembers, totalPointsIssued, totalPointsRedeemed, pendingRedemptions, tierDistribution] = await Promise.all([
+      pool.query('SELECT COUNT(*) FROM farmers WHERE loyalty_points > 0'),
+      pool.query("SELECT COUNT(*) FROM farmers WHERE loyalty_points > 0 AND updated_at > NOW() - INTERVAL '30 days'"),
+      pool.query("SELECT COALESCE(SUM(points),0) as total FROM loyalty_transactions WHERE type='earn'"),
+      pool.query("SELECT COALESCE(SUM(points),0) as total FROM loyalty_transactions WHERE type='redeem'"),
+      pool.query("SELECT COUNT(*) FROM redemption_requests WHERE status='pending'"),
+      pool.query(`SELECT lt.name, lt.color, lt.icon, COUNT(f.id) as count 
+                  FROM loyalty_tiers lt LEFT JOIN farmers f ON f.loyalty_tier_id = lt.id 
+                  GROUP BY lt.id, lt.name, lt.color, lt.icon ORDER BY lt.sort_order`)
+    ]);
+    res.json({
+      total_members: +totalMembers.rows[0].count,
+      active_members: +activeMembers.rows[0].count,
+      total_points_issued: +totalPointsIssued.rows[0].total,
+      total_points_redeemed: +totalPointsRedeemed.rows[0].total,
+      pending_redemptions: +pendingRedemptions.rows[0].count,
+      tier_distribution: tierDistribution.rows
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/v1/loyalty/tiers - List all tiers
+app.get('/api/v1/loyalty/tiers', auth, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM loyalty_tiers ORDER BY sort_order');
+    res.json(result.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/v1/loyalty/tiers/:id - Update a tier
+app.put('/api/v1/loyalty/tiers/:id', auth, async (req, res) => {
+  try {
+    const { name, min_points, max_points, multiplier, benefits, color, icon, active } = req.body;
+    const result = await pool.query(
+      `UPDATE loyalty_tiers SET name=$1, min_points=$2, max_points=$3, multiplier=$4, benefits=$5, color=$6, icon=$7, active=$8 WHERE id=$9 RETURNING *`,
+      [name, min_points, max_points, multiplier, JSON.stringify(benefits), color, icon, active, req.params.id]
+    );
+    res.json(result.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/v1/loyalty/transactions - List transactions with filters
+app.get('/api/v1/loyalty/transactions', auth, async (req, res) => {
+  try {
+    const { farmer_id, type, source, limit = 50, offset = 0 } = req.query;
+    let where = [];
+    let params = [];
+    let idx = 1;
+    if (farmer_id) { where.push(`lt.farmer_id = $${idx++}`); params.push(farmer_id); }
+    if (type) { where.push(`lt.type = $${idx++}`); params.push(type); }
+    if (source) { where.push(`lt.source = $${idx++}`); params.push(source); }
+    const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
+    const result = await pool.query(
+      `SELECT lt.*, f.name as farmer_name, f.phone as farmer_phone
+       FROM loyalty_transactions lt LEFT JOIN farmers f ON f.id = lt.farmer_id
+       ${whereClause} ORDER BY lt.created_at DESC LIMIT $${idx++} OFFSET $${idx++}`,
+      [...params, limit, offset]
+    );
+    res.json(result.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/v1/loyalty/points - Manually award/deduct points
+app.post('/api/v1/loyalty/points', auth, async (req, res) => {
+  try {
+    const { farmer_id, points, type = 'earn', source = 'manual', description } = req.body;
+    if (!farmer_id || !points) return res.status(400).json({ error: 'farmer_id and points required' });
+
+    const farmer = await pool.query('SELECT id, name, phone, loyalty_points FROM farmers WHERE id = $1', [farmer_id]);
+    if (!farmer.rows.length) return res.status(404).json({ error: 'Farmer not found' });
+
+    const currentPoints = farmer.rows[0].loyalty_points || 0;
+    const newBalance = type === 'redeem' ? currentPoints - Math.abs(points) : currentPoints + Math.abs(points);
+    if (newBalance < 0) return res.status(400).json({ error: 'Insufficient points' });
+
+    const lifetimeAdd = type === 'earn' ? Math.abs(points) : 0;
+
+    await pool.query(
+      'UPDATE farmers SET loyalty_points = $1, lifetime_points = COALESCE(lifetime_points,0) + $2 WHERE id = $3',
+      [newBalance, lifetimeAdd, farmer_id]
+    );
+
+    const txn = await pool.query(
+      `INSERT INTO loyalty_transactions (farmer_id, type, points, balance_after, source, description)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [farmer_id, type, Math.abs(points), newBalance, source, description || `Manual ${type} by admin`]
+    );
+
+    // Update tier
+    const tier = await pool.query(
+      'SELECT id, name FROM loyalty_tiers WHERE min_points <= $1 AND (max_points IS NULL OR max_points >= $1) AND active = true ORDER BY min_points DESC LIMIT 1',
+      [type === 'earn' ? (farmer.rows[0].lifetime_points || 0) + lifetimeAdd : farmer.rows[0].lifetime_points || 0]
+    );
+    if (tier.rows.length) {
+      await pool.query('UPDATE farmers SET loyalty_tier_id = $1, tier_updated_at = NOW() WHERE id = $2', [tier.rows[0].id, farmer_id]);
+    }
+
+    res.json({ transaction: txn.rows[0], new_balance: newBalance, tier: tier.rows[0] || null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/v1/loyalty/catalog - List redemption items
+app.get('/api/v1/loyalty/catalog', auth, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM redemption_catalog ORDER BY sort_order');
+    res.json(result.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/v1/loyalty/catalog - Add catalog item
+app.post('/api/v1/loyalty/catalog', auth, async (req, res) => {
+  try {
+    const { name, description, category, points_required, value_inr, redemption_type, stock } = req.body;
+    const result = await pool.query(
+      `INSERT INTO redemption_catalog (name, description, category, points_required, value_inr, redemption_type, stock)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [name, description, category, points_required, value_inr, redemption_type, stock || -1]
+    );
+    res.json(result.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/v1/loyalty/catalog/:id - Update catalog item
+app.put('/api/v1/loyalty/catalog/:id', auth, async (req, res) => {
+  try {
+    const { name, description, category, points_required, value_inr, redemption_type, stock, active } = req.body;
+    const result = await pool.query(
+      `UPDATE redemption_catalog SET name=$1, description=$2, category=$3, points_required=$4, value_inr=$5, redemption_type=$6, stock=$7, active=$8 WHERE id=$9 RETURNING *`,
+      [name, description, category, points_required, value_inr, redemption_type, stock, active, req.params.id]
+    );
+    res.json(result.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/v1/loyalty/redemptions - List redemption requests
+app.get('/api/v1/loyalty/redemptions', auth, async (req, res) => {
+  try {
+    const { status, limit = 50, offset = 0 } = req.query;
+    const where = status ? 'WHERE rr.status = $1' : '';
+    const params = status ? [status, limit, offset] : [limit, offset];
+    const result = await pool.query(
+      `SELECT rr.*, f.name as farmer_name, f.phone as farmer_phone, f.loyalty_points,
+              rc.name as item_name, rc.category, rc.redemption_type
+       FROM redemption_requests rr
+       LEFT JOIN farmers f ON f.id = rr.farmer_id
+       LEFT JOIN redemption_catalog rc ON rc.id = rr.catalog_item_id
+       ${where} ORDER BY rr.created_at DESC LIMIT $${status ? 2 : 1} OFFSET $${status ? 3 : 2}`,
+      params
+    );
+    res.json(result.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/v1/loyalty/redemptions/:id/approve
+app.put('/api/v1/loyalty/redemptions/:id/approve', auth, async (req, res) => {
+  try {
+    const redemption = await pool.query('SELECT * FROM redemption_requests WHERE id = $1', [req.params.id]);
+    if (!redemption.rows.length) return res.status(404).json({ error: 'Not found' });
+    if (redemption.rows[0].status !== 'pending') return res.status(400).json({ error: 'Not in pending status' });
+
+    await pool.query(
+      `UPDATE redemption_requests SET status='approved', approved_by=$1, approved_at=NOW() WHERE id=$2`,
+      [req.user.id, req.params.id]
+    );
+
+    // Send WhatsApp notification
+    try {
+      const farmer = await pool.query('SELECT phone, name FROM farmers WHERE id = $1', [redemption.rows[0].farmer_id]);
+      const item = await pool.query('SELECT name FROM redemption_catalog WHERE id = $1', [redemption.rows[0].catalog_item_id]);
+      if (farmer.rows.length) {
+        await axios.post('https://vartmap-whatsapp-gateway.onrender.com/api/v1/send-message', {
+          phone: farmer.rows[0].phone,
+          message: `🎉 Hi ${farmer.rows[0].name}! Your redemption request for "${item.rows[0]?.name}" has been approved! We'll process it shortly. Ref: ${req.params.id.slice(0,8)}`
+        });
+      }
+    } catch (e) { console.log('WhatsApp notification failed:', e.message); }
+
+    res.json({ success: true, message: 'Redemption approved' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/v1/loyalty/redemptions/:id/deliver
+app.put('/api/v1/loyalty/redemptions/:id/deliver', auth, async (req, res) => {
+  try {
+    const { tracking_number, notes } = req.body;
+    await pool.query(
+      `UPDATE redemption_requests SET status='delivered', delivered_at=NOW(), tracking_number=$1, notes=$2 WHERE id=$3`,
+      [tracking_number, notes, req.params.id]
+    );
+    res.json({ success: true, message: 'Marked as delivered' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/v1/loyalty/redemptions/:id/reject
+app.put('/api/v1/loyalty/redemptions/:id/reject', auth, async (req, res) => {
+  try {
+    const { reason } = req.body;
+    const redemption = await pool.query('SELECT * FROM redemption_requests WHERE id = $1', [req.params.id]);
+    if (!redemption.rows.length) return res.status(404).json({ error: 'Not found' });
+
+    // Refund points
+    const farmer = await pool.query('SELECT loyalty_points FROM farmers WHERE id = $1', [redemption.rows[0].farmer_id]);
+    const refundedBalance = (farmer.rows[0]?.loyalty_points || 0) + redemption.rows[0].points_spent;
+    await pool.query('UPDATE farmers SET loyalty_points = $1 WHERE id = $2', [refundedBalance, redemption.rows[0].farmer_id]);
+
+    await pool.query(
+      `INSERT INTO loyalty_transactions (farmer_id, type, points, balance_after, source, source_id, description)
+       VALUES ($1, 'earn', $2, $3, 'refund', $4, $5)`,
+      [redemption.rows[0].farmer_id, redemption.rows[0].points_spent, refundedBalance, req.params.id, 'Redemption rejected: ' + (reason || 'No reason')]
+    );
+
+    await pool.query(
+      `UPDATE redemption_requests SET status='rejected', rejection_reason=$1 WHERE id=$2`,
+      [reason, req.params.id]
+    );
+
+    res.json({ success: true, message: 'Redemption rejected, points refunded' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/v1/loyalty/leaderboard - Top farmers by points
+app.get('/api/v1/loyalty/leaderboard', auth, async (req, res) => {
+  try {
+    const { limit = 20 } = req.query;
+    const result = await pool.query(
+      `SELECT f.id, f.name, f.phone, f.district, f.loyalty_points, f.lifetime_points,
+              lt.name as tier_name, lt.icon as tier_icon, lt.color as tier_color
+       FROM farmers f LEFT JOIN loyalty_tiers lt ON lt.id = f.loyalty_tier_id
+       WHERE f.lifetime_points > 0 ORDER BY f.lifetime_points DESC LIMIT $1`,
+      [limit]
+    );
+    res.json(result.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUBLIC: Farmer loyalty status (no auth)
+app.get('/api/v1/public/loyalty/:phone', async (req, res) => {
+  try {
+    const phone = req.params.phone.replace(/\D/g, '');
+    const fullPhone = phone.length === 10 ? '91' + phone : phone;
+    const farmer = await pool.query(
+      `SELECT f.id, f.name, f.phone, f.loyalty_points, f.lifetime_points,
+              lt.name as tier_name, lt.icon as tier_icon, lt.color as tier_color, lt.benefits
+       FROM farmers f LEFT JOIN loyalty_tiers lt ON lt.id = f.loyalty_tier_id
+       WHERE f.phone = $1 OR f.phone = $2`,
+      [phone, fullPhone]
+    );
+    if (!farmer.rows.length) return res.status(404).json({ error: 'Farmer not found' });
+
+    const transactions = await pool.query(
+      'SELECT type, points, balance_after, source, description, created_at FROM loyalty_transactions WHERE farmer_id = $1 ORDER BY created_at DESC LIMIT 20',
+      [farmer.rows[0].id]
+    );
+
+    const catalog = await pool.query('SELECT id, name, description, category, points_required, redemption_type FROM redemption_catalog WHERE active = true ORDER BY sort_order');
+
+    res.json({
+      farmer: farmer.rows[0],
+      transactions: transactions.rows,
+      catalog: catalog.rows
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUBLIC: Farmer redeem points (no auth, phone-verified)
+app.post('/api/v1/public/loyalty/redeem', async (req, res) => {
+  try {
+    const { phone, catalog_item_id, delivery_address } = req.body;
+    if (!phone || !catalog_item_id) return res.status(400).json({ error: 'phone and catalog_item_id required' });
+
+    const cleanPhone = phone.replace(/\D/g, '');
+    const fullPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
+    const farmer = await pool.query('SELECT id, name, phone, loyalty_points FROM farmers WHERE phone = $1 OR phone = $2', [cleanPhone, fullPhone]);
+    if (!farmer.rows.length) return res.status(404).json({ error: 'Farmer not found' });
+
+    const item = await pool.query('SELECT * FROM redemption_catalog WHERE id = $1 AND active = true', [catalog_item_id]);
+    if (!item.rows.length) return res.status(404).json({ error: 'Item not found' });
+    if (item.rows[0].stock !== -1 && item.rows[0].redeemed_count >= item.rows[0].stock) return res.status(400).json({ error: 'Out of stock' });
+    if ((farmer.rows[0].loyalty_points || 0) < item.rows[0].points_required) return res.status(400).json({ error: 'Insufficient points' });
+
+    const newBalance = farmer.rows[0].loyalty_points - item.rows[0].points_required;
+    await pool.query('UPDATE farmers SET loyalty_points = $1 WHERE id = $2', [newBalance, farmer.rows[0].id]);
+    await pool.query('UPDATE redemption_catalog SET redeemed_count = redeemed_count + 1 WHERE id = $1', [catalog_item_id]);
+
+    await pool.query(
+      `INSERT INTO loyalty_transactions (farmer_id, type, points, balance_after, source, description)
+       VALUES ($1, 'redeem', $2, $3, 'redemption', $4)`,
+      [farmer.rows[0].id, item.rows[0].points_required, newBalance, 'Redeemed: ' + item.rows[0].name]
+    );
+
+    const request = await pool.query(
+      `INSERT INTO redemption_requests (farmer_id, catalog_item_id, points_spent, farmer_phone, delivery_address)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [farmer.rows[0].id, catalog_item_id, item.rows[0].points_required, fullPhone, delivery_address]
+    );
+
+    res.json({ success: true, redemption: request.rows[0], new_balance: newBalance });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── SPIN WHEELS (Digicides-style) ───
 app.get('/api/v1/spin-wheels', auth, async (req, res) => {
   try {
