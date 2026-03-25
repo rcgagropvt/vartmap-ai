@@ -6,12 +6,10 @@ node_modules/
 __pycache__/
 "@
 
-# Remove node_modules from git tracking (keeps files locally)
+# Remove node_modules from git tracking
 git rm -r --cached services/whatsapp-gateway/node_modules
 
-# Stage everything
+# Commit and push
 git add .
-git commit -m "remove node_modules from git, add gitignore"
-
-# Push
+git commit -m "remove node_modules, add gitignore, complete spin wheel UI"
 git push
