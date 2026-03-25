@@ -1015,7 +1015,7 @@ function shareWheelLink(wheelId) {
 }
 
 async function loadLoyaltyProgram() {
-  const mainContent = document.getElementById('mainContent');
+  const mainContent = document.getElementById('pageContent');
   mainContent.innerHTML = '<div style="padding:40px;text-align:center"><div class="spinner"></div><p>Loading Loyalty Program...</p></div>';
   try {
     const [overview, tiers, catalog, redemptions, leaderboard] = await Promise.all([
