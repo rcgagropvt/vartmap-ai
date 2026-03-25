@@ -1196,34 +1196,140 @@ function showLoyaltyTab(tab) {
 }
 
 async function showAddPointsModal() {
-  const farmerId = prompt('Enter Farmer ID (UUID):');
-  if (!farmerId) return;
-  const points = prompt('Points to award:');
-  if (!points || isNaN(points)) return;
-  const desc = prompt('Reason (optional):') || 'Manual award';
+  let farmersCache = [];
+  openModal('Award Loyalty Points', `
+    <div class="form-group">
+      <label>Search Farmer</label>
+      <input id="awardFarmerSearch" placeholder="Type name or phone..." oninput="searchFarmersForAward(this.value)" autocomplete="off">
+      <div id="farmerSearchResults" style="max-height:180px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;margin-top:4px;display:none"></div>
+      <input type="hidden" id="awardFarmerId">
+      <div id="selectedFarmerInfo" style="margin-top:8px;padding:10px;background:#f0fdf4;border-radius:8px;display:none;font-size:13px"></div>
+    </div>
+    <div class="form-group">
+      <label>Points to Award</label>
+      <input id="awardPoints" type="number" min="1" placeholder="e.g. 100">
+    </div>
+    <div class="form-group">
+      <label>Reason</label>
+      <input id="awardReason" placeholder="e.g. Purchase reward, Welcome bonus, Referral">
+    </div>
+    <div class="form-group">
+      <label>Type</label>
+      <select id="awardType" style="width:100%;padding:8px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px">
+        <option value="earn">Award Points (Earn)</option>
+        <option value="redeem">Deduct Points (Redeem)</option>
+      </select>
+    </div>
+  `, `<button class="btn btn-primary" onclick="submitAwardPoints()"><i class="fas fa-coins"></i> Award Points</button>`);
+  try {
+    farmersCache = await api('/api/v1/farmers?limit=200');
+    if (Array.isArray(farmersCache)) window._farmersCache = farmersCache;
+    else if (farmersCache.farmers) window._farmersCache = farmersCache.farmers;
+    else window._farmersCache = [];
+  } catch(e) { window._farmersCache = []; }
+}
+function searchFarmersForAward(query) {
+  const container = document.getElementById('farmerSearchResults');
+  if (!query || query.length < 2) { container.style.display = 'none'; return; }
+  const q = query.toLowerCase();
+  const matches = (window._farmersCache || []).filter(f =>
+    (f.name && f.name.toLowerCase().includes(q)) || (f.phone && f.phone.includes(q))
+  ).slice(0, 10);
+  if (!matches.length) {
+    container.style.display = 'block';
+    container.innerHTML = '<div style="padding:12px;color:#6b7280;font-size:13px">No farmers found</div>';
+    return;
+  }
+  container.style.display = 'block';
+  container.innerHTML = matches.map(f => `
+    <div onclick="selectFarmerForAward('${f.id}', '${(f.name||'').replace(/'/g,"\\'")}', '${f.phone||''}')"
+         style="padding:10px 12px;cursor:pointer;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;transition:background 0.15s"
+         onmouseover="this.style.background='#f0fdf4'" onmouseout="this.style.background='transparent'">
+      <div>
+        <div style="font-weight:600;font-size:14px">${f.name || 'Unknown'}</div>
+        <div style="font-size:12px;color:#6b7280">${f.phone || ''}</div>
+      </div>
+      <div style="font-size:11px;color:#10b981;font-weight:600">${f.loyalty_points || 0} pts</div>
+    </div>
+  `).join('');
+}
+function selectFarmerForAward(id, name, phone) {
+  document.getElementById('awardFarmerId').value = id;
+  document.getElementById('awardFarmerSearch').value = name + ' (' + phone + ')';
+  document.getElementById('farmerSearchResults').style.display = 'none';
+  document.getElementById('selectedFarmerInfo').style.display = 'block';
+  document.getElementById('selectedFarmerInfo').innerHTML = '<span style="color:#10b981">&#10003;</span> Selected: <strong>' + name + '</strong> | ' + phone;
+}
+async function submitAwardPoints() {
+  const farmerId = document.getElementById('awardFarmerId').value;
+  const points = document.getElementById('awardPoints').value;
+  const reason = document.getElementById('awardReason').value || 'Manual award';
+  const type = document.getElementById('awardType').value;
+  if (!farmerId) { alert('Please select a farmer first'); return; }
+  if (!points || isNaN(points) || +points <= 0) { alert('Please enter valid points'); return; }
   try {
     const result = await api('/api/v1/loyalty/points', {
       method: 'POST',
-      body: JSON.stringify({ farmer_id: farmerId, points: +points, type: 'earn', source: 'manual', description: desc })
+      body: JSON.stringify({ farmer_id: farmerId, points: +points, type: type, source: 'manual', description: reason })
     });
+    closeModal();
     alert('Awarded ' + points + ' points! New balance: ' + result.new_balance + (result.tier ? ' | Tier: ' + result.tier.name : ''));
     loadLoyaltyProgram();
   } catch (e) { alert('Error: ' + e.message); }
 }
-
 async function showAddCatalogModal() {
-  const name = prompt('Reward name:');
-  if (!name) return;
-  const points = prompt('Points required:');
-  if (!points) return;
-  const category = prompt('Category (recharge/coupon/physical):') || 'general';
-  const value = prompt('Value in ₹ (optional):') || null;
+  openModal('Add Reward to Catalog', `
+    <div class="form-group">
+      <label>Reward Name</label>
+      <input id="catName" placeholder="e.g. Rs.100 Mobile Recharge">
+    </div>
+    <div class="form-group">
+      <label>Description</label>
+      <textarea id="catDesc" rows="2" placeholder="Brief description of the reward"></textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Category</label>
+        <select id="catCategory" style="width:100%;padding:8px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px">
+          <option value="recharge">Recharge</option>
+          <option value="coupon">Coupon</option>
+          <option value="physical">Physical Item</option>
+          <option value="general">General</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Points Required</label>
+        <input id="catPoints" type="number" min="1" placeholder="e.g. 100">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Value in Rs. (optional)</label>
+        <input id="catValue" type="number" step="0.01" placeholder="e.g. 100.00">
+      </div>
+      <div class="form-group">
+        <label>Stock (-1 = unlimited)</label>
+        <input id="catStock" type="number" value="-1">
+      </div>
+    </div>
+  `, `<button class="btn btn-primary" onclick="submitCatalogItem()"><i class="fas fa-plus"></i> Add Reward</button>`);
+}
+async function submitCatalogItem() {
+  const name = document.getElementById('catName').value;
+  const description = document.getElementById('catDesc').value;
+  const category = document.getElementById('catCategory').value;
+  const points = document.getElementById('catPoints').value;
+  const value = document.getElementById('catValue').value;
+  const stock = document.getElementById('catStock').value;
+  if (!name) { alert('Please enter a reward name'); return; }
+  if (!points || +points <= 0) { alert('Please enter points required'); return; }
   try {
     await api('/api/v1/loyalty/catalog', {
       method: 'POST',
-      body: JSON.stringify({ name, points_required: +points, category, value_inr: value ? +value : null, redemption_type: category })
+      body: JSON.stringify({ name, description, category, points_required: +points, value_inr: value ? +value : null, redemption_type: category, stock: stock ? +stock : -1 })
     });
-    alert('Reward added!');
+    closeModal();
+    alert('Reward added to catalog!');
     loadLoyaltyProgram();
   } catch (e) { alert('Error: ' + e.message); }
 }
