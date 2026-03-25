@@ -1545,46 +1545,286 @@ async function pauseWheel(id) { await api('/api/v1/spin-wheels/' + id, { method:
 // ─── 9. COUPONS ───
 async function loadCoupons() {
   const el = document.getElementById('pageContent');
+  el.innerHTML = '<div style="padding:40px;text-align:center"><div class="spinner"></div><p>Loading Coupon Codes...</p></div>';
   try {
     const d = await api('/api/v1/coupons');
+    const campaigns = d.campaigns || [];
+    const totalCodes = campaigns.reduce((s,c) => s + (+c.stats?.total_codes || 0), 0);
+    const totalUsed = campaigns.reduce((s,c) => s + (+c.stats?.used || 0), 0);
+    const activeCampaigns = campaigns.filter(c => c.status === 'active').length;
+
     el.innerHTML = `
-    <div class="table-wrap">
-      <div class="table-header"><h3>Coupon Campaigns (${d.campaigns.length})</h3><button class="btn btn-primary btn-sm" onclick="newCouponModal()"><i class="fas fa-plus"></i> New Campaign</button></div>
-      <table><tr><th>Name</th><th>Prefix</th><th>Type</th><th>Value</th><th>Codes</th><th>Used</th><th>Status</th><th>Dates</th></tr>
-      ${d.campaigns.map(c => `<tr><td><strong>${c.name}</strong></td><td>${c.code_prefix}</td><td>${c.discount_type}</td><td>${c.discount_value}${c.discount_type==='percentage'?'%':' ₹'}</td><td>${c.stats?.total_codes || 0}</td><td>${c.stats?.used || 0}</td><td><span class="status ${c.status}">${c.status}</span></td><td>${fmtDate(c.start_date)} → ${fmtDate(c.end_date)}</td></tr>`).join('')}
-      </table>
-    </div>`;
-  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+        <h2>Coupon Codes</h2>
+        <div>
+          <button onclick="showValidateCouponModal()" style="padding:8px 16px;background:#f59e0b;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-right:8px">Validate Code</button>
+          <button onclick="newCouponModal()" style="padding:8px 16px;background:#10b981;color:#fff;border:none;border-radius:6px;cursor:pointer">+ New Campaign</button>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:24px">
+        <div style="background:#fff;padding:20px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#6366f1">${campaigns.length}</div>
+          <div style="color:#6b7280;font-size:13px">Campaigns</div>
+        </div>
+        <div style="background:#fff;padding:20px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#10b981">${activeCampaigns}</div>
+          <div style="color:#6b7280;font-size:13px">Active</div>
+        </div>
+        <div style="background:#fff;padding:20px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#3b82f6">${totalCodes}</div>
+          <div style="color:#6b7280;font-size:13px">Total Codes</div>
+        </div>
+        <div style="background:#fff;padding:20px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#f59e0b">${totalUsed}</div>
+          <div style="color:#6b7280;font-size:13px">Redeemed</div>
+        </div>
+        <div style="background:#fff;padding:20px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#ef4444">${totalCodes > 0 ? Math.round(totalUsed/totalCodes*100) : 0}%</div>
+          <div style="color:#6b7280;font-size:13px">Usage Rate</div>
+        </div>
+      </div>
+
+      ${campaigns.length ? `
+      <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:#f8fafc">
+            <th style="padding:12px;text-align:left">Campaign</th>
+            <th style="padding:12px;text-align:center">Type</th>
+            <th style="padding:12px;text-align:center">Value</th>
+            <th style="padding:12px;text-align:center">Codes</th>
+            <th style="padding:12px;text-align:center">Used</th>
+            <th style="padding:12px;text-align:center">Status</th>
+            <th style="padding:12px;text-align:center">Period</th>
+            <th style="padding:12px;text-align:center">Actions</th>
+          </tr></thead>
+          <tbody>
+            ${campaigns.map(c => {
+              const usageRate = c.stats?.total_codes > 0 ? Math.round(c.stats.used / c.stats.total_codes * 100) : 0;
+              return '<tr style="border-top:1px solid #f1f5f9">' +
+                '<td style="padding:12px"><strong>' + c.name + '</strong><br><small style="color:#6b7280">Prefix: ' + c.code_prefix + '</small></td>' +
+                '<td style="padding:12px;text-align:center"><span style="background:#e0e7ff;color:#4338ca;padding:2px 8px;border-radius:4px;font-size:12px">' + c.discount_type + '</span></td>' +
+                '<td style="padding:12px;text-align:center;font-weight:600">' + (c.discount_type === 'percentage' ? c.discount_value + '%' : c.discount_type === 'points' ? c.discount_value + ' pts' : 'Rs.' + c.discount_value) + '</td>' +
+                '<td style="padding:12px;text-align:center">' + (c.stats?.total_codes || 0) + '</td>' +
+                '<td style="padding:12px;text-align:center"><strong>' + (c.stats?.used || 0) + '</strong> <small style="color:#6b7280">(' + usageRate + '%)</small></td>' +
+                '<td style="padding:12px;text-align:center"><span style="padding:2px 8px;border-radius:4px;font-size:12px;background:' + (c.status === 'active' ? '#d1fae5;color:#065f46' : '#fee2e2;color:#991b1b') + '">' + c.status + '</span></td>' +
+                '<td style="padding:12px;text-align:center;font-size:12px;color:#6b7280">' + (c.start_date ? new Date(c.start_date).toLocaleDateString() : '-') + ' to ' + (c.end_date ? new Date(c.end_date).toLocaleDateString() : '-') + '</td>' +
+                '<td style="padding:12px;text-align:center">' +
+                  '<button onclick="viewCouponCodes(\\'' + c.id + '\\', \\'' + c.name.replace(/'/g, '') + '\\')" style="padding:4px 8px;background:#3b82f6;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;margin:2px" title="View Codes">View</button>' +
+                  '<button onclick="generateMoreCodes(\\'' + c.id + '\\')" style="padding:4px 8px;background:#10b981;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;margin:2px" title="Generate More">+Codes</button>' +
+                  '<button onclick="exportCouponCodes(\\'' + c.id + '\\')" style="padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;margin:2px" title="Export CSV">Export</button>' +
+                  '<button onclick="toggleCouponStatus(\\'' + c.id + '\\', \\'' + c.status + '\\')" style="padding:4px 8px;background:' + (c.status === 'active' ? '#f59e0b' : '#10b981') + ';color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;margin:2px">' + (c.status === 'active' ? 'Pause' : 'Activate') + '</button>' +
+                '</td></tr>';
+            }).join('')}
+          </tbody>
+        </table>
+      </div>` : '<div style="padding:40px;text-align:center;color:#6b7280">No coupon campaigns yet. Click "+ New Campaign" to create one.</div>'}
+    `;
+  } catch (e) { el.innerHTML = '<div style="padding:40px;text-align:center;color:red">Error loading coupons: ' + e.message + '</div>'; }
+}
+
+async function viewCouponCodes(campaignId, campaignName) {
+  const el = document.getElementById('pageContent');
+  el.innerHTML = '<div style="padding:40px;text-align:center"><div class="spinner"></div><p>Loading codes...</p></div>';
+  try {
+    const d = await api('/api/v1/coupons/' + campaignId);
+    const c = d.campaign;
+    const stats = d.stats;
+    const codes = d.codes || [];
+
+    el.innerHTML = `
+      <div style="margin-bottom:16px">
+        <button onclick="loadCoupons()" style="padding:6px 12px;background:#f1f5f9;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;font-size:13px">&larr; Back to Campaigns</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <div>
+          <h2>${c.name}</h2>
+          <p style="color:#6b7280;font-size:14px">Prefix: ${c.code_prefix} | ${c.discount_type === 'percentage' ? c.discount_value + '% off' : c.discount_type === 'points' ? c.discount_value + ' points' : 'Rs.' + c.discount_value + ' off'}</p>
+        </div>
+        <div>
+          <button onclick="generateMoreCodes('${campaignId}')" style="padding:8px 14px;background:#10b981;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;margin-right:8px">+ Generate More</button>
+          <button onclick="exportCouponCodes('${campaignId}')" style="padding:8px 14px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">Export CSV</button>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px">
+        <div style="background:#fff;padding:16px;border-radius:10px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
+          <div style="font-size:24px;font-weight:700;color:#3b82f6">${stats.total_codes}</div>
+          <div style="font-size:12px;color:#6b7280">Total</div>
+        </div>
+        <div style="background:#fff;padding:16px;border-radius:10px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
+          <div style="font-size:24px;font-weight:700;color:#10b981">${stats.available}</div>
+          <div style="font-size:12px;color:#6b7280">Available</div>
+        </div>
+        <div style="background:#fff;padding:16px;border-radius:10px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
+          <div style="font-size:24px;font-weight:700;color:#f59e0b">${stats.used}</div>
+          <div style="font-size:12px;color:#6b7280">Used</div>
+        </div>
+        <div style="background:#fff;padding:16px;border-radius:10px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
+          <div style="font-size:24px;font-weight:700;color:#8b5cf6">${stats.assigned}</div>
+          <div style="font-size:12px;color:#6b7280">Assigned</div>
+        </div>
+        <div style="background:#fff;padding:16px;border-radius:10px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
+          <div style="font-size:24px;font-weight:700;color:#ef4444">${stats.expired}</div>
+          <div style="font-size:12px;color:#6b7280">Expired</div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="filterCouponCodes('all')" style="padding:6px 14px;background:#1e293b;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px">All (${stats.total_codes})</button>
+        <button onclick="filterCouponCodes('available')" style="padding:6px 14px;background:#fff;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;font-size:12px">Available (${stats.available})</button>
+        <button onclick="filterCouponCodes('used')" style="padding:6px 14px;background:#fff;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;font-size:12px">Used (${stats.used})</button>
+      </div>
+
+      <div style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
+        <table style="width:100%;border-collapse:collapse" id="codesTable">
+          <thead><tr style="background:#f8fafc">
+            <th style="padding:10px;text-align:left">Code</th>
+            <th style="padding:10px;text-align:center">Status</th>
+            <th style="padding:10px;text-align:left">Used By</th>
+            <th style="padding:10px;text-align:center">Used At</th>
+          </tr></thead>
+          <tbody>
+            ${codes.map(code => '<tr style="border-top:1px solid #f1f5f9" data-status="' + code.status + '">' +
+              '<td style="padding:10px;font-family:monospace;font-weight:600;font-size:13px">' + code.code + '</td>' +
+              '<td style="padding:10px;text-align:center"><span style="padding:2px 8px;border-radius:4px;font-size:11px;background:' + 
+                (code.status === 'available' ? '#d1fae5;color:#065f46' : code.status === 'used' ? '#fee2e2;color:#991b1b' : '#e0e7ff;color:#4338ca') + '">' + code.status + '</span></td>' +
+              '<td style="padding:10px;font-size:13px">' + (code.farmer_name ? code.farmer_name + ' (' + code.farmer_phone + ')' : '-') + '</td>' +
+              '<td style="padding:10px;text-align:center;font-size:12px;color:#6b7280">' + (code.used_at ? new Date(code.used_at).toLocaleString() : '-') + '</td>' +
+            '</tr>').join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    window._currentCouponCampaignId = campaignId;
+  } catch (e) { el.innerHTML = '<div style="padding:40px;text-align:center;color:red">Error: ' + e.message + '</div>'; }
+}
+
+function filterCouponCodes(status) {
+  const rows = document.querySelectorAll('#codesTable tbody tr');
+  rows.forEach(row => {
+    if (status === 'all' || row.getAttribute('data-status') === status) {
+      row.style.display = '';
+    } else {
+      row.style.display = 'none';
+    }
+  });
+}
+
+async function generateMoreCodes(campaignId) {
+  const count = prompt('How many codes to generate?', '50');
+  if (!count || isNaN(count)) return;
+  try {
+    const result = await api('/api/v1/coupons/' + campaignId + '/generate', {
+      method: 'POST', body: JSON.stringify({ count: +count })
+    });
+    alert('Generated ' + result.generated + ' new codes!');
+    if (window._currentCouponCampaignId === campaignId) {
+      viewCouponCodes(campaignId, '');
+    } else {
+      loadCoupons();
+    }
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+function exportCouponCodes(campaignId) {
+  const token = localStorage.getItem('vartmap_token');
+  window.open('https://vartmap-admin-api.onrender.com/api/v1/coupons/' + campaignId + '/export?token=' + token, '_blank');
+}
+
+async function toggleCouponStatus(campaignId, currentStatus) {
+  const newStatus = currentStatus === 'active' ? 'paused' : 'active';
+  if (!confirm('Change campaign status to ' + newStatus + '?')) return;
+  try {
+    await api('/api/v1/coupons/' + campaignId, { method: 'PUT', body: JSON.stringify({ status: newStatus }) });
+    loadCoupons();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+function showValidateCouponModal() {
+  openModal('Validate Coupon Code', `
+    <div class="form-group">
+      <label>Enter Coupon Code</label>
+      <input id="validateCode" placeholder="e.g. VART1A2B3C4D" style="font-family:monospace;font-size:18px;letter-spacing:2px;text-transform:uppercase">
+    </div>
+    <div id="validateResult" style="margin-top:16px"></div>
+  `, `<button class="btn btn-primary" onclick="validateCoupon()"><i class="fas fa-check-circle"></i> Validate</button>`);
+}
+
+async function validateCoupon() {
+  const code = document.getElementById('validateCode').value.trim();
+  const resultEl = document.getElementById('validateResult');
+  if (!code) { resultEl.innerHTML = '<div style="color:#ef4444">Please enter a code</div>'; return; }
+  try {
+    const resp = await fetch('https://vartmap-admin-api.onrender.com/api/v1/coupons/validate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+    const d = await resp.json();
+    if (d.valid) {
+      resultEl.innerHTML = '<div style="background:#d1fae5;border:1px solid #10b981;border-radius:8px;padding:16px">' +
+        '<div style="font-size:18px;font-weight:700;color:#065f46;margin-bottom:8px">Valid Coupon</div>' +
+        '<div style="font-size:14px">Campaign: <strong>' + d.campaign + '</strong></div>' +
+        '<div style="font-size:14px">Discount: <strong>' + (d.discount_type === 'percentage' ? d.discount_value + '%' : d.discount_type === 'points' ? d.discount_value + ' points' : 'Rs.' + d.discount_value) + '</strong></div>' +
+        (d.min_purchase > 0 ? '<div style="font-size:13px;color:#6b7280">Min purchase: Rs.' + d.min_purchase + '</div>' : '') +
+        '</div>';
+    } else {
+      resultEl.innerHTML = '<div style="background:#fee2e2;border:1px solid #ef4444;border-radius:8px;padding:16px">' +
+        '<div style="font-size:18px;font-weight:700;color:#991b1b;margin-bottom:4px">Invalid</div>' +
+        '<div style="font-size:14px;color:#991b1b">' + d.error + '</div></div>';
+    }
+  } catch (e) { resultEl.innerHTML = '<div style="color:#ef4444">Error: ' + e.message + '</div>'; }
 }
 
 function newCouponModal() {
   openModal('New Coupon Campaign', `
-    <div class="form-group"><label>Campaign Name</label><input id="ccName"></div>
+    <div class="form-group"><label>Campaign Name</label><input id="ccName" placeholder="e.g. Diwali Offer 2026"></div>
     <div class="form-row">
-      <div class="form-group"><label>Code Prefix</label><input id="ccPrefix" value="VART"></div>
-      <div class="form-group"><label>Generate Count</label><input id="ccCount" type="number" value="50"></div>
+      <div class="form-group"><label>Code Prefix</label><input id="ccPrefix" value="VART" maxlength="6" style="text-transform:uppercase"></div>
+      <div class="form-group"><label>Generate Count</label><input id="ccCount" type="number" value="50" min="1" max="1000"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Discount Type</label><select id="ccType"><option value="percentage">Percentage</option><option value="fixed">Fixed ₹</option><option value="points">Points</option></select></div>
+      <div class="form-group">
+        <label>Discount Type</label>
+        <select id="ccType" style="width:100%;padding:8px;border:1px solid #e5e7eb;border-radius:8px">
+          <option value="percentage">Percentage (%)</option>
+          <option value="fixed">Fixed Amount (Rs.)</option>
+          <option value="points">Loyalty Points</option>
+        </select>
+      </div>
       <div class="form-group"><label>Discount Value</label><input id="ccVal" type="number" value="10"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Min Purchase (Rs.)</label><input id="ccMinPurchase" type="number" value="0"></div>
+      <div class="form-group"><label>Max Uses (0=unlimited)</label><input id="ccMaxUses" type="number" value="0"></div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>Start Date</label><input id="ccStart" type="date"></div>
       <div class="form-group"><label>End Date</label><input id="ccEnd" type="date"></div>
     </div>
-  `, `<button class="btn btn-primary" onclick="createCoupon()"><i class="fas fa-save"></i> Create & Generate Codes</button>`);
+  `, `<button class="btn btn-primary" onclick="createCoupon()"><i class="fas fa-ticket-alt"></i> Create & Generate Codes</button>`);
 }
 
 async function createCoupon() {
-  const d = await api('/api/v1/coupons', { method: 'POST', body: JSON.stringify({
-    name: document.getElementById('ccName').value, code_prefix: document.getElementById('ccPrefix').value,
-    discount_type: document.getElementById('ccType').value, discount_value: +document.getElementById('ccVal').value,
-    generate_count: +document.getElementById('ccCount').value,
-    start_date: document.getElementById('ccStart').value || null, end_date: document.getElementById('ccEnd').value || null
-  })});
-  closeModal();
-  if (d.sample_codes) alert('Generated ' + d.codes_generated + ' codes. Samples: ' + d.sample_codes.join(', '));
-  loadCoupons();
+  const name = document.getElementById('ccName').value;
+  if (!name) { alert('Please enter a campaign name'); return; }
+  try {
+    const d = await api('/api/v1/coupons', { method: 'POST', body: JSON.stringify({
+      name: name,
+      code_prefix: document.getElementById('ccPrefix').value.toUpperCase(),
+      discount_type: document.getElementById('ccType').value,
+      discount_value: +document.getElementById('ccVal').value,
+      min_purchase: +document.getElementById('ccMinPurchase').value || 0,
+      max_uses: +document.getElementById('ccMaxUses').value || 0,
+      generate_count: +document.getElementById('ccCount').value,
+      start_date: document.getElementById('ccStart').value || null,
+      end_date: document.getElementById('ccEnd').value || null
+    })});
+    closeModal();
+    alert('Campaign created! Generated ' + d.codes_generated + ' codes.\nSample: ' + (d.sample_codes || []).join(', '));
+    loadCoupons();
+  } catch (e) { alert('Error: ' + e.message); }
 }
 
 // ─── 10. REWARDS ───

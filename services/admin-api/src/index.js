@@ -848,6 +848,193 @@ app.post('/api/v1/coupons', auth, async (req, res) => {
     res.json({ campaign: camp.rows[0], codes_generated: count, sample_codes: codes.slice(0, 5) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+// GET /api/v1/coupons/:id - Get campaign details with all codes
+app.get('/api/v1/coupons/:id', auth, async (req, res) => {
+  try {
+    const campaign = await pool.query('SELECT * FROM coupon_campaigns WHERE id = $1', [req.params.id]);
+    if (!campaign.rows.length) return res.status(404).json({ error: 'Campaign not found' });
+    
+    const codes = await pool.query(
+      `SELECT cc.*, f.name as farmer_name, f.phone as farmer_phone 
+       FROM coupon_codes cc LEFT JOIN farmers f ON f.id = cc.farmer_id 
+       WHERE cc.campaign_id = $1 ORDER BY cc.created_at DESC`,
+      [req.params.id]
+    );
+    
+    const stats = await pool.query(
+      `SELECT 
+        COUNT(*) as total_codes,
+        COUNT(CASE WHEN status = 'available' THEN 1 END) as available,
+        COUNT(CASE WHEN status = 'used' THEN 1 END) as used,
+        COUNT(CASE WHEN status = 'assigned' THEN 1 END) as assigned,
+        COUNT(CASE WHEN status = 'expired' THEN 1 END) as expired
+       FROM coupon_codes WHERE campaign_id = $1`,
+      [req.params.id]
+    );
+    
+    res.json({ campaign: campaign.rows[0], codes: codes.rows, stats: stats.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/v1/coupons/:id - Update campaign
+app.put('/api/v1/coupons/:id', auth, async (req, res) => {
+  try {
+    const { name, status, start_date, end_date, discount_type, discount_value, max_uses, min_purchase } = req.body;
+    const result = await pool.query(
+      `UPDATE coupon_campaigns SET name=COALESCE($1,name), status=COALESCE($2,status), 
+       start_date=COALESCE($3,start_date), end_date=COALESCE($4,end_date),
+       discount_type=COALESCE($5,discount_type), discount_value=COALESCE($6,discount_value),
+       max_uses=COALESCE($7,max_uses), min_purchase=COALESCE($8,min_purchase), updated_at=NOW()
+       WHERE id=$9 RETURNING *`,
+      [name, status, start_date, end_date, discount_type, discount_value, max_uses, min_purchase, req.params.id]
+    );
+    res.json(result.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/v1/coupons/:id/generate - Generate more codes for existing campaign
+app.post('/api/v1/coupons/:id/generate', auth, async (req, res) => {
+  try {
+    const { count = 10 } = req.body;
+    const campaign = await pool.query('SELECT * FROM coupon_campaigns WHERE id = $1', [req.params.id]);
+    if (!campaign.rows.length) return res.status(404).json({ error: 'Campaign not found' });
+    
+    const prefix = campaign.rows[0].code_prefix || 'VART';
+    const codes = [];
+    for (let i = 0; i < Math.min(count, 1000); i++) {
+      const code = prefix + crypto.randomBytes(4).toString('hex').toUpperCase();
+      await pool.query('INSERT INTO coupon_codes (campaign_id, code, status) VALUES ($1, $2, $3)', 
+        [req.params.id, code, 'available']);
+      codes.push(code);
+    }
+    res.json({ generated: codes.length, codes });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/v1/coupons/validate - Validate a coupon code (public-facing)
+app.post('/api/v1/coupons/validate', async (req, res) => {
+  try {
+    const { code, phone } = req.body;
+    if (!code) return res.status(400).json({ error: 'Code is required' });
+    
+    const coupon = await pool.query(
+      `SELECT cc.*, cp.name as campaign_name, cp.discount_type, cp.discount_value, 
+              cp.min_purchase, cp.status as campaign_status, cp.start_date, cp.end_date
+       FROM coupon_codes cc JOIN coupon_campaigns cp ON cp.id = cc.campaign_id 
+       WHERE cc.code = $1`,
+      [code.toUpperCase()]
+    );
+    
+    if (!coupon.rows.length) return res.status(404).json({ valid: false, error: 'Invalid coupon code' });
+    
+    const c = coupon.rows[0];
+    if (c.status === 'used') return res.json({ valid: false, error: 'Coupon already used', used_at: c.used_at });
+    if (c.status === 'expired') return res.json({ valid: false, error: 'Coupon has expired' });
+    if (c.campaign_status !== 'active') return res.json({ valid: false, error: 'Campaign is not active' });
+    if (c.end_date && new Date(c.end_date) < new Date()) return res.json({ valid: false, error: 'Campaign has ended' });
+    if (c.start_date && new Date(c.start_date) > new Date()) return res.json({ valid: false, error: 'Campaign has not started yet' });
+    
+    res.json({
+      valid: true,
+      code: c.code,
+      campaign: c.campaign_name,
+      discount_type: c.discount_type,
+      discount_value: c.discount_value,
+      min_purchase: c.min_purchase
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/v1/coupons/redeem - Redeem/use a coupon code
+app.post('/api/v1/coupons/redeem', async (req, res) => {
+  try {
+    const { code, phone, order_id } = req.body;
+    if (!code || !phone) return res.status(400).json({ error: 'Code and phone are required' });
+    
+    const coupon = await pool.query(
+      `SELECT cc.*, cp.discount_type, cp.discount_value, cp.name as campaign_name, cp.status as campaign_status
+       FROM coupon_codes cc JOIN coupon_campaigns cp ON cp.id = cc.campaign_id 
+       WHERE cc.code = $1`,
+      [code.toUpperCase()]
+    );
+    
+    if (!coupon.rows.length) return res.status(404).json({ error: 'Invalid coupon code' });
+    const c = coupon.rows[0];
+    if (c.status === 'used') return res.status(400).json({ error: 'Coupon already used' });
+    if (c.campaign_status !== 'active') return res.status(400).json({ error: 'Campaign is not active' });
+    
+    // Find or note farmer
+    const cleanPhone = phone.replace(/\D/g, '');
+    const fullPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
+    const farmer = await pool.query('SELECT id FROM farmers WHERE phone = $1 OR phone = $2', [cleanPhone, fullPhone]);
+    const farmerId = farmer.rows.length ? farmer.rows[0].id : null;
+    
+    // Mark as used
+    await pool.query(
+      `UPDATE coupon_codes SET status = 'used', used_at = NOW(), farmer_id = $1, order_id = $2, 
+       metadata = jsonb_set(COALESCE(metadata,'{}'), '{redeemed_phone}', $3::jsonb)
+       WHERE id = $4`,
+      [farmerId, order_id || null, JSON.stringify(fullPhone), c.id]
+    );
+    
+    // Update campaign used count
+    await pool.query('UPDATE coupon_campaigns SET used_count = used_count + 1 WHERE id = $1', [c.campaign_id]);
+    
+    // Award loyalty points if discount_type is 'points'
+    if (c.discount_type === 'points' && farmerId) {
+      const farmerData = await pool.query('SELECT loyalty_points FROM farmers WHERE id = $1', [farmerId]);
+      const newBalance = (farmerData.rows[0]?.loyalty_points || 0) + c.discount_value;
+      await pool.query('UPDATE farmers SET loyalty_points = $1, lifetime_points = COALESCE(lifetime_points,0) + $2 WHERE id = $3',
+        [newBalance, c.discount_value, farmerId]);
+      await pool.query(
+        `INSERT INTO loyalty_transactions (farmer_id, type, points, balance_after, source, description)
+         VALUES ($1, 'earn', $2, $3, 'coupon', $4)`,
+        [farmerId, c.discount_value, newBalance, 'Coupon: ' + c.code]
+      );
+    }
+    
+    // Send WhatsApp confirmation
+    try {
+      await axios.post('https://vartmap-whatsapp-gateway.onrender.com/api/v1/send-message', {
+        phone: fullPhone,
+        message: `✅ Coupon ${c.code} redeemed successfully!\n\n🎁 ${c.campaign_name}\n💰 ${c.discount_type === 'percentage' ? c.discount_value + '% discount' : c.discount_type === 'points' ? c.discount_value + ' loyalty points' : '₹' + c.discount_value + ' off'}\n\nThank you for your purchase! 🌾`
+      });
+    } catch (e) { console.log('WhatsApp notification failed:', e.message); }
+    
+    res.json({ success: true, discount_type: c.discount_type, discount_value: c.discount_value, campaign: c.campaign_name });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/v1/coupons/:id/export - Export codes as CSV text
+app.get('/api/v1/coupons/:id/export', async (req, res) => {
+  // Allow token via query param for CSV download
+  const token = req.query.token || (req.headers.authorization || '').replace('Bearer ', '');
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+  try { jwt.verify(token, process.env.JWT_SECRET || 'vartmap-secret-key-2026'); }
+  catch(e) { return res.status(401).json({ error: 'Invalid token' }); }
+  try {
+    const codes = await pool.query(
+      `SELECT cc.code, cc.status, cc.used_at, f.name as farmer_name, f.phone as farmer_phone
+       FROM coupon_codes cc LEFT JOIN farmers f ON f.id = cc.farmer_id 
+       WHERE cc.campaign_id = $1 ORDER BY cc.code`,
+      [req.params.id]
+    );
+    const csv = 'Code,Status,Used At,Farmer Name,Farmer Phone\n' +
+      codes.rows.map(c => `${c.code},${c.status},${c.used_at || ''},${c.farmer_name || ''},${c.farmer_phone || ''}`).join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=coupons-${req.params.id}.csv`);
+    res.send(csv);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/v1/coupons/:id - Delete a campaign and its codes
+app.delete('/api/v1/coupons/:id', auth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM coupon_codes WHERE campaign_id = $1', [req.params.id]);
+    await pool.query('DELETE FROM coupon_campaigns WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // ─── SOIL NUTRIENT DATA ───
 app.get('/api/v1/soil-data', auth, async (req, res) => {
