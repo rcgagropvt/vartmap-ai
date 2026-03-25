@@ -34,7 +34,7 @@ try {
   console.error('DB init error:', err.message);
 }
 
-// Redis connection (Upstash compatible)
+// Redis connection
 let redis = null;
 try {
   const redisUrl = process.env.REDIS_URL;
@@ -60,7 +60,7 @@ try {
 }
 
 // ============================================
-// WhatsApp Cloud API - Send Message Function
+// WhatsApp Cloud API - Send Message
 // ============================================
 async function sendWhatsAppMessage(to, text) {
   const phoneNumberId = process.env.WA_PHONE_NUMBER_ID;
@@ -87,7 +87,7 @@ async function sendWhatsAppMessage(to, text) {
       }
     });
 
-    console.log('Message sent successfully to', to, ':', response.data);
+    console.log('Message sent successfully to', to);
     return response.data;
   } catch (err) {
     console.error('Send message error:', err.response?.data || err.message);
@@ -96,29 +96,28 @@ async function sendWhatsAppMessage(to, text) {
 }
 
 // ============================================
-// Send message from Admin Dashboard (chat)
+// Send message from Admin Dashboard
 // ============================================
 app.post('/api/v1/send-message', async (req, res) => {
   try {
-    const { phone, message, session_id } = req.body;
+    const { phone, message, session_id, farmer_id } = req.body;
 
     if (!phone || !message) {
       return res.status(400).json({ error: 'phone and message are required' });
     }
 
-    // Send via WhatsApp Cloud API
     const result = await sendWhatsAppMessage(phone, message);
 
     if (!result) {
       return res.status(500).json({ error: 'Failed to send WhatsApp message' });
     }
 
-    // Store outgoing message if session_id provided
+    // Store outgoing message with correct column names
     if (session_id && pool) {
       await pool.query(
-        `INSERT INTO wa_messages (id, session_id, direction, message_type, content, status, created_at)
-         VALUES (gen_random_uuid(), $1, 'outgoing', 'text', $2, 'sent', NOW())`,
-        [session_id, message]
+        `INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at)
+         VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())`,
+        [session_id, farmer_id || null, message]
       );
 
       await pool.query(
@@ -182,12 +181,10 @@ app.get('/webhook', (req, res) => {
 
 // WhatsApp webhook incoming messages
 app.post('/webhook', async (req, res) => {
-  // Always respond 200 quickly to Meta
   res.sendStatus(200);
 
   try {
     const body = req.body;
-
     if (!body.object || body.object !== 'whatsapp_business_account') return;
 
     const entries = body.entry || [];
@@ -208,7 +205,7 @@ app.post('/webhook', async (req, res) => {
           const profileName = contact.profile?.name || 'Unknown';
           const waMessageId = msg.id;
 
-          console.log(`Incoming message from ${from} (${profileName}): ${msgBody}`);
+          console.log(`Incoming from ${from} (${profileName}): ${msgBody}`);
 
           if (!pool) {
             console.error('No database connection');
@@ -227,7 +224,6 @@ app.post('/webhook', async (req, res) => {
             );
             console.log('New farmer created:', from);
           } else {
-            // Update interaction count
             await pool.query(
               'UPDATE farmers SET total_interactions = COALESCE(total_interactions, 0) + 1, last_interaction_at = NOW(), updated_at = NOW() WHERE phone = $1',
               [from]
@@ -258,17 +254,19 @@ app.post('/webhook', async (req, res) => {
             [sessionId]
           );
 
-          // 3. Store incoming message
+          // 3. Store incoming message — CORRECT COLUMNS
           await pool.query(
-            `INSERT INTO wa_messages (id, session_id, direction, message_type, content, wa_message_id, status, created_at)
-             VALUES (gen_random_uuid(), $1, 'incoming', 'text', $2, $3, 'delivered', NOW())`,
-            [sessionId, msgBody, waMessageId]
+            `INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_message_id, wa_status, created_at)
+             VALUES (gen_random_uuid(), $1, $2, 'inbound', 'farmer', 'text', $3, $4, 'delivered', NOW())`,
+            [sessionId, farmerId, msgBody, waMessageId]
           );
 
-          // 4. Send auto-reply
+          console.log('Message stored for farmer', farmerId);
+
+          // 4. Auto-reply
           const msgCount = await pool.query(
-            'SELECT COUNT(*) FROM wa_messages WHERE session_id = $1 AND direction = $2',
-            [sessionId, 'incoming']
+            "SELECT COUNT(*) FROM wa_messages WHERE session_id = $1 AND direction = 'inbound'",
+            [sessionId]
           );
 
           let replyText;
@@ -280,11 +278,11 @@ app.post('/webhook', async (req, res) => {
 
           const sendResult = await sendWhatsAppMessage(from, replyText);
 
-          // Store outgoing message
+          // Store auto-reply — CORRECT COLUMNS
           await pool.query(
-            `INSERT INTO wa_messages (id, session_id, direction, message_type, content, status, created_at)
-             VALUES (gen_random_uuid(), $1, 'outgoing', 'text', $2, $3, NOW())`,
-            [sessionId, replyText, sendResult ? 'sent' : 'failed']
+            `INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at)
+             VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, $4, NOW())`,
+            [sessionId, farmerId, replyText, sendResult ? 'sent' : 'failed']
           );
 
           console.log(`Reply ${sendResult ? 'sent' : 'FAILED'} to ${from}`);
@@ -301,7 +299,6 @@ app.get('/api/v1/status', (req, res) => {
   res.json({ status: 'running', service: 'whatsapp-gateway', version: '1.0.0' });
 });
 
-// Start server
 app.listen(PORT, () => {
   console.log(`WhatsApp Gateway running on port ${PORT}`);
 });

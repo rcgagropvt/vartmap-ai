@@ -231,36 +231,71 @@ app.get('/api/v1/chats/:id/messages', auth, async (req, res) => {
 
 app.post('/api/v1/chats/:id/send', auth, async (req, res) => {
   try {
-    const { content, message_type = 'text', media_url, template_id } = req.body;
-    const session = await pool.query('SELECT * FROM wa_chat_sessions WHERE id=$1', [req.params.id]);
-    if (!session.rows.length) return res.status(404).json({ error: 'Chat not found' });
-    const s = session.rows[0];
+    const sessionId = req.params.id;
+    const { content } = req.body;
+
+    if (!content) return res.status(400).json({ error: 'content is required' });
+
+    // Get session + farmer phone
+    const session = await pool.query(
+      `SELECT s.*, f.phone, f.name as farmer_name, f.id as farmer_id
+       FROM wa_chat_sessions s
+       JOIN farmers f ON s.farmer_id = f.id
+       WHERE s.id = $1`,
+      [sessionId]
+    );
+
+    if (!session.rows.length) return res.status(404).json({ error: 'Chat session not found' });
+
+    const farmerPhone = session.rows[0].phone;
+    const farmerId = session.rows[0].farmer_id;
+
+    // Store message in DB
     const msg = await pool.query(
-      `INSERT INTO wa_messages (session_id, farmer_id, direction, sender_type, sender_id, message_type, content, media_url, template_id)
-       VALUES ($1,$2,'outbound','admin',$3,$4,$5,$6,$7) RETURNING *`,
-      [req.params.id, s.farmer_id, req.user.id, message_type, content, media_url, template_id]
+      `INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, sender_id, message_type, content, wa_status, created_at)
+       VALUES (gen_random_uuid(), $1, $2, 'outbound', 'admin', $3, 'text', $4, 'sending', NOW())
+       RETURNING *`,
+      [sessionId, farmerId, req.user.id, content]
     );
-    await pool.query('UPDATE wa_chat_sessions SET last_message_at=NOW() WHERE id=$1', [req.params.id]);
-    // Also log in conversations table
+
+    // Update session
     await pool.query(
-      `INSERT INTO conversations (farmer_id, channel, direction, message_type, content, status) VALUES ($1,'whatsapp','outbound',$2,$3,'sent')`,
-      [s.farmer_id, message_type, content]
+      'UPDATE wa_chat_sessions SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1',
+      [sessionId]
     );
-    // Forward to WhatsApp Gateway
-    if (process.env.WA_GATEWAY_URL && process.env.WA_GATEWAY_URL !== 'placeholder') {
-      try {
-        const axios = require('axios');
-        const farmer = await pool.query('SELECT phone FROM farmers WHERE id=$1', [s.farmer_id]);
-        if (farmer.rows.length) {
-          await axios.post(process.env.WA_GATEWAY_URL + '/api/v1/send', {
-            phone: farmer.rows[0].phone, message: content, type: message_type
-          }, { timeout: 5000 });
-        }
-      } catch (e) { console.error('WA send error:', e.message); }
+
+    // Send via WhatsApp Gateway
+    const gatewayUrl = process.env.GATEWAY_URL || 'https://vartmap-whatsapp-gateway.onrender.com';
+    try {
+      const waResponse = await axios.post(`${gatewayUrl}/api/v1/send-message`, {
+        phone: farmerPhone,
+        message: content,
+        session_id: sessionId,
+        farmer_id: farmerId
+      });
+
+      // Update message status to sent
+      await pool.query(
+        "UPDATE wa_messages SET wa_status = 'sent' WHERE id = $1",
+        [msg.rows[0].id]
+      );
+
+      res.json({ success: true, message: msg.rows[0], wa_delivered: true });
+    } catch (waErr) {
+      console.error('WhatsApp send failed:', waErr.response?.data || waErr.message);
+      // Update message status to failed
+      await pool.query(
+        "UPDATE wa_messages SET wa_status = 'failed' WHERE id = $1",
+        [msg.rows[0].id]
+      );
+      res.json({ success: true, message: msg.rows[0], wa_delivered: false, wa_error: waErr.message });
     }
-    res.json({ message: msg.rows[0] });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (err) {
+    console.error('Chat send error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
+
 
 app.put('/api/v1/chats/:id/assign', auth, async (req, res) => {
   try {
