@@ -1313,10 +1313,13 @@ app.post('/api/v1/public/spin-wheel/:id/spin', async (req, res) => {
     // Record result
     const refId = 'VRT-' + Date.now().toString(36).toUpperCase();
     await pool.query(
-      `INSERT INTO spin_results (id, wheel_id, farmer_id, segment_id, prize_type, prize_value, status, created_at)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW())`,
-      [req.params.id, farmer_id, selectedSegment.id, selectedSegment.prize_type, selectedSegment.prize_value || 0,
-       selectedSegment.prize_type === 'better_luck' ? 'no_prize' : 'won']
+      `INSERT INTO spin_results (id, wheel_id, farmer_id, segment_id, prize_type, prize_value, prize_label, verification_code, status, created_at)
+      VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+      [req.params.id, farmer_id, selectedSegment.id, selectedSegment.prize_type,
+      selectedSegment.prize_value || 0,
+      selectedSegment.label || selectedSegment.prize_description || null,
+      'VRT-' + Date.now().toString(36).toUpperCase(),
+      selectedSegment.prize_type === 'better_luck' ? 'no_prize' : 'won']
     );
     
     // Update winner count
