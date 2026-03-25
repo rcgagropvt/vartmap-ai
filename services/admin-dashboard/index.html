@@ -1014,29 +1014,7 @@ function shareWheelLink(wheelId) {
   `, `<button class="btn btn-primary" onclick="navigator.clipboard.writeText('${link}');alert('Link copied!')"><i class="fas fa-copy"></i> Copy Link</button>`);
 }
 
-function drawWheel(canvasId, segments) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const cx = 160, cy = 160, r = 150;
-  const total = segments.length;
-  const arc = (2 * Math.PI) / total;
-  segments.forEach((s, i) => {
-    const start = i * arc - Math.PI / 2;
-    ctx.beginPath(); ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, r, start, start + arc);
-    ctx.fillStyle = s.color || ['#4CAF50','#FF9800','#2196F3','#E91E63','#9C27B0','#00BCD4','#FF5722','#607D8B'][i % 8];
-    ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
-    // label
-    ctx.save(); ctx.translate(cx, cy); ctx.rotate(start + arc / 2);
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 11px Inter'; ctx.textAlign = 'center';
-    ctx.fillText(s.label.substring(0, 12), r * 0.65, 4);
-    ctx.restore();
-  });
-  // center
-  ctx.beginPath(); ctx.arc(cx, cy, 20, 0, 2 * Math.PI);
-  ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#ddd'; ctx.lineWidth = 2; ctx.stroke();
-}
+
 
 function newSpinWheelModal() {
   openModal('Create Spin Wheel', `
