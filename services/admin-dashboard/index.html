@@ -1610,12 +1610,11 @@ async function loadCoupons() {
                 '<td style="padding:12px;text-align:center"><span style="padding:2px 8px;border-radius:4px;font-size:12px;background:' + (c.status === 'active' ? '#d1fae5;color:#065f46' : '#fee2e2;color:#991b1b') + '">' + c.status + '</span></td>' +
                 '<td style="padding:12px;text-align:center;font-size:12px;color:#6b7280">' + (c.start_date ? new Date(c.start_date).toLocaleDateString() : '-') + ' to ' + (c.end_date ? new Date(c.end_date).toLocaleDateString() : '-') + '</td>' +
                 '<td style="padding:12px;text-align:center">' +
-                  '<button onclick="viewCouponCodes(\\'' + c.id + '\\', \\'' + c.name.replace(/'/g, '') + '\\')" style="padding:4px 8px;background:#3b82f6;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;margin:2px" title="View Codes">View</button>' +
-                  '<button onclick="generateMoreCodes(\\'' + c.id + '\\')" style="padding:4px 8px;background:#10b981;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;margin:2px" title="Generate More">+Codes</button>' +
-                  '<button onclick="exportCouponCodes(\\'' + c.id + '\\')" style="padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;margin:2px" title="Export CSV">Export</button>' +
-                  '<button onclick="toggleCouponStatus(\\'' + c.id + '\\', \\'' + c.status + '\\')" style="padding:4px 8px;background:' + (c.status === 'active' ? '#f59e0b' : '#10b981') + ';color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;margin:2px">' + (c.status === 'active' ? 'Pause' : 'Activate') + '</button>' +
+                  '<button onclick="viewCouponCodes(' + "'" + c.id + "'" + ', ' + "'" + c.name.replace(/'/g, '') + "'" + ')" style="padding:4px 8px;background:#3b82f6;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;margin:2px">View</button>' +
+                  '<button onclick="generateMoreCodes(' + "'" + c.id + "'" + ')" style="padding:4px 8px;background:#10b981;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;margin:2px">+Codes</button>' +
+                  '<button onclick="exportCouponCodes(' + "'" + c.id + "'" + ')" style="padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;margin:2px">Export</button>' +
+                  '<button onclick="toggleCouponStatus(' + "'" + c.id + "'" + ', ' + "'" + c.status + "'" + ')" style="padding:4px 8px;background:' + (c.status === 'active' ? '#f59e0b' : '#10b981') + ';color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;margin:2px">' + (c.status === 'active' ? 'Pause' : 'Activate') + '</button>' +
                 '</td></tr>';
-            }).join('')}
           </tbody>
         </table>
       </div>` : '<div style="padding:40px;text-align:center;color:#6b7280">No coupon campaigns yet. Click "+ New Campaign" to create one.</div>'}
