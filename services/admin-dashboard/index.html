@@ -330,7 +330,7 @@ function navigate(page) {
   const loaders = {
     'overview':loadOverview,'chats':loadChats,'farmers':loadFarmers,'conversations':loadConversations,
     'templates':loadTemplates,'campaigns':loadCampaigns,'spin-wheels':loadSpinWheels,
-    'loyalty':loadLoyalty,'coupons':loadCoupons,'rewards':loadRewards,'referrals':loadReferrals,
+    'loyalty':loadLoyaltyProgram,'coupons':loadCoupons,'rewards':loadRewards,'referrals':loadReferrals,
     'soil-data':loadSoilData,'schemes':loadSchemes,'products':loadProducts,
     'mandi-prices':loadMandi,'dealers':loadDealers,'field-agents':loadFieldAgents,'orders':loadOrders,
     'moderation':loadModeration,'notifications':loadNotifications,'analytics':loadAnalytics,
@@ -1435,66 +1435,6 @@ async function createSpinWheel() {
 
 async function activateWheel(id) { await api('/api/v1/spin-wheels/' + id, { method: 'PUT', body: JSON.stringify({ status: 'active' }) }); loadSpinWheels(); }
 async function pauseWheel(id) { await api('/api/v1/spin-wheels/' + id, { method: 'PUT', body: JSON.stringify({ status: 'paused' }) }); loadSpinWheels(); }
-
-
-// ─── 8. LOYALTY ───
-async function loadLoyalty() {
-  const el = document.getElementById('pageContent');
-  try {
-    const [progs, lb] = await Promise.all([api('/api/v1/loyalty/programs'), api('/api/v1/loyalty/leaderboard')]);
-    el.innerHTML = `
-    <div class="tabs">
-      <div class="tab active" onclick="this.parentElement.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));this.classList.add('active');document.getElementById('loyProgs').style.display='block';document.getElementById('loyLB').style.display='none'">Programs</div>
-      <div class="tab" onclick="this.parentElement.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));this.classList.add('active');document.getElementById('loyProgs').style.display='none';document.getElementById('loyLB').style.display='block'">Leaderboard</div>
-    </div>
-    <div id="loyProgs">
-      <div class="flex justify-between items-center mb-16"><h3>Loyalty Programs</h3><button class="btn btn-primary btn-sm" onclick="newLoyaltyModal()"><i class="fas fa-plus"></i> New Program</button></div>
-      ${progs.programs.map(p => `
-        <div class="stat-card mb-16">
-          <h3 style="font-size:16px">${p.name} <span class="status ${p.status}">${p.status}</span></h3>
-          <p style="font-size:13px;color:var(--text-light);margin-top:4px">${p.description || ''}</p>
-          <div style="margin-top:12px;font-size:13px">
-            <strong>${p.stats?.members || 0}</strong> members · <strong>${p.stats?.total_available || 0}</strong> active points<br>
-            Per purchase: ${p.points_per_purchase}pts · Per referral: ${p.points_per_referral}pts · Per chat: ${p.points_per_interaction}pts · Redeem min: ${p.min_redeem_points}pts · 1pt = ₹${p.point_value_inr}
-          </div>
-        </div>
-      `).join('')}
-      ${!progs.programs.length ? '<div class="empty"><p>No loyalty programs yet</p></div>' : ''}
-    </div>
-    <div id="loyLB" style="display:none">
-      <div class="table-wrap"><div class="table-header"><h3>Top Farmers by Loyalty Points</h3></div>
-      <table><tr><th>#</th><th>Name</th><th>Phone</th><th>Village</th><th>Available</th><th>Lifetime</th><th>Tier</th></tr>
-      ${lb.leaderboard.map((l, i) => `<tr><td>${i+1}</td><td>${l.name || '-'}</td><td>${l.phone}</td><td>${l.village || '-'}</td><td><strong>${l.available_points}</strong></td><td>${l.lifetime_points}</td><td><span class="tag">${l.tier}</span></td></tr>`).join('')}
-      </table></div>
-    </div>`;
-  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
-}
-
-function newLoyaltyModal() {
-  openModal('New Loyalty Program', `
-    <div class="form-group"><label>Name</label><input id="lpName" placeholder="VartMap Kisan Rewards"></div>
-    <div class="form-group"><label>Description</label><textarea id="lpDesc" rows="2"></textarea></div>
-    <div class="form-row">
-      <div class="form-group"><label>Points per Purchase</label><input id="lpPP" type="number" value="1"></div>
-      <div class="form-group"><label>Points per Referral</label><input id="lpPR" type="number" value="10"></div>
-    </div>
-    <div class="form-row">
-      <div class="form-group"><label>Points per Interaction</label><input id="lpPI" type="number" value="0.5"></div>
-      <div class="form-group"><label>Min Redeem Points</label><input id="lpMin" type="number" value="100"></div>
-    </div>
-    <div class="form-group"><label>1 Point = ₹</label><input id="lpVal" type="number" step="0.01" value="0.10"></div>
-  `, `<button class="btn btn-primary" onclick="createLoyaltyProg()"><i class="fas fa-save"></i> Create</button>`);
-}
-
-async function createLoyaltyProg() {
-  await api('/api/v1/loyalty/programs', { method: 'POST', body: JSON.stringify({
-    name: document.getElementById('lpName').value, description: document.getElementById('lpDesc').value,
-    points_per_purchase: +document.getElementById('lpPP').value, points_per_referral: +document.getElementById('lpPR').value,
-    points_per_interaction: +document.getElementById('lpPI').value, min_redeem_points: +document.getElementById('lpMin').value,
-    point_value_inr: +document.getElementById('lpVal').value
-  })});
-  closeModal(); loadLoyalty();
-}
 
 // ─── 9. COUPONS ───
 async function loadCoupons() {
