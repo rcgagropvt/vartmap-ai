@@ -818,66 +818,6 @@ app.get('/api/v1/spin-wheels/:id/results', auth, async (req, res) => {
     res.json({ results: r.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
-
-// ─── LOYALTY SYSTEM ───
-app.get('/api/v1/loyalty/programs', auth, async (req, res) => {
-  try {
-    const r = await pool.query('SELECT * FROM loyalty_programs ORDER BY created_at DESC');
-    for (let p of r.rows) {
-      const stats = await pool.query('SELECT COUNT(*) as members, COALESCE(SUM(available_points),0) as total_available FROM farmer_loyalty WHERE program_id=$1', [p.id]);
-      p.stats = stats.rows[0];
-    }
-    res.json({ programs: r.rows });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/v1/loyalty/programs', auth, async (req, res) => {
-  try {
-    const { name, description, points_per_purchase, points_per_referral, points_per_interaction, min_redeem_points, point_value_inr, tiers } = req.body;
-    const r = await pool.query(
-      `INSERT INTO loyalty_programs (name, description, points_per_purchase, points_per_referral, points_per_interaction, min_redeem_points, point_value_inr, tiers)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [name, description, points_per_purchase || 1, points_per_referral || 10, points_per_interaction || 0.5, min_redeem_points || 100, point_value_inr || 0.10, JSON.stringify(tiers || [])]
-    );
-    res.json({ program: r.rows[0] });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/v1/loyalty/leaderboard', auth, async (req, res) => {
-  try {
-    const r = await pool.query(
-      `SELECT fl.*, f.name, f.phone, f.village FROM farmer_loyalty fl
-       JOIN farmers f ON fl.farmer_id=f.id ORDER BY fl.lifetime_points DESC LIMIT 50`
-    );
-    res.json({ leaderboard: r.rows });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/v1/loyalty/award', auth, async (req, res) => {
-  try {
-    const { farmer_id, points, source, description } = req.body;
-    const existing = await pool.query('SELECT * FROM farmer_loyalty WHERE farmer_id=$1', [farmer_id]);
-    let fl;
-    if (existing.rows.length) {
-      fl = await pool.query(
-        `UPDATE farmer_loyalty SET total_points=total_points+$1, available_points=available_points+$1, lifetime_points=lifetime_points+$1 WHERE farmer_id=$2 RETURNING *`,
-        [points, farmer_id]
-      );
-    } else {
-      fl = await pool.query(
-        `INSERT INTO farmer_loyalty (farmer_id, total_points, available_points, lifetime_points) VALUES ($1,$2,$2,$2) RETURNING *`,
-        [farmer_id, points]
-      );
-    }
-    await pool.query(
-      `INSERT INTO loyalty_transactions (farmer_id, type, points, balance_after, source, description)
-       VALUES ($1,'earn',$2,$3,$4,$5)`,
-      [farmer_id, points, fl.rows[0].available_points, source || 'manual', description || 'Admin award']
-    );
-    res.json({ loyalty: fl.rows[0] });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
 // ─── COUPON CODES ───
 app.get('/api/v1/coupons', auth, async (req, res) => {
   try {
