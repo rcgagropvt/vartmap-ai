@@ -1,0 +1,19 @@
+# Create/update .gitignore to exclude node_modules
+Set-Content -Path ".gitignore" -Value @"
+node_modules/
+.env
+*.log
+.DS_Store
+"@
+
+# Remove node_modules from git tracking (keeps files locally)
+git rm -r --cached services/whatsapp-gateway/node_modules
+git rm -r --cached services/admin-api/node_modules
+git rm -r --cached services/intelligence-service/__pycache__
+
+# Commit the cleanup
+git add .
+git commit -m "remove node_modules from git, add gitignore"
+
+# Push
+git push
