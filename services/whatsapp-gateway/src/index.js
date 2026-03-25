@@ -273,14 +273,11 @@ if (couponMatch) {
     if (validateData.valid) {
       const redeemResp = await axios.post(`${adminApiUrl}/api/v1/coupons/redeem-geo`, { code: couponMatch[0], phone: from.replace("@s.whatsapp.net","") });
       const redeemData = redeemResp.data;
-      let couponReply;
-      if (redeemData.redeemed) {
-        const discountText = redeemData.discount_type === 'percentage' ? redeemData.discount_value + '% discount' : redeemData.discount_type === 'points' ? redeemData.discount_value + ' loyalty points' : 'Rs.' + redeemData.discount_value + ' discount';
-        couponReply = `Coupon Redeemed! Code: ${couponMatch[0].toUpperCase()} | Reward: ${discountText} | Campaign: ${redeemData.campaign_name}. Thank you!`;
-      } else {
-        couponReply = `This code ${couponMatch[0].toUpperCase()} ${redeemData.error || 'could not be redeemed'}. Please check and try again.`;
-      }
-      await sendWhatsAppMessage(from, couponReply);
+      let couponReply = "Coupon " + couponMatch[0].toUpperCase() + " redeemed! You got " + redeemData.discount_value + (redeemData.discount_type === "percentage" ? "% discount" : " off") + " from " + redeemData.campaign_name + ". Thank you!";
+      if (!redeemData.redeemed) { couponReply = "Code " + couponMatch[0].toUpperCase() + " " + (redeemData.error || "could not be redeemed") + ". Please try again."; }
+      console.log("COUPON REPLY TO SEND:", couponReply, "TO:", from);
+      const couponSendResult = await sendWhatsAppMessage(from, couponReply);
+      console.log("COUPON SEND RESULT:", couponSendResult);
       return res.sendStatus(200);
     }
   } catch (e) {
