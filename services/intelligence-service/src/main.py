@@ -93,28 +93,46 @@ async def fetch_mandi_prices(
 
         if db_pool and records:
             async with db_pool.acquire() as conn:
-                for r in records:
-                    try:
-                        await conn.execute("""
-                            INSERT INTO mandi_prices (commodity, variety, market_name, district, state,
-                                min_price, max_price, modal_price, price_date, source)
-                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'data.gov.in')
-                            ON CONFLICT DO NOTHING
-                        """,
-                            r.get("commodity", ""),
-                            r.get("variety", ""),
-                            r.get("market", ""),
-                            r.get("district", ""),
-                            r.get("state", ""),
-                            float(r.get("min_price", 0) or 0),
-                            float(r.get("max_price", 0) or 0),
-                            float(r.get("modal_price", 0) or 0),
-                            datetime.strptime(r.get("arrival_date", "01/01/2026"), "%d/%m/%Y").date() if r.get("arrival_date") else date.today()
-                        )
-                        inserted += 1
-                    except Exception as e:
-                        print(f"Insert error: {e}")
+                    for r in records:
+                        try:
+                            commodity = r.get("commodity") or r.get("Commodity") or ""
+                            variety = r.get("variety") or r.get("Variety") or ""
+                            market = r.get("market") or r.get("Market") or r.get("market_center") or ""
+                            district = r.get("district") or r.get("District") or ""
+                            state = r.get("state") or r.get("State") or ""
+                            min_p = r.get("min_price") or r.get("Min_x0020_Price") or r.get("min_price_rs_quintal") or 0
+                            max_p = r.get("max_price") or r.get("Max_x0020_Price") or r.get("max_price_rs_quintal") or 0
+                            modal_p = r.get("modal_price") or r.get("Modal_x0020_Price") or r.get("modal_price_rs_quintal") or 0
+                            arr_date = r.get("arrival_date") or r.get("Arrival_Date") or r.get("reported_date") or ""
+                            
+                            price_date = date.today()
+                            if arr_date:
+                                try:
+                                    price_date = datetime.strptime(arr_date, "%d/%m/%Y").date()
+                                except:
+                                    try:
+                                        price_date = datetime.strptime(arr_date, "%Y-%m-%d").date()
+                                    except:
+                                        price_date = date.today()
 
+                            await conn.execute("""
+                                INSERT INTO mandi_prices (commodity, variety, market_name, district, state,
+                                    min_price, max_price, modal_price, price_date, source)
+                                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'data.gov.in')
+                            """,
+                                str(commodity),
+                                str(variety),
+                                str(market),
+                                str(district),
+                                str(state),
+                                float(min_p or 0),
+                                float(max_p or 0),
+                                float(modal_p or 0),
+                                price_date
+                            )
+                            inserted += 1
+                        except Exception as e:
+                            print(f"Insert error: {e}")
         return {
             "success": True,
             "source": "data.gov.in",
