@@ -1036,6 +1036,589 @@ app.delete('/api/v1/coupons/:id', auth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ==================== QR CODE GENERATION ====================
+// ─── QR CODE GENERATION ───
+const QRCode = require('qrcode');
+
+// POST /api/v1/coupons/:id/generate-qr - Generate QR codes for all codes in a campaign
+app.post('/api/v1/coupons/:id/generate-qr', auth, async (req, res) => {
+  try {
+    const codes = await pool.query(
+      'SELECT id, code FROM coupon_codes WHERE campaign_id = $1 AND qr_data_url IS NULL',
+      [req.params.id]
+    );
+    if (!codes.rows.length) return res.json({ message: 'All codes already have QR codes', generated: 0 });
+
+    let generated = 0;
+    for (const code of codes.rows) {
+      const qrDataUrl = await QRCode.toDataURL(code.code, { width: 300, margin: 2 });
+      await pool.query('UPDATE coupon_codes SET qr_data_url = $1 WHERE id = $2', [qrDataUrl, code.id]);
+      generated++;
+    }
+    res.json({ message: `Generated ${generated} QR codes`, generated });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/v1/coupons/:id/qr-sheet - Printable HTML sheet of QR codes
+app.get('/api/v1/coupons/:id/qr-sheet', async (req, res) => {
+  try {
+    const token = req.query.token || (req.headers.authorization || '').replace('Bearer ', '');
+    if (!token) return res.status(401).json({ error: 'Unauthorized' });
+    try { jwt.verify(token, process.env.JWT_SECRET || 'vartmap-secret-key-2026'); }
+    catch(e) { return res.status(401).json({ error: 'Invalid token' }); }
+
+    const campaign = await pool.query('SELECT * FROM coupon_campaigns WHERE id = $1', [req.params.id]);
+    if (!campaign.rows.length) return res.status(404).json({ error: 'Campaign not found' });
+
+    const codes = await pool.query(
+      'SELECT code, qr_data_url FROM coupon_codes WHERE campaign_id = $1 AND qr_data_url IS NOT NULL ORDER BY code',
+      [req.params.id]
+    );
+    if (!codes.rows.length) return res.status(400).json({ error: 'No QR codes generated yet. Call generate-qr first.' });
+
+    const camp = campaign.rows[0];
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+      <title>QR Codes - ${camp.name}</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+        h1 { text-align: center; font-size: 18px; margin-bottom: 10px; }
+        .info { text-align: center; font-size: 12px; color: #666; margin-bottom: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
+        .card { border: 1px solid #ddd; border-radius: 8px; padding: 10px; text-align: center; page-break-inside: avoid; }
+        .card img { width: 120px; height: 120px; }
+        .card .code { font-family: monospace; font-size: 11px; font-weight: bold; margin-top: 5px; letter-spacing: 1px; }
+        .card .campaign { font-size: 9px; color: #888; margin-top: 3px; }
+        @media print { body { padding: 10px; } .grid { gap: 8px; } .card { padding: 6px; } .card img { width: 100px; height: 100px; } }
+      </style>
+    </head><body>
+      <h1>${camp.name} - Coupon QR Codes</h1>
+      <p class="info">${codes.rows.length} codes | Discount: ${camp.discount_type === 'percentage' ? camp.discount_value + '%' : camp.discount_type === 'points' ? camp.discount_value + ' pts' : 'Rs.' + camp.discount_value}</p>
+      <div class="grid">
+        ${codes.rows.map(c => `<div class="card"><img src="${c.qr_data_url}" /><div class="code">${c.code}</div><div class="campaign">${camp.name}</div></div>`).join('')}
+      </div>
+    </body></html>`;
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── DEALER ASSIGNMENT ───
+
+// POST /api/v1/coupons/:id/assign-dealer - Assign batch of codes to a dealer
+app.post('/api/v1/coupons/:id/assign-dealer', auth, async (req, res) => {
+  try {
+    const { dealer_name, dealer_phone, codes_count, notes } = req.body;
+    if (!dealer_name || !codes_count) return res.status(400).json({ error: 'dealer_name and codes_count required' });
+
+    const available = await pool.query(
+      'SELECT id, code FROM coupon_codes WHERE campaign_id = $1 AND status = $2 AND assigned_dealer_id IS NULL ORDER BY created_at LIMIT $3',
+      [req.params.id, 'available', codes_count]
+    );
+    if (available.rows.length < codes_count) {
+      return res.status(400).json({ error: `Only ${available.rows.length} unassigned codes available` });
+    }
+
+    const codeIds = available.rows.map(c => c.id);
+    const dealerId = require('crypto').randomUUID();
+    await pool.query(
+      'UPDATE coupon_codes SET assigned_dealer_id = $1 WHERE id = ANY($2)',
+      [dealerId, codeIds]
+    );
+
+    const batch = await pool.query(
+      `INSERT INTO coupon_dealer_batches (campaign_id, dealer_id, dealer_name, dealer_phone, codes_count, notes)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [req.params.id, dealerId, dealer_name, dealer_phone || null, codes_count, notes || null]
+    );
+
+    // Send WhatsApp notification to dealer if phone provided
+    if (dealer_phone) {
+      try {
+        const whatsappUrl = process.env.WHATSAPP_API_URL || 'https://vartmap-whatsapp.onrender.com';
+        await fetch(`${whatsappUrl}/api/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: dealer_phone,
+            message: `🎫 VartMap Coupon Assignment\n\nDear ${dealer_name},\n${codes_count} coupon codes have been assigned to you.\n\nPlease distribute these to farmers along with product sales.\n\nThank you for your partnership!`
+          })
+        });
+      } catch (e) { console.log('WhatsApp dealer notification failed:', e.message); }
+    }
+
+    res.json({
+      batch: batch.rows[0],
+      codes_assigned: available.rows.map(c => c.code),
+      message: `${codes_count} codes assigned to ${dealer_name}`
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/v1/coupons/:id/dealers - List dealer assignments
+app.get('/api/v1/coupons/:id/dealers', auth, async (req, res) => {
+  try {
+    const batches = await pool.query(
+      `SELECT cdb.*, 
+        (SELECT COUNT(*) FROM coupon_codes WHERE assigned_dealer_id = cdb.dealer_id AND status = 'used') as redeemed_count
+       FROM coupon_dealer_batches cdb WHERE cdb.campaign_id = $1 ORDER BY cdb.assigned_at DESC`,
+      [req.params.id]
+    );
+    res.json(batches.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── BULK DISTRIBUTION ───
+
+// POST /api/v1/coupons/:id/distribute - Bulk WhatsApp distribution
+app.post('/api/v1/coupons/:id/distribute', auth, async (req, res) => {
+  try {
+    const { farmer_ids, message_template } = req.body;
+    if (!farmer_ids || !farmer_ids.length) return res.status(400).json({ error: 'farmer_ids array required' });
+
+    const available = await pool.query(
+      'SELECT id, code FROM coupon_codes WHERE campaign_id = $1 AND status = $2 AND assigned_dealer_id IS NULL ORDER BY created_at LIMIT $3',
+      [req.params.id, 'available', farmer_ids.length]
+    );
+    if (available.rows.length < farmer_ids.length) {
+      return res.status(400).json({ error: `Only ${available.rows.length} codes available, need ${farmer_ids.length}` });
+    }
+
+    const campaign = await pool.query('SELECT name, discount_type, discount_value FROM coupon_campaigns WHERE id = $1', [req.params.id]);
+    const camp = campaign.rows[0];
+
+    const dist = await pool.query(
+      `INSERT INTO coupon_distributions (campaign_id, channel, total_recipients, status)
+       VALUES ($1, 'whatsapp', $2, 'in_progress') RETURNING *`,
+      [req.params.id, farmer_ids.length]
+    );
+
+    const whatsappUrl = process.env.WHATSAPP_API_URL || 'https://vartmap-whatsapp.onrender.com';
+    let sentCount = 0, failedCount = 0;
+
+    for (let i = 0; i < farmer_ids.length; i++) {
+      try {
+        const farmer = await pool.query('SELECT id, phone, name FROM farmers WHERE id = $1', [farmer_ids[i]]);
+        if (!farmer.rows.length) { failedCount++; continue; }
+
+        const f = farmer.rows[0];
+        const code = available.rows[i];
+
+        await pool.query(
+          "UPDATE coupon_codes SET distributed_via = 'whatsapp', distributed_at = NOW(), status = 'assigned' WHERE id = $1",
+          [code.id]
+        );
+
+        const discountText = camp.discount_type === 'percentage' ? camp.discount_value + '% off' :
+                             camp.discount_type === 'points' ? camp.discount_value + ' loyalty points' :
+                             'Rs.' + camp.discount_value + ' off';
+
+        const msg = message_template
+          ? message_template.replace('{name}', f.name || 'Farmer').replace('{code}', code.code).replace('{discount}', discountText)
+          : `🎁 Namaste ${f.name || 'Farmer'}!\n\nYou have a special offer from VartMap:\n🎫 Code: *${code.code}*\n💰 Discount: ${discountText}\n📦 Campaign: ${camp.name}\n\nTo redeem, simply reply with your code or show it at your dealer.\n\nHappy farming! 🌾`;
+
+        await fetch(`${whatsappUrl}/api/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: f.phone, message: msg })
+        });
+        sentCount++;
+      } catch (e) { failedCount++; console.log('Distribution failed for farmer:', farmer_ids[i], e.message); }
+    }
+
+    await pool.query(
+      'UPDATE coupon_distributions SET sent_count = $1, failed_count = $2, status = $3, completed_at = NOW() WHERE id = $4',
+      [sentCount, failedCount, 'completed', dist.rows[0].id]
+    );
+
+    res.json({ distribution_id: dist.rows[0].id, sent: sentCount, failed: failedCount, total: farmer_ids.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── GEO-TRACKED REDEMPTION ───
+
+// POST /api/v1/coupons/redeem-geo - Redeem with location tracking
+app.post('/api/v1/coupons/redeem-geo', async (req, res) => {
+  try {
+    const { code, phone, lat, lng, location_name } = req.body;
+    if (!code || !phone) return res.status(400).json({ error: 'code and phone required' });
+
+    const codeResult = await pool.query(
+      `SELECT cc.*, camp.name as campaign_name, camp.discount_type, camp.discount_value, camp.status as campaign_status,
+              camp.start_date, camp.end_date
+       FROM coupon_codes cc JOIN coupon_campaigns camp ON cc.campaign_id = camp.id
+       WHERE cc.code = $1`, [code.toUpperCase()]
+    );
+    if (!codeResult.rows.length) return res.status(404).json({ error: 'Invalid coupon code', valid: false });
+
+    const c = codeResult.rows[0];
+    if (c.status === 'used') return res.status(400).json({ error: 'Code already used', valid: false });
+    if (c.campaign_status !== 'active') return res.status(400).json({ error: 'Campaign is not active', valid: false });
+    if (c.end_date && new Date(c.end_date) < new Date()) return res.status(400).json({ error: 'Campaign expired', valid: false });
+
+    const farmer = await pool.query('SELECT id, name FROM farmers WHERE phone = $1', [phone]);
+    const farmerId = farmer.rows.length ? farmer.rows[0].id : null;
+    const farmerName = farmer.rows.length ? farmer.rows[0].name : 'Farmer';
+
+    await pool.query(
+      `UPDATE coupon_codes SET status = 'used', used_by = $1, used_at = NOW(),
+       redeemed_lat = $2, redeemed_lng = $3, redeemed_location = $4 WHERE id = $5`,
+      [farmerId, lat || null, lng || null, location_name || null, c.id]
+    );
+
+    // Award loyalty points if discount type is points
+    if (c.discount_type === 'points' && farmerId) {
+      await pool.query('UPDATE farmers SET loyalty_points = loyalty_points + $1, lifetime_points = lifetime_points + $1 WHERE id = $2',
+        [c.discount_value, farmerId]);
+      await pool.query(
+        `INSERT INTO loyalty_transactions (id, farmer_id, type, points, source, description, created_at)
+         VALUES (gen_random_uuid(), $1, 'earned', $2, 'coupon', $3, NOW())`,
+        [farmerId, c.discount_value, 'Coupon: ' + code.toUpperCase()]
+      );
+    }
+
+    // Send WhatsApp confirmation
+    try {
+      const whatsappUrl = process.env.WHATSAPP_API_URL || 'https://vartmap-whatsapp.onrender.com';
+      const discountText = c.discount_type === 'percentage' ? c.discount_value + '% discount' :
+                           c.discount_type === 'points' ? c.discount_value + ' loyalty points' :
+                           'Rs.' + c.discount_value + ' discount';
+      await fetch(`${whatsappUrl}/api/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone,
+          message: `✅ Coupon Redeemed!\n\nHi ${farmerName}, your code *${code.toUpperCase()}* has been successfully redeemed.\n🎁 Reward: ${discountText}\n📦 Campaign: ${c.campaign_name}\n\nThank you for choosing VartMap! 🌾`
+        })
+      });
+    } catch (e) { console.log('WhatsApp redeem notification failed:', e.message); }
+
+    res.json({
+      valid: true, redeemed: true,
+      discount_type: c.discount_type, discount_value: c.discount_value,
+      campaign_name: c.campaign_name,
+      message: `Code redeemed successfully`
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/v1/coupons/:id/geo-stats - Geographic redemption statistics
+app.get('/api/v1/coupons/:id/geo-stats', auth, async (req, res) => {
+  try {
+    const locationStats = await pool.query(
+      `SELECT redeemed_location, COUNT(*) as count
+       FROM coupon_codes WHERE campaign_id = $1 AND status = 'used' AND redeemed_location IS NOT NULL
+       GROUP BY redeemed_location ORDER BY count DESC`,
+      [req.params.id]
+    );
+    const geoPoints = await pool.query(
+      `SELECT cc.code, cc.redeemed_lat, cc.redeemed_lng, cc.redeemed_location, cc.used_at, f.name as farmer_name
+       FROM coupon_codes cc LEFT JOIN farmers f ON cc.used_by = f.id
+       WHERE cc.campaign_id = $1 AND cc.status = 'used' AND cc.redeemed_lat IS NOT NULL`,
+      [req.params.id]
+    );
+    const totalRedeemed = await pool.query(
+      "SELECT COUNT(*) as total FROM coupon_codes WHERE campaign_id = $1 AND status = 'used'",
+      [req.params.id]
+    );
+    const geoRedeemed = await pool.query(
+      "SELECT COUNT(*) as total FROM coupon_codes WHERE campaign_id = $1 AND status = 'used' AND redeemed_lat IS NOT NULL",
+      [req.params.id]
+    );
+    res.json({
+      total_redeemed: parseInt(totalRedeemed.rows[0].total),
+      geo_tracked: parseInt(geoRedeemed.rows[0].total),
+      locations: locationStats.rows,
+      points: geoPoints.rows
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+const QRCode = require('qrcode');
+
+// POST /api/v1/coupons/:id/generate-qr - Generate QR codes for all codes in a campaign
+app.post('/api/v1/coupons/:id/generate-qr', auth, async (req, res) => {
+  try {
+    const { base_url } = req.body;
+    const redeemUrl = base_url || 'https://vartmap-dashboard.onrender.com/redeem';
+    
+    const codes = await pool.query(
+      'SELECT id, code FROM coupon_codes WHERE campaign_id = $1 AND qr_data_url IS NULL',
+      [req.params.id]
+    );
+    
+    let generated = 0;
+    for (const code of codes.rows) {
+      try {
+        const qrUrl = `${redeemUrl}?code=${code.code}`;
+        const qrDataUrl = await QRCode.toDataURL(qrUrl, { width: 300, margin: 2, color: { dark: '#1e293b', light: '#ffffff' } });
+        await pool.query('UPDATE coupon_codes SET qr_data_url = $1 WHERE id = $2', [qrDataUrl, code.id]);
+        generated++;
+      } catch (e) { console.log('QR generation failed for', code.code, e.message); }
+    }
+    
+    res.json({ success: true, generated, total: codes.rows.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/v1/coupons/:id/qr-sheet - Get all QR codes as printable HTML
+app.get('/api/v1/coupons/:id/qr-sheet', async (req, res) => {
+  try {
+    const token = req.query.token || (req.headers.authorization || '').replace('Bearer ', '');
+    if (!token) return res.status(401).json({ error: 'Unauthorized' });
+    try { jwt.verify(token, process.env.JWT_SECRET || 'vartmap-secret-key-2026'); }
+    catch(e) { return res.status(401).json({ error: 'Invalid token' }); }
+
+    const campaign = await pool.query('SELECT * FROM coupon_campaigns WHERE id = $1', [req.params.id]);
+    if (!campaign.rows.length) return res.status(404).json({ error: 'Not found' });
+    
+    const codes = await pool.query(
+      'SELECT code, qr_data_url FROM coupon_codes WHERE campaign_id = $1 AND qr_data_url IS NOT NULL ORDER BY code',
+      [req.params.id]
+    );
+    
+    const html = `<!DOCTYPE html><html><head><title>QR Codes - ${campaign.rows[0].name}</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+      .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+      .qr-card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; text-align: center; page-break-inside: avoid; }
+      .qr-card img { width: 150px; height: 150px; }
+      .qr-code-text { font-family: monospace; font-size: 14px; font-weight: bold; margin-top: 8px; }
+      .campaign-name { font-size: 10px; color: #666; }
+      h1 { text-align: center; margin-bottom: 8px; }
+      .subtitle { text-align: center; color: #666; margin-bottom: 24px; }
+      @media print { .no-print { display: none; } body { padding: 0; } }
+    </style></head><body>
+    <h1>${campaign.rows[0].name}</h1>
+    <p class="subtitle">${codes.rows.length} QR Codes | ${campaign.rows[0].discount_type === 'percentage' ? campaign.rows[0].discount_value + '% off' : campaign.rows[0].discount_type === 'points' ? campaign.rows[0].discount_value + ' points' : 'Rs.' + campaign.rows[0].discount_value + ' off'}</p>
+    <button class="no-print" onclick="window.print()" style="display:block;margin:0 auto 20px;padding:10px 24px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:16px">Print QR Codes</button>
+    <div class="grid">
+      ${codes.rows.map(c => `<div class="qr-card"><img src="${c.qr_data_url}" alt="${c.code}"><div class="qr-code-text">${c.code}</div><div class="campaign-name">${campaign.rows[0].name}</div></div>`).join('')}
+    </div></body></html>`;
+    
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ==================== DEALER CODE ASSIGNMENT ====================
+
+// POST /api/v1/coupons/:id/assign-dealer - Assign batch of codes to a dealer
+app.post('/api/v1/coupons/:id/assign-dealer', auth, async (req, res) => {
+  try {
+    const { dealer_name, dealer_phone, dealer_location, count = 50, notes } = req.body;
+    if (!dealer_name) return res.status(400).json({ error: 'dealer_name required' });
+    
+    // Get available codes
+    const available = await pool.query(
+      'SELECT id, code FROM coupon_codes WHERE campaign_id = $1 AND status = $2 AND assigned_dealer_id IS NULL ORDER BY created_at LIMIT $3',
+      [req.params.id, 'available', count]
+    );
+    
+    if (!available.rows.length) return res.status(400).json({ error: 'No available codes to assign' });
+    
+    // Check if dealer exists
+    let dealerId = null;
+    if (dealer_phone) {
+      const cleanPhone = dealer_phone.replace(/\D/g, '');
+      const dealer = await pool.query('SELECT id FROM dealers WHERE phone LIKE $1', ['%' + cleanPhone + '%']);
+      if (dealer.rows.length) dealerId = dealer.rows[0].id;
+    }
+    
+    // Create batch record
+    const batch = await pool.query(
+      `INSERT INTO coupon_dealer_batches (campaign_id, dealer_id, dealer_name, dealer_phone, dealer_location, codes_count, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [req.params.id, dealerId, dealer_name, dealer_phone, dealer_location, available.rows.length, notes]
+    );
+    
+    // Assign codes
+    const codeIds = available.rows.map(c => c.id);
+    await pool.query(
+      `UPDATE coupon_codes SET assigned_dealer_id = $1, status = 'assigned', 
+       metadata = jsonb_set(COALESCE(metadata,'{}'), '{dealer_batch_id}', $2::jsonb)
+       WHERE id = ANY($3)`,
+      [dealerId || batch.rows[0].id, JSON.stringify(batch.rows[0].id), codeIds]
+    );
+    
+    // Send WhatsApp notification to dealer
+    if (dealer_phone) {
+      try {
+        const fullPhone = dealer_phone.replace(/\D/g, '');
+        const sampleCodes = available.rows.slice(0, 3).map(c => c.code).join(', ');
+        await axios.post('https://vartmap-whatsapp-gateway.onrender.com/api/v1/send-message', {
+          phone: fullPhone.length === 10 ? '91' + fullPhone : fullPhone,
+          message: `📦 VartMap Coupon Assignment\n\nHi ${dealer_name}!\n\n${available.rows.length} coupon codes have been assigned to you.\n\nCampaign: ${(await pool.query('SELECT name FROM coupon_campaigns WHERE id=$1', [req.params.id])).rows[0]?.name}\nCodes: ${sampleCodes}${available.rows.length > 3 ? ' ... and ' + (available.rows.length - 3) + ' more' : ''}\n\nPlease distribute these to farmers at your shop. 🌾`
+        });
+      } catch(e) { console.log('Dealer WhatsApp failed:', e.message); }
+    }
+    
+    res.json({ 
+      batch: batch.rows[0], 
+      codes_assigned: available.rows.length, 
+      sample_codes: available.rows.slice(0, 5).map(c => c.code)
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/v1/coupons/:id/dealers - Get dealer assignments for a campaign
+app.get('/api/v1/coupons/:id/dealers', auth, async (req, res) => {
+  try {
+    const batches = await pool.query(
+      `SELECT cdb.*, 
+        (SELECT COUNT(*) FROM coupon_codes cc WHERE cc.metadata->>'dealer_batch_id' = cdb.id::text AND cc.status = 'used') as codes_used
+       FROM coupon_dealer_batches cdb WHERE cdb.campaign_id = $1 ORDER BY cdb.assigned_at DESC`,
+      [req.params.id]
+    );
+    res.json(batches.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ==================== BULK WHATSAPP DISTRIBUTION ====================
+
+// POST /api/v1/coupons/:id/distribute - Send unique codes to farmers via WhatsApp
+app.post('/api/v1/coupons/:id/distribute', auth, async (req, res) => {
+  try {
+    const { farmer_ids, message_template } = req.body;
+    if (!farmer_ids || !farmer_ids.length) return res.status(400).json({ error: 'farmer_ids array required' });
+    
+    const campaign = await pool.query('SELECT * FROM coupon_campaigns WHERE id = $1', [req.params.id]);
+    if (!campaign.rows.length) return res.status(404).json({ error: 'Campaign not found' });
+    
+    // Get available codes
+    const available = await pool.query(
+      'SELECT id, code FROM coupon_codes WHERE campaign_id = $1 AND status = $2 ORDER BY created_at LIMIT $3',
+      [req.params.id, 'available', farmer_ids.length]
+    );
+    
+    if (available.rows.length < farmer_ids.length) {
+      return res.status(400).json({ 
+        error: `Not enough codes. Available: ${available.rows.length}, Needed: ${farmer_ids.length}` 
+      });
+    }
+    
+    const farmers = await pool.query('SELECT id, name, phone FROM farmers WHERE id = ANY($1)', [farmer_ids]);
+    const farmerMap = {};
+    farmers.rows.forEach(f => { farmerMap[f.id] = f; });
+    
+    let sent = 0, failed = 0;
+    const template = message_template || `🎉 Special Offer!\n\nHi {name}!\n\nYou've received an exclusive coupon code:\n\n🎟️ {code}\n\n💰 {discount}\n\nRedeem it on your next purchase! Valid till {end_date}.\n\n🌾 VartMap Krishi Sahayak`;
+    
+    for (let i = 0; i < farmer_ids.length; i++) {
+      const farmer = farmerMap[farmer_ids[i]];
+      if (!farmer || !farmer.phone) { failed++; continue; }
+      
+      const code = available.rows[i];
+      const discountText = campaign.rows[0].discount_type === 'percentage' 
+        ? campaign.rows[0].discount_value + '% off' 
+        : campaign.rows[0].discount_type === 'points'
+          ? campaign.rows[0].discount_value + ' loyalty points'
+          : 'Rs.' + campaign.rows[0].discount_value + ' off';
+      
+      const msg = template
+        .replace('{name}', farmer.name || 'Kisan')
+        .replace('{code}', code.code)
+        .replace('{discount}', discountText)
+        .replace('{end_date}', campaign.rows[0].end_date ? new Date(campaign.rows[0].end_date).toLocaleDateString() : 'limited time');
+      
+      try {
+        await axios.post('https://vartmap-whatsapp-gateway.onrender.com/api/v1/send-message', {
+          phone: farmer.phone, message: msg
+        });
+        
+        // Mark code as assigned to farmer
+        await pool.query(
+          `UPDATE coupon_codes SET farmer_id = $1, status = 'assigned', distributed_via = 'whatsapp', distributed_at = NOW() WHERE id = $2`,
+          [farmer.id, code.id]
+        );
+        
+        // Log distribution
+        await pool.query(
+          `INSERT INTO coupon_distributions (campaign_id, code_id, farmer_id, channel, phone, status)
+           VALUES ($1, $2, $3, 'whatsapp', $4, 'sent')`,
+          [req.params.id, code.id, farmer.id, farmer.phone]
+        );
+        
+        sent++;
+      } catch(e) { failed++; console.log('Distribution failed for', farmer.phone, e.message); }
+    }
+    
+    res.json({ sent, failed, total: farmer_ids.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ==================== COUPON REDEMPTION WITH GEO ====================
+
+// POST /api/v1/coupons/redeem-geo - Redeem with location tracking
+app.post('/api/v1/coupons/redeem-geo', async (req, res) => {
+  try {
+    const { code, phone, lat, lng, location_name } = req.body;
+    if (!code || !phone) return res.status(400).json({ error: 'Code and phone required' });
+    
+    const coupon = await pool.query(
+      `SELECT cc.*, cp.discount_type, cp.discount_value, cp.name as campaign_name, cp.status as campaign_status
+       FROM coupon_codes cc JOIN coupon_campaigns cp ON cp.id = cc.campaign_id WHERE cc.code = $1`,
+      [code.toUpperCase()]
+    );
+    
+    if (!coupon.rows.length) return res.status(404).json({ error: 'Invalid coupon code' });
+    const c = coupon.rows[0];
+    if (c.status === 'used') return res.status(400).json({ error: 'Already used' });
+    if (c.campaign_status !== 'active') return res.status(400).json({ error: 'Campaign not active' });
+    
+    const cleanPhone = phone.replace(/\D/g, '');
+    const fullPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
+    const farmer = await pool.query('SELECT id FROM farmers WHERE phone = $1 OR phone = $2', [cleanPhone, fullPhone]);
+    const farmerId = farmer.rows.length ? farmer.rows[0].id : null;
+    
+    await pool.query(
+      `UPDATE coupon_codes SET status = 'used', used_at = NOW(), farmer_id = $1,
+       redeemed_lat = $2, redeemed_lng = $3, redeemed_location = $4,
+       metadata = jsonb_set(COALESCE(metadata,'{}'), '{redeemed_phone}', $5::jsonb)
+       WHERE id = $6`,
+      [farmerId, lat || null, lng || null, location_name || null, JSON.stringify(fullPhone), c.id]
+    );
+    
+    await pool.query('UPDATE coupon_campaigns SET used_count = used_count + 1 WHERE id = $1', [c.campaign_id]);
+    
+    // Award points if points-type
+    if (c.discount_type === 'points' && farmerId) {
+      const fd = await pool.query('SELECT loyalty_points FROM farmers WHERE id = $1', [farmerId]);
+      const newBal = (fd.rows[0]?.loyalty_points || 0) + c.discount_value;
+      await pool.query('UPDATE farmers SET loyalty_points = $1, lifetime_points = COALESCE(lifetime_points,0) + $2 WHERE id = $3', [newBal, c.discount_value, farmerId]);
+      await pool.query(
+        `INSERT INTO loyalty_transactions (farmer_id, type, points, balance_after, source, description) VALUES ($1,'earn',$2,$3,'coupon',$4)`,
+        [farmerId, c.discount_value, newBal, 'Coupon: ' + c.code]
+      );
+    }
+    
+    res.json({ success: true, discount_type: c.discount_type, discount_value: c.discount_value, location_tracked: !!(lat && lng) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/v1/coupons/:id/geo-stats - Geographic redemption stats
+app.get('/api/v1/coupons/:id/geo-stats', auth, async (req, res) => {
+  try {
+    const locations = await pool.query(
+      `SELECT cc.code, cc.redeemed_lat, cc.redeemed_lng, cc.redeemed_location, cc.used_at,
+              f.name as farmer_name, f.phone as farmer_phone
+       FROM coupon_codes cc LEFT JOIN farmers f ON f.id = cc.farmer_id
+       WHERE cc.campaign_id = $1 AND cc.status = 'used' AND cc.redeemed_lat IS NOT NULL
+       ORDER BY cc.used_at DESC`,
+      [req.params.id]
+    );
+    
+    const locationSummary = await pool.query(
+      `SELECT redeemed_location, COUNT(*) as count 
+       FROM coupon_codes WHERE campaign_id = $1 AND status = 'used' AND redeemed_location IS NOT NULL
+       GROUP BY redeemed_location ORDER BY count DESC LIMIT 20`,
+      [req.params.id]
+    );
+    
+    res.json({ redemptions: locations.rows, location_summary: locationSummary.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+
 // ─── SOIL NUTRIENT DATA ───
 app.get('/api/v1/soil-data', auth, async (req, res) => {
   try {
