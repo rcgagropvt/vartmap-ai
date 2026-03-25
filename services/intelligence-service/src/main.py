@@ -15,7 +15,7 @@ DB_URL = os.getenv("DATABASE_URL", "")
 REDIS_URL = os.getenv("REDIS_URL", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-DATA_GOV_API_KEY = os.getenv("DATA_GOV_API_KEY", "579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b")
+DATA_GOV_API_KEY = os.getenv("DATA_GOV_API_KEY", "579b464db66ec23bdd0000014885b7cac531486745d8726672686458")
 
 db_pool = None
 redis_client = None
@@ -72,7 +72,7 @@ async def fetch_mandi_prices(
 ):
     """Fetch LIVE mandi prices from data.gov.in and store in database"""
     try:
-        resource_id = "9ef84268-d588-465a-a308-a864a43d0070"
+        resource_id = "35985678-0d79-46b4-9ed6-6f13308a1d24"
         url = f"https://api.data.gov.in/resource/{resource_id}"
         params = {
             "api-key": DATA_GOV_API_KEY,
