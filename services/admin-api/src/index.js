@@ -123,17 +123,64 @@ app.get('/api/v1/farmers/:id', auth, async (req, res) => {
 
 app.post('/api/v1/farmers', auth, async (req, res) => {
   try {
-    const { phone, name, language, district_id, village, pin_code, land_holding_acres, crops, soil_type, irrigation_type, farming_type } = req.body;
-    const bsu = 'BSU' + Date.now().toString(36).toUpperCase();
-    const ref = 'REF' + crypto.randomBytes(4).toString('hex').toUpperCase();
-    const r = await pool.query(
-      `INSERT INTO farmers (phone, bsu_id, name, language, district_id, village, pin_code, land_holding_acres, crops, soil_type, irrigation_type, farming_type, referral_code, status, onboarding_stage)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'active','completed') RETURNING *`,
-      [phone, bsu, name, language || 'hi', district_id, village, pin_code, land_holding_acres, crops || '{}', soil_type, irrigation_type, farming_type, ref]
+    const {
+      name, phone, village, district_id, language, status,
+      pin_code, land_holding_acres, crops, soil_type,
+      irrigation_type, farming_type
+    } = req.body;
+
+    if (!phone) {
+      return res.status(400).json({ error: 'Phone number is required' });
+    }
+
+    // Clean phone - digits only
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+
+    // Check if phone already exists
+    const existing = await pool.query('SELECT id FROM farmers WHERE phone = $1', [cleanPhone]);
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: 'Farmer with this phone number already exists' });
+    }
+
+    // Generate referral code
+    const refCode = 'VRT' + cleanPhone.slice(-6) + Math.random().toString(36).substring(2, 5).toUpperCase();
+
+    const result = await pool.query(
+      `INSERT INTO farmers (
+        id, phone, name, language, district_id, village, pin_code,
+        land_holding_acres, crops, soil_type, irrigation_type, farming_type,
+        onboarding_stage, profile_complete, status, referral_code,
+        total_interactions, created_at, updated_at
+      ) VALUES (
+        gen_random_uuid(), $1, $2, $3, $4, $5, $6,
+        $7, $8, $9, $10, $11,
+        'registered', false, $12, $13,
+        0, NOW(), NOW()
+      ) RETURNING *`,
+      [
+        cleanPhone,
+        name || null,
+        language || 'hi',
+        district_id || null,
+        village || null,
+        pin_code || null,
+        land_holding_acres || null,
+        crops ? (Array.isArray(crops) ? crops : [crops]) : null,
+        soil_type || null,
+        irrigation_type || null,
+        farming_type || null,
+        status || 'active',
+        refCode
+      ]
     );
-    res.json({ farmer: r.rows[0] });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Create farmer error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
+
 
 app.put('/api/v1/farmers/:id', auth, async (req, res) => {
   try {
@@ -864,6 +911,22 @@ app.get('/api/v1/load-soil-data', auth, async (req, res) => {
     const r = await axios.get(INTEL_URL + '/api/v1/load-soil-data', { timeout: 30000 });
     res.json(r.data);
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// Proxy: send WhatsApp message from admin dashboard chat
+app.post('/api/v1/send-wa-message', auth, async (req, res) => {
+  try {
+    const { phone, message, session_id } = req.body;
+    const gatewayUrl = process.env.GATEWAY_URL || 'https://vartmap-whatsapp-gateway.onrender.com';
+    
+    const response = await axios.post(`${gatewayUrl}/api/v1/send-message`, {
+      phone, message, session_id
+    });
+    
+    res.json(response.data);
+  } catch (err) {
+    console.error('Send WA message proxy error:', err.response?.data || err.message);
+    res.status(500).json({ error: err.response?.data?.error || err.message });
+  }
 });
 
 // ─── START SERVER ───

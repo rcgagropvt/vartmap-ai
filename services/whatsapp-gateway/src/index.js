@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const { Pool } = require('pg');
 const Redis = require('ioredis');
+const axios = require('axios');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -58,6 +59,81 @@ try {
   console.error('Redis init error:', err.message);
 }
 
+// ============================================
+// WhatsApp Cloud API - Send Message Function
+// ============================================
+async function sendWhatsAppMessage(to, text) {
+  const phoneNumberId = process.env.WA_PHONE_NUMBER_ID;
+  const accessToken = process.env.WA_ACCESS_TOKEN;
+
+  if (!phoneNumberId || !accessToken) {
+    console.error('Missing WA_PHONE_NUMBER_ID or WA_ACCESS_TOKEN');
+    return null;
+  }
+
+  const url = `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`;
+
+  try {
+    const response = await axios.post(url, {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: to,
+      type: 'text',
+      text: { body: text }
+    }, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    console.log('Message sent successfully to', to, ':', response.data);
+    return response.data;
+  } catch (err) {
+    console.error('Send message error:', err.response?.data || err.message);
+    return null;
+  }
+}
+
+// ============================================
+// Send message from Admin Dashboard (chat)
+// ============================================
+app.post('/api/v1/send-message', async (req, res) => {
+  try {
+    const { phone, message, session_id } = req.body;
+
+    if (!phone || !message) {
+      return res.status(400).json({ error: 'phone and message are required' });
+    }
+
+    // Send via WhatsApp Cloud API
+    const result = await sendWhatsAppMessage(phone, message);
+
+    if (!result) {
+      return res.status(500).json({ error: 'Failed to send WhatsApp message' });
+    }
+
+    // Store outgoing message if session_id provided
+    if (session_id && pool) {
+      await pool.query(
+        `INSERT INTO wa_messages (id, session_id, direction, message_type, content, status, created_at)
+         VALUES (gen_random_uuid(), $1, 'outgoing', 'text', $2, 'sent', NOW())`,
+        [session_id, message]
+      );
+
+      await pool.query(
+        'UPDATE wa_chat_sessions SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1',
+        [session_id]
+      );
+    }
+
+    res.json({ success: true, wa_response: result });
+  } catch (err) {
+    console.error('Send message API error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Health check
 app.get('/health', async (req, res) => {
   let dbStatus = 'not configured';
@@ -106,33 +182,117 @@ app.get('/webhook', (req, res) => {
 
 // WhatsApp webhook incoming messages
 app.post('/webhook', async (req, res) => {
+  // Always respond 200 quickly to Meta
+  res.sendStatus(200);
+
   try {
     const body = req.body;
-    console.log('Incoming webhook:', JSON.stringify(body).substring(0, 500));
 
-    if (body.object === 'whatsapp_business_account' && pool) {
-      for (const entry of body.entry || []) {
-        for (const change of entry.changes || []) {
-          if (change.value.messages) {
-            for (const message of change.value.messages) {
-              console.log('Message from:', message.from, 'Text:', message.text?.body);
+    if (!body.object || body.object !== 'whatsapp_business_account') return;
 
-              await pool.query(
-                `INSERT INTO conversations (farmer_id, channel, direction, message_type, content, wa_message_id, created_at)
-                 SELECT f.id, 'whatsapp', 'inbound', $1, $2, $3, NOW()
-                 FROM farmers f WHERE f.phone = $4
-                 LIMIT 1`,
-                [message.type || 'text', message.text?.body || '', message.id, message.from]
-              );
-            }
+    const entries = body.entry || [];
+    for (const entry of entries) {
+      const changes = entry.changes || [];
+      for (const change of changes) {
+        if (change.field !== 'messages') continue;
+
+        const value = change.value;
+        const messages = value.messages || [];
+        const contacts = value.contacts || [];
+
+        for (let i = 0; i < messages.length; i++) {
+          const msg = messages[i];
+          const contact = contacts[i] || {};
+          const from = msg.from;
+          const msgBody = msg.text?.body || '';
+          const profileName = contact.profile?.name || 'Unknown';
+          const waMessageId = msg.id;
+
+          console.log(`Incoming message from ${from} (${profileName}): ${msgBody}`);
+
+          if (!pool) {
+            console.error('No database connection');
+            continue;
           }
+
+          // 1. Find or create farmer
+          let farmer = await pool.query('SELECT * FROM farmers WHERE phone = $1', [from]);
+
+          if (farmer.rows.length === 0) {
+            farmer = await pool.query(
+              `INSERT INTO farmers (id, name, phone, language, status, onboarding_stage, profile_complete, total_interactions, created_at, updated_at)
+               VALUES (gen_random_uuid(), $1, $2, 'hi', 'active', 'new', false, 1, NOW(), NOW())
+               RETURNING *`,
+              [profileName, from]
+            );
+            console.log('New farmer created:', from);
+          } else {
+            // Update interaction count
+            await pool.query(
+              'UPDATE farmers SET total_interactions = COALESCE(total_interactions, 0) + 1, last_interaction_at = NOW(), updated_at = NOW() WHERE phone = $1',
+              [from]
+            );
+          }
+
+          const farmerId = farmer.rows[0].id;
+
+          // 2. Find or create chat session
+          let session = await pool.query(
+            'SELECT * FROM wa_chat_sessions WHERE farmer_id = $1 AND status = $2',
+            [farmerId, 'active']
+          );
+
+          if (session.rows.length === 0) {
+            session = await pool.query(
+              `INSERT INTO wa_chat_sessions (id, farmer_id, status, last_message_at, created_at, updated_at)
+               VALUES (gen_random_uuid(), $1, 'active', NOW(), NOW(), NOW())
+               RETURNING *`,
+              [farmerId]
+            );
+          }
+
+          const sessionId = session.rows[0].id;
+
+          await pool.query(
+            'UPDATE wa_chat_sessions SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1',
+            [sessionId]
+          );
+
+          // 3. Store incoming message
+          await pool.query(
+            `INSERT INTO wa_messages (id, session_id, direction, message_type, content, wa_message_id, status, created_at)
+             VALUES (gen_random_uuid(), $1, 'incoming', 'text', $2, $3, 'delivered', NOW())`,
+            [sessionId, msgBody, waMessageId]
+          );
+
+          // 4. Send auto-reply
+          const msgCount = await pool.query(
+            'SELECT COUNT(*) FROM wa_messages WHERE session_id = $1 AND direction = $2',
+            [sessionId, 'incoming']
+          );
+
+          let replyText;
+          if (parseInt(msgCount.rows[0].count) <= 1) {
+            replyText = `🙏 Namaste ${profileName}!\n\nWelcome to VartMap Krishi Sahayak. I'm here to help you with:\n\n🌾 Mandi Prices\n🧪 Soil Health Info\n💰 Government Schemes\n🌤 Weather Updates\n\nHow can I help you today?`;
+          } else {
+            replyText = `Thank you for your message! Our team will respond shortly. 🙏`;
+          }
+
+          const sendResult = await sendWhatsAppMessage(from, replyText);
+
+          // Store outgoing message
+          await pool.query(
+            `INSERT INTO wa_messages (id, session_id, direction, message_type, content, status, created_at)
+             VALUES (gen_random_uuid(), $1, 'outgoing', 'text', $2, $3, NOW())`,
+            [sessionId, replyText, sendResult ? 'sent' : 'failed']
+          );
+
+          console.log(`Reply ${sendResult ? 'sent' : 'FAILED'} to ${from}`);
         }
       }
     }
-    res.sendStatus(200);
   } catch (err) {
-    console.error('Webhook error:', err.message);
-    res.sendStatus(200);
+    console.error('Webhook processing error:', err);
   }
 });
 
