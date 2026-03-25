@@ -734,58 +734,7 @@ async function createCampaign() {
 
 async function updateCampaignStatus(id, status) { await api('/api/v1/campaigns/' + id, { method: 'PUT', body: JSON.stringify({ status }) }); loadCampaigns(); }
 // ─── 7. SPIN WHEELS ───
-async function loadSpinWheels() {
-  const el = document.getElementById('pageContent');
-  el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
-  try {
-    const d = await api('/api/v1/spin-wheels');
-    el.innerHTML = `
-    <div class="table-wrap">
-      <div class="table-header">
-        <h3><i class="fas fa-dharmachakra"></i> Spin Wheels & Lucky Draw (${d.wheels.length})</h3>
-        <button class="btn btn-primary btn-sm" onclick="newSpinWheelModal()"><i class="fas fa-plus"></i> Create Wheel</button>
-      </div>
-      ${d.wheels.length ? d.wheels.map(w => `
-      <div style="padding:20px;border-bottom:1px solid var(--border)">
-        <div class="flex justify-between items-center mb-16 flex-wrap gap-10">
-          <div>
-            <h3 style="font-size:16px">${w.name} <span class="status ${w.status}">${w.status}</span></h3>
-            <p style="font-size:12px;color:var(--text-light)">${w.description || ''} · Max ${w.max_spins_per_farmer} spin/farmer · Budget: ₹${w.total_budget}</p>
-          </div>
-          <div class="flex gap-10">
-            ${w.status === 'draft' ? `<button class="btn btn-sm btn-primary" onclick="activateWheel('${w.id}')"><i class="fas fa-play"></i> Activate</button>` : ''}
-            ${w.status === 'active' ? `<button class="btn btn-sm btn-accent" onclick="pauseWheel('${w.id}')"><i class="fas fa-pause"></i> Pause</button>` : ''}
-            <button class="btn btn-sm btn-outline" onclick="viewWheelResults('${w.id}','${w.name}')"><i class="fas fa-list"></i> Results</button>
-          </div>
-        </div>
-        <div class="wheel-container">
-          <div class="wheel-visual">
-            <div class="wheel-pointer"><i class="fas fa-caret-down"></i></div>
-            <canvas id="canvas-${w.id}" class="wheel-canvas" width="320" height="320"></canvas>
-          </div>
-          <div class="wheel-config">
-            <h4 style="margin-bottom:10px">Segments (${w.segments.length})</h4>
-            <div class="segment-list">
-              ${w.segments.map(s => `
-                <div class="segment-item">
-                  <div class="segment-color" style="background:${s.color}"></div>
-                  <div class="segment-info">
-                    <strong>${s.label}</strong>
-                    <small>${s.prize_type} · ₹${s.prize_value} · Prob: ${(s.probability * 100).toFixed(1)}% · Winners: ${s.current_winners}/${s.max_winners || '∞'}</small>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-            <p style="margin-top:12px;font-size:13px"><strong>Stats:</strong> ${w.stats.total_spins} spins · ${w.stats.winners} winners</p>
-          </div>
-        </div>
-      </div>
-      `).join('') : '<div class="empty"><i class="fas fa-dharmachakra"></i><p>No spin wheels yet. Create one!</p></div>'}
-    </div>`;
-    // Draw wheel canvases
-    d.wheels.forEach(w => { if (w.segments.length) drawWheel('canvas-' + w.id, w.segments); });
-  } catch (e) { el.innerHTML = '<div class="empty"><p>Error loading spin wheels</p></div>'; }
-}
+undefined
 
 function drawWheel(canvasId, segments) {
   const canvas = document.getElementById(canvasId);
