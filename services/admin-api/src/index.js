@@ -1004,6 +1004,186 @@ app.post('/api/v1/send-wa-message', auth, async (req, res) => {
     res.status(500).json({ error: err.response?.data?.error || err.message });
   }
 });
+// ─── PUBLIC SPIN WHEEL API (No auth required - Digicides-style flow) ───
+
+// Get wheel info (public)
+app.get('/api/v1/public/spin-wheel/:id', async (req, res) => {
+  try {
+    const w = await pool.query('SELECT id, name, description, status, max_spins_per_farmer, start_date, end_date FROM spin_wheels WHERE id=$1', [req.params.id]);
+    if (!w.rows.length) return res.status(404).json({ error: 'Wheel not found' });
+    
+    const wheel = w.rows[0];
+    if (wheel.status !== 'active') return res.status(410).json({ error: 'This campaign has ended' });
+    if (new Date(wheel.end_date) < new Date()) return res.status(410).json({ error: 'This campaign has expired' });
+    
+    const segs = await pool.query(
+      'SELECT id, label, prize_type, prize_value, color, probability FROM spin_wheel_segments WHERE wheel_id=$1 AND active=true ORDER BY sort_order',
+      [req.params.id]
+    );
+    wheel.segments = segs.rows;
+    res.json(wheel);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Verify farmer + coupon (Step 1 of Digicides flow)
+app.post('/api/v1/public/spin-wheel/:id/verify', async (req, res) => {
+  try {
+    const { name, phone, coupon_code, language } = req.body;
+    if (!phone) return res.status(400).json({ error: 'Phone number is required' });
+    
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    
+    // Get wheel
+    const w = await pool.query('SELECT * FROM spin_wheels WHERE id=$1 AND status=$2', [req.params.id, 'active']);
+    if (!w.rows.length) return res.status(404).json({ error: 'Campaign not found or inactive' });
+    const wheel = w.rows[0];
+    
+    // Find or create farmer
+    let farmer = await pool.query('SELECT * FROM farmers WHERE phone=$1', [cleanPhone]);
+    if (!farmer.rows.length) {
+      farmer = await pool.query(
+        `INSERT INTO farmers (id, name, phone, language, status, onboarding_stage, profile_complete, total_interactions, created_at, updated_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, 'active', 'registered', false, 1, NOW(), NOW()) RETURNING *`,
+        [name || 'Unknown', cleanPhone, language || 'hi']
+      );
+    } else {
+      if (name) await pool.query('UPDATE farmers SET name=COALESCE(NULLIF($1,\'\'), name), updated_at=NOW() WHERE phone=$2', [name, cleanPhone]);
+    }
+    const farmerId = farmer.rows[0].id;
+    
+    // Verify coupon if provided
+    if (coupon_code) {
+      const coupon = await pool.query(
+        "SELECT * FROM coupon_codes WHERE UPPER(code)=$1 AND status='active'",
+        [coupon_code.toUpperCase()]
+      );
+      if (!coupon.rows.length) {
+        // Allow spin without coupon for now (coupon is optional)
+        // return res.status(400).json({ error: 'Invalid or already used coupon code' });
+      } else {
+        await pool.query("UPDATE coupon_codes SET status='used', used_by=$1, used_at=NOW() WHERE id=$2", [farmerId, coupon.rows[0].id]);
+      }
+    }
+    
+    // Check spin count
+    const spinCount = await pool.query(
+      'SELECT COUNT(*) FROM spin_results WHERE wheel_id=$1 AND farmer_id=$2',
+      [req.params.id, farmerId]
+    );
+    const used = parseInt(spinCount.rows[0].count);
+    const maxSpins = wheel.max_spins_per_farmer || 1;
+    
+    res.json({
+      farmer_id: farmerId,
+      farmer_name: farmer.rows[0].name,
+      phone: cleanPhone,
+      spins_used: used,
+      spins_remaining: Math.max(0, maxSpins - used),
+      max_spins: maxSpins
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Execute spin (server-side randomization - Digicides-style)
+app.post('/api/v1/public/spin-wheel/:id/spin', async (req, res) => {
+  try {
+    const { farmer_id, phone } = req.body;
+    if (!farmer_id) return res.status(400).json({ error: 'farmer_id is required' });
+    
+    // Get wheel
+    const w = await pool.query('SELECT * FROM spin_wheels WHERE id=$1 AND status=$2', [req.params.id, 'active']);
+    if (!w.rows.length) return res.status(404).json({ error: 'Campaign not found' });
+    const wheel = w.rows[0];
+    
+    // Check spins remaining
+    const spinCount = await pool.query('SELECT COUNT(*) FROM spin_results WHERE wheel_id=$1 AND farmer_id=$2', [req.params.id, farmer_id]);
+    if (parseInt(spinCount.rows[0].count) >= (wheel.max_spins_per_farmer || 1)) {
+      return res.status(400).json({ error: 'No spins remaining' });
+    }
+    
+    // Get segments
+    const segs = await pool.query(
+      'SELECT * FROM spin_wheel_segments WHERE wheel_id=$1 AND active=true ORDER BY sort_order',
+      [req.params.id]
+    );
+    if (!segs.rows.length) return res.status(500).json({ error: 'No segments configured' });
+    
+    // Weighted random selection based on probability
+    const segments = segs.rows;
+    let totalProb = segments.reduce((sum, s) => sum + parseFloat(s.probability || 0), 0);
+    let random = Math.random() * totalProb;
+    let selectedSegment = segments[segments.length - 1]; // fallback
+    
+    for (const seg of segments) {
+      random -= parseFloat(seg.probability || 0);
+      if (random <= 0) {
+        // Check max winners
+        if (seg.max_winners > 0 && seg.current_winners >= seg.max_winners) {
+          continue; // Skip if max winners reached, pick next
+        }
+        selectedSegment = seg;
+        break;
+      }
+    }
+    
+    // Record result
+    const refId = 'VRT-' + Date.now().toString(36).toUpperCase();
+    await pool.query(
+      `INSERT INTO spin_results (id, wheel_id, farmer_id, segment_id, prize_type, prize_value, status, created_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW())`,
+      [req.params.id, farmer_id, selectedSegment.id, selectedSegment.prize_type, selectedSegment.prize_value || 0,
+       selectedSegment.prize_type === 'better_luck' ? 'no_prize' : 'won']
+    );
+    
+    // Update winner count
+    await pool.query(
+      'UPDATE spin_wheel_segments SET current_winners = current_winners + 1 WHERE id=$1',
+      [selectedSegment.id]
+    );
+    
+    // Update budget spent
+    if (selectedSegment.prize_type === 'cash' && selectedSegment.prize_value) {
+      await pool.query(
+        'UPDATE spin_wheels SET spent_budget = COALESCE(spent_budget, 0) + $1 WHERE id=$2',
+        [selectedSegment.prize_value, req.params.id]
+      );
+    }
+    
+    // Award loyalty points if prize_type is 'points'
+    if (selectedSegment.prize_type === 'points' && selectedSegment.prize_value) {
+      const existing = await pool.query('SELECT * FROM farmer_loyalty WHERE farmer_id=$1', [farmer_id]);
+      if (existing.rows.length) {
+        await pool.query(
+          'UPDATE farmer_loyalty SET total_points=total_points+$1, available_points=available_points+$1, lifetime_points=lifetime_points+$1 WHERE farmer_id=$2',
+          [selectedSegment.prize_value, farmer_id]
+        );
+      } else {
+        await pool.query(
+          'INSERT INTO farmer_loyalty (farmer_id, total_points, available_points, lifetime_points) VALUES ($1,$2,$2,$2)',
+          [farmer_id, selectedSegment.prize_value]
+        );
+      }
+    }
+    
+    // Send WhatsApp notification
+    if (phone && selectedSegment.prize_type !== 'better_luck') {
+      try {
+        const gatewayUrl = process.env.GATEWAY_URL || 'https://vartmap-whatsapp-gateway.onrender.com';
+        const msg = `🎉 Congratulations! You won "${selectedSegment.label}" in the ${wheel.name} lucky draw!\n\nReference: ${refId}\nPrize will be credited within 24 hours.\n\n🌾 VartMap Krishi Sahayak`;
+        await axios.post(`${gatewayUrl}/api/v1/send-message`, { phone, message: msg });
+      } catch(e) { console.error('WhatsApp notification failed:', e.message); }
+    }
+    
+    res.json({
+      segment_id: selectedSegment.id,
+      label: selectedSegment.label,
+      prize_type: selectedSegment.prize_type,
+      prize_value: selectedSegment.prize_value,
+      color: selectedSegment.color,
+      reference_id: refId
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // ─── START SERVER ───
 app.listen(PORT, () => console.log(`VartMap Admin API running on port ${PORT}`));

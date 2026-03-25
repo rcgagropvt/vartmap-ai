@@ -5,6 +5,11 @@ const PORT = process.env.PORT || 3003;
 
 app.use(express.static(path.join(__dirname)));
 
+// Spin wheel public page
+app.get('/spin/:wheelId', (req, res) => {
+    res.sendFile(path.join(__dirname, 'spin.html'));
+});
+
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
