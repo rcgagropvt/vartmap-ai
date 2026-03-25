@@ -1614,7 +1614,8 @@ async function loadCoupons() {
                   '<button onclick="generateMoreCodes(' + "'" + c.id + "'" + ')" style="padding:4px 8px;background:#10b981;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;margin:2px">+Codes</button>' +
                   '<button onclick="exportCouponCodes(' + "'" + c.id + "'" + ')" style="padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;margin:2px">Export</button>' +
                   '<button onclick="toggleCouponStatus(' + "'" + c.id + "'" + ', ' + "'" + c.status + "'" + ')" style="padding:4px 8px;background:' + (c.status === 'active' ? '#f59e0b' : '#10b981') + ';color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;margin:2px">' + (c.status === 'active' ? 'Pause' : 'Activate') + '</button>' +
-                '</td></tr>';
+                '</td></tr>'
+           			 }).join('')}
           </tbody>
         </table>
       </div>` : '<div style="padding:40px;text-align:center;color:#6b7280">No coupon campaigns yet. Click "+ New Campaign" to create one.</div>'}
