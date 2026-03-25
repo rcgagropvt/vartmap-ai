@@ -1130,7 +1130,7 @@ async function uploadBulkSoil() {
 
 async function fetchSoilLive() {
   try {
-    const r = await fetch('https://vartmap-intelligence.onrender.com/api/v1/load-soil-data').then(r => r.json());
+    const r = await api('/api/v1/load-soil-data');
     alert(r.message + '\nStates: ' + r.states_covered.join(', '));
     loadSoilData();
   } catch (e) { alert('Error: ' + e.message); }
@@ -1185,7 +1185,7 @@ async function fetchSchemesLive() {
   const el = document.getElementById('schemeFetchResult');
   if (el) { el.style.display = 'block'; el.innerHTML = '<div style="padding:12px;background:var(--bg);border-radius:8px"><i class="fas fa-spinner fa-spin"></i> Loading schemes from government database...</div>'; }
   try {
-    const r = await fetch('https://vartmap-intelligence.onrender.com/api/v1/load-schemes').then(r => r.json());
+    const r = await api('/api/v1/load-schemes');
     if (el) el.innerHTML = `<div style="padding:12px;background:#E8F5E9;border-radius:8px;font-size:13px"><strong><i class="fas fa-check-circle" style="color:#2E7D32"></i> ${r.message}</strong></div>`;
     setTimeout(() => loadSchemes(), 1500);
   } catch (e) { if (el) el.innerHTML = '<div style="padding:12px;background:#FFEBEE;border-radius:8px">Error: ' + e.message + '</div>'; }
@@ -1316,10 +1316,10 @@ async function fetchMandiLive(state, commodity, limit) {
   const resultEl = document.getElementById('fetchResult');
   if (resultEl) { resultEl.style.display = 'block'; resultEl.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Fetching live prices from data.gov.in...</p>'; }
   try {
-    let url = `https://vartmap-intelligence.onrender.com/api/v1/fetch-mandi-prices?limit=${limit || 100}`;
+    let url = API + `/api/v1/fetch-mandi-prices?limit=${limit || 100}`;
     if (state) url += '&state=' + encodeURIComponent(state);
     if (commodity) url += '&commodity=' + encodeURIComponent(commodity);
-    const r = await fetch(url).then(r => r.json());
+    const r = await fetch(url, { headers: { 'Authorization': 'Bearer ' + TOKEN } }).then(r => r.json());
     if (resultEl) {
       resultEl.innerHTML = `<div style="padding:12px;background:#E8F5E9;border-radius:8px;font-size:13px">
         <strong><i class="fas fa-check-circle" style="color:#2E7D32"></i> ${r.message}</strong><br>

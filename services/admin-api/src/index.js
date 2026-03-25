@@ -837,6 +837,34 @@ app.post('/api/v1/admin-users', auth, async (req, res) => {
     res.json({ user: r.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+// ─── PROXY: Fetch Live Data from Intelligence Service ───
+const axios = require('axios');
+const INTEL_URL = process.env.INTELLIGENCE_SERVICE_URL || 'https://vartmap-intelligence.onrender.com';
+
+app.get('/api/v1/fetch-mandi-prices', auth, async (req, res) => {
+  try {
+    const { state, commodity, limit } = req.query;
+    let url = INTEL_URL + '/api/v1/fetch-mandi-prices?limit=' + (limit || 100);
+    if (state) url += '&state=' + encodeURIComponent(state);
+    if (commodity) url += '&commodity=' + encodeURIComponent(commodity);
+    const r = await axios.get(url, { timeout: 30000 });
+    res.json(r.data);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/v1/load-schemes', auth, async (req, res) => {
+  try {
+    const r = await axios.get(INTEL_URL + '/api/v1/load-schemes', { timeout: 30000 });
+    res.json(r.data);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/v1/load-soil-data', auth, async (req, res) => {
+  try {
+    const r = await axios.get(INTEL_URL + '/api/v1/load-soil-data', { timeout: 30000 });
+    res.json(r.data);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // ─── START SERVER ───
 app.listen(PORT, () => console.log(`VartMap Admin API running on port ${PORT}`));
