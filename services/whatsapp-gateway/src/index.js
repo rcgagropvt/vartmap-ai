@@ -268,39 +268,23 @@ const couponMatch = msgBody.trim().match(/^[A-Z0-9]{6,20}$/i);
 if (couponMatch) {
   try {
     const adminApiUrl = process.env.ADMIN_API_URL || 'https://vartmap-admin-api.onrender.com';
-    const validateResp = await fetch(`${adminApiUrl}/api/v1/coupons/validate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: couponMatch[0] })
-    });
-    const validateData = await validateResp.json();
-
-    if (validateResp.ok && validateData.valid) {
-      // Auto-redeem the code
-      const redeemResp = await fetch(`${adminApiUrl}/api/v1/coupons/redeem-geo`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: couponMatch[0], phone: from.replace("@s.whatsapp.net","") })
-      });
-      const redeemData = await redeemResp.json();
-
-      if (redeemResp.ok && redeemData.redeemed) {
-        const discountText = redeemData.discount_type === 'percentage' ? redeemData.discount_value + '% discount' :
-                             redeemData.discount_type === 'points' ? redeemData.discount_value + ' loyalty points' :
-                             'Rs.' + redeemData.discount_value + ' discount';
-        replyMessage = `✅ *Coupon Redeemed Successfully!*\n\n🎫 Code: *${couponMatch[0].toUpperCase()}*\n🎁 Reward: ${discountText}\n📦 Campaign: ${redeemData.campaign_name}\n\nYour reward has been applied. Thank you! 🌾`;
+    const validateResp = await axios.post(`${adminApiUrl}/api/v1/coupons/validate`, { code: couponMatch[0] });
+    const validateData = validateResp.data;
+    if (validateData.valid) {
+      const redeemResp = await axios.post(`${adminApiUrl}/api/v1/coupons/redeem-geo`, { code: couponMatch[0], phone: from.replace("@s.whatsapp.net","") });
+      const redeemData = redeemResp.data;
+      let couponReply;
+      if (redeemData.redeemed) {
+        const discountText = redeemData.discount_type === 'percentage' ? redeemData.discount_value + '% discount' : redeemData.discount_type === 'points' ? redeemData.discount_value + ' loyalty points' : 'Rs.' + redeemData.discount_value + ' discount';
+        couponReply = `Coupon Redeemed! Code: ${couponMatch[0].toUpperCase()} | Reward: ${discountText} | Campaign: ${redeemData.campaign_name}. Thank you!`;
       } else {
-        replyMessage = `⚠️ This code *${couponMatch[0].toUpperCase()}* ${redeemData.error || 'could not be redeemed'}. Please check and try again.`;
+        couponReply = `This code ${couponMatch[0].toUpperCase()} ${redeemData.error || 'could not be redeemed'}. Please check and try again.`;
       }
-
-      // Send the reply and skip further processing
-      await sendWhatsAppMessage(from, replyMessage);
+      await sendWhatsAppMessage(from, couponReply);
       return res.sendStatus(200);
     }
-    // If not a valid coupon, fall through to normal message processing
   } catch (e) {
     console.log('Coupon validation error:', e.message);
-    // Fall through to normal processing
   }
 }
           // 4. Auto-reply
