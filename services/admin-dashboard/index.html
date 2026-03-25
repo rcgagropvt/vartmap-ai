@@ -1193,15 +1193,6 @@ async function createSpinWheel() {
 async function activateWheel(id) { await api('/api/v1/spin-wheels/' + id, { method: 'PUT', body: JSON.stringify({ status: 'active' }) }); loadSpinWheels(); }
 async function pauseWheel(id) { await api('/api/v1/spin-wheels/' + id, { method: 'PUT', body: JSON.stringify({ status: 'paused' }) }); loadSpinWheels(); }
 
-async function viewWheelResults(id, name) {
-  const d = await api('/api/v1/spin-wheels/' + id + '/results');
-  openModal('Spin Results: ' + name, `
-    <table><tr><th>Farmer</th><th>Phone</th><th>Prize</th><th>Value</th><th>Status</th><th>Date</th></tr>
-    ${d.results.map(r => `<tr><td>${r.farmer_name}</td><td>${r.farmer_phone}</td><td>${r.prize_label}</td><td>₹${r.prize_value}</td><td><span class="status ${r.status}">${r.status}</span></td><td>${fmtDate(r.created_at)}</td></tr>`).join('')}
-    </table>
-    ${!d.results.length ? '<div class="empty"><p>No results yet</p></div>' : ''}
-  `);
-}
 
 // ─── 8. LOYALTY ───
 async function loadLoyalty() {
