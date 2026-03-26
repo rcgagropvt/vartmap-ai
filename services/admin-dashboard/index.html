@@ -273,7 +273,7 @@ let USER = JSON.parse(localStorage.getItem('vartmap_user') || 'null');
 let currentPage = 'overview';
 let currentChat = null;
 
-// â”€â”€â”€ AUTH â”€â”€â”€
+// ------
 function doLogin() {
   const email = document.getElementById('loginEmail').value;
   const pass = document.getElementById('loginPass').value;
@@ -313,7 +313,7 @@ function api(path, opts = {}) {
   }).then(r => r.json());
 }
 
-// â”€â”€â”€ NAVIGATION â”€â”€â”€
+// ------
 function navigate(page) {
   currentPage = page;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -357,7 +357,7 @@ function timeAgo(d) {
 }
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '-'; }
 
-// â”€â”€â”€ 1. OVERVIEW â”€â”€â”€
+// ------
 async function loadOverview() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
@@ -380,7 +380,7 @@ async function loadOverview() {
   } catch (e) { el.innerHTML = '<div class="empty"><i class="fas fa-exclamation-triangle"></i><p>Error loading dashboard</p></div>'; }
 }
 
-// â”€â”€â”€ 2. WHATSAPP CHAT â”€â”€â”€
+// ------
 async function loadChats() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading chats...</p></div>';
@@ -397,7 +397,7 @@ async function loadChats() {
           ${d.chats.length ? d.chats.map(c => `
             <div class="chat-item" id="chat-${c.id}" onclick="openChatSession('${c.id}')">
               <div class="chat-name"><span>${c.farmer_name || 'Unknown'}</span><span style="font-size:11px;color:var(--text-light)">${timeAgo(c.last_message_at)}</span></div>
-              <div class="chat-preview">${c.farmer_phone || ''} Â· ${c.village || ''}</div>
+              <div class="chat-preview">${c.farmer_phone || ''} | ${c.village || ''}</div>
               <div class="chat-meta">
                 <span class="status ${c.status}">${c.status}</span>
                 ${c.unread_count > 0 ? `<span class="unread">${c.unread_count}</span>` : ''}
@@ -491,7 +491,7 @@ function searchChats(q) {
   });
 }
 
-// â”€â”€â”€ 3. FARMERS â”€â”€â”€
+// ------
 async function loadFarmers() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
@@ -598,7 +598,7 @@ async function startChatWithFarmer(farmerId) {
   navigate('chats');
 }
 
-// â”€â”€â”€ 4. CONVERSATIONS â”€â”€â”€
+// ------
 async function loadConversations() {
   const el = document.getElementById('pageContent');
   try {
@@ -613,7 +613,7 @@ async function loadConversations() {
   } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
 }
 
-// â”€â”€â”€ 5. TEMPLATES â”€â”€â”€
+// ------
 async function loadTemplates() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
@@ -686,7 +686,7 @@ async function updateTemplate(id) {
 
 async function deleteTemplate(id) { if (confirm('Delete this template?')) { await api('/api/v1/templates/' + id, { method: 'DELETE' }); loadTemplates(); } }
 
-// â”€â”€â”€ 6. CAMPAIGNS â”€â”€â”€
+// ------
 async function loadCampaigns() {
   const el = document.getElementById('pageContent');
   try {
@@ -735,8 +735,8 @@ async function createCampaign() {
 }
 
 async function updateCampaignStatus(id, status) { await api('/api/v1/campaigns/' + id, { method: 'PUT', body: JSON.stringify({ status }) }); loadCampaigns(); }
-// â”€â”€â”€ 7. SPIN WHEELS â”€â”€â”€
-// â”€â”€â”€ 7. SPIN WHEELS â”€â”€â”€
+// ------
+// ------
 async function loadSpinWheels() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
@@ -761,9 +761,9 @@ async function loadSpinWheels() {
             <h3 style="font-size:18px;margin-bottom:4px">${w.name} <span class="status ${w.status}">${w.status}</span></h3>
             <p style="font-size:13px;color:var(--text-light)">${w.description || ''}</p>
             <div style="font-size:12px;color:var(--text-light);margin-top:6px">
-              <i class="fas fa-calendar"></i> ${fmtDate(w.start_date)} â†’ ${fmtDate(w.end_date)} Â· 
+              <i class="fas fa-calendar"></i> ${fmtDate(w.start_date)} - ${fmtDate(w.end_date)} |
               <i class="fas fa-sync"></i> Max ${w.max_spins_per_farmer} spin/farmer Â· 
-              <i class="fas fa-wallet"></i> Budget: â‚¹${w.total_budget} (Spent: â‚¹${w.spent_budget || 0})
+              <i class="fas fa-wallet"></i> Budget: Rs.${w.total_budget} (Spent: Rs.${w.spent_budget || 0})
             </div>
           </div>
           <div class="flex gap-10 flex-wrap">
@@ -790,7 +790,7 @@ async function loadSpinWheels() {
                   <div class="segment-color" style="background:${s.color}"></div>
                   <div class="segment-info" style="flex:1">
                     <strong>${s.label}</strong>
-                    <small>${s.prize_type} Â· â‚¹${s.prize_value} Â· Prob: ${(s.probability * 100).toFixed(1)}%</small>
+                    <small>${s.prize_type} | Rs.${s.prize_value} | Prob: ${(s.probability * 100).toFixed(1)}%</small>
                   </div>
                   <div style="text-align:right;font-size:12px">
                     <div style="font-weight:700;color:${s.current_winners >= (s.max_winners||9999) ? 'var(--danger)' : 'var(--primary)'}">${s.current_winners}/${s.max_winners || 'âˆž'}</div>
@@ -854,7 +854,7 @@ function drawWheel(canvasId, segments) {
     ctx.save(); ctx.translate(cx, cy); ctx.rotate(start + arc / 2);
     ctx.fillStyle = '#fff'; ctx.font = 'bold 11px Inter'; ctx.textAlign = 'center';
     ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 3;
-    ctx.fillText(s.label.replace(/[ðŸŽ‰ðŸŽâ­ðŸ·ï¸ðŸ€]/g,'').trim().substring(0, 14), r * 0.65, 4);
+    ctx.fillText(s.label.replace(/[^\x20-\x7E]/g,'').trim().substring(0, 14), r * 0.65, 4);
     ctx.restore();
   });
   
@@ -932,7 +932,7 @@ function testSpinWheel(wheelId) {
         setTimeout(() => {
           segItems[winIdx].style.background = '';
           segItems[winIdx].style.transform = '';
-          alert('ðŸŽ‰ Test Result: ' + label + '\n\n(This is a test spin - no actual prize awarded)');
+          alert(' Test Result: ' + label + '\n\n(This is a test spin - no actual prize awarded)');
         }, 500);
       }
     }
@@ -1004,10 +1004,10 @@ function shareWheelLink(wheelId) {
     <div style="margin-top:16px">
       <h4 style="margin-bottom:8px">WhatsApp Message Template:</h4>
       <div style="padding:14px;background:#DCF8C6;border-radius:10px;font-size:13px">
-        ðŸŽ‰ <strong>Kisan Lucky Draw!</strong><br><br>
+         <strong>Kisan Lucky Draw!</strong><br><br>
         Spin the wheel and win exciting prizes!<br>
-        ðŸ’° Cash prizes up to â‚¹500<br>
-        â­ Loyalty points<br>
+         Cash prizes up to Rs.500<br>
+        � Loyalty points<br>
         ðŸ·ï¸ Discount coupons<br><br>
         ðŸ‘‰ Spin now: ${link}<br><br>
         ðŸ™ VartMap Krishi Sahayak
@@ -1365,7 +1365,7 @@ async function deliverRedemption(id) {
 }
 
 
-// â”€â”€â”€ PRIZE FULFILLMENT â”€â”€â”€
+// ------
 async function viewWheelResults(wheelId, wheelName) {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading prizes...</p></div>';
@@ -1544,7 +1544,7 @@ async function createSpinWheel() {
 async function activateWheel(id) { await api('/api/v1/spin-wheels/' + id, { method: 'PUT', body: JSON.stringify({ status: 'active' }) }); loadSpinWheels(); }
 async function pauseWheel(id) { await api('/api/v1/spin-wheels/' + id, { method: 'PUT', body: JSON.stringify({ status: 'paused' }) }); loadSpinWheels(); }
 
-// â”€â”€â”€ 9. COUPONS â”€â”€â”€
+// ------
 async function loadCoupons() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div style="padding:40px;text-align:center"><div class="spinner"></div><p>Loading Coupon Codes...</p></div>';
@@ -2414,7 +2414,7 @@ async function generateReferralCode() {
   } catch(e) { alert('Error: ' + e.message); }
 }
 
-// â”€â”€â”€ 12. SOIL DATA â”€â”€â”€
+// ------
 async function loadSoilData() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
@@ -2530,7 +2530,7 @@ async function fetchSoilLive() {
   } catch (e) { alert('Error: ' + e.message); }
 }
 
-// â”€â”€â”€ 13. SCHEMES â”€â”€â”€
+// ------
 async function loadSchemes() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
@@ -2625,7 +2625,7 @@ async function updateScheme(id) {
   closeModal(); loadSchemes();
 }
 
-// â”€â”€â”€ 14. PRODUCTS â”€â”€â”€
+// ------
 async function loadProducts() {
   const el = document.getElementById('pageContent');
   try {
@@ -2662,7 +2662,7 @@ async function createProduct() {
   closeModal(); loadProducts();
 }
 
-// â”€â”€â”€ 15. MANDI PRICES â”€â”€â”€
+// ------
 async function loadMandi() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
@@ -2763,7 +2763,7 @@ async function createMandiPrice() {
   closeModal(); loadMandi();
 }
 
-// â”€â”€â”€ 16. DEALERS â”€â”€â”€
+// ------
 async function loadDealers() {
   const el = document.getElementById('pageContent');
   try {
@@ -2793,7 +2793,7 @@ async function createDealer() {
   closeModal(); loadDealers();
 }
 
-// â”€â”€â”€ 17. FIELD AGENTS â”€â”€â”€
+// ------
 async function loadFieldAgents() {
   const el = document.getElementById('pageContent');
   try {
@@ -2823,7 +2823,7 @@ async function createAgent() {
   closeModal(); loadFieldAgents();
 }
 
-// â”€â”€â”€ 18. ORDERS â”€â”€â”€
+// ------
 async function loadOrders() {
   const el = document.getElementById('pageContent');
   try {
@@ -2838,7 +2838,7 @@ async function loadOrders() {
   } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
 }
 
-// â”€â”€â”€ 19. MODERATION â”€â”€â”€
+// ------
 async function loadModeration() {
   const el = document.getElementById('pageContent');
   try {
@@ -2857,7 +2857,7 @@ async function loadModeration() {
 
 async function modAction(id, action) { await api('/api/v1/moderation/' + id + '/action', { method: 'POST', body: JSON.stringify({ action }) }); loadModeration(); }
 
-// â”€â”€â”€ 20. NOTIFICATIONS â”€â”€â”€
+// ------
 async function loadNotifications() {
   const el = document.getElementById('pageContent');
   try {
@@ -2872,7 +2872,7 @@ async function loadNotifications() {
   } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
 }
 
-// â”€â”€â”€ 21. ANALYTICS â”€â”€â”€
+// ------
 async function loadAnalytics() {
   const el = document.getElementById('pageContent');
   try {
@@ -2920,7 +2920,7 @@ function showAnalyticsTab(tabId, el) {
   document.getElementById('usageTab').style.display = tabId === 'usageTab' ? 'block' : 'none';
 }
 
-// â”€â”€â”€ 22. SERVICES â”€â”€â”€
+// ------
 async function loadServices() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="stats-grid">' + SVCS.map(s => `<div class="stat-card" id="svc-${s.name.replace(/\s/g,'')}"><div class="stat-icon"><i class="fas fa-spinner fa-spin"></i></div><div class="stat-value">${s.name}</div><div class="stat-label">Checking...</div></div>`).join('') + '</div>';
@@ -2938,7 +2938,7 @@ async function loadServices() {
   }
 }
 
-// â”€â”€â”€ 23. ADMIN USERS â”€â”€â”€
+// ------
 async function loadAdminUsers() {
   const el = document.getElementById('pageContent');
   try {
@@ -2968,7 +2968,7 @@ async function createAdmin() {
   closeModal(); loadAdminUsers();
 }
 
-// â”€â”€â”€ 24. AUDIT LOG â”€â”€â”€
+// ------
 async function loadAuditLog() {
   const el = document.getElementById('pageContent');
   try {
@@ -2984,7 +2984,7 @@ async function loadAuditLog() {
   } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
 }
 
-// â”€â”€â”€ INIT â”€â”€â”€
+// ------
 if (TOKEN && USER) showApp();
 </script>
 </body>
