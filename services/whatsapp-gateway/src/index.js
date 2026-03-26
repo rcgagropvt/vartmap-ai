@@ -37,12 +37,16 @@ try {
     redis.on('connect', () => console.log('Redis connected'));
   }
 } catch (e) { console.log('Redis not available:', e.message); }
-
-// --- GEMINI AI ---
+// --- AI SETUP (Gemini + Groq fallback) ---
 const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
+let groqClient = null;
+if (process.env.GROQ_API_KEY) {
+  const Groq = require('groq-sdk');
+  groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY });
+}
 let catalogCache = null;
 let catalogCacheTime = 0;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 5 * 60 * 1000;
 
 async function getProductCatalog() {
   const now = Date.now();
@@ -61,67 +65,21 @@ async function getProductCatalog() {
 
 function buildSystemPrompt(catalog, farmer, language) {
   const productList = (catalog.products || []).map(p =>
-    `- ${p.product_name} (${p.product_code}): ${p.composition}. Crops: ${(p.target_crops || []).join(', ')}. ${p.benefits || ''} Dosage: ${p.dosage_per_acre || 'as per soil test'}`
+    '- ' + p.product_name + ' (' + (p.product_code || '') + '): ' + (p.composition || '') + '. Crops: ' + (p.target_crops || []).join(', ') + '. ' + (p.benefits || '') + ' Dosage: ' + (p.dosage_per_acre || 'as per soil test')
   ).join('\n');
-
   const recoList = (catalog.recommendations || []).map(r =>
-    `- ${r.crop_name} / ${r.growth_stage} (${r.days_range || ''}): Use ${r.product_name} - ${r.dosage}. Method: ${r.application_method || 'soil application'}`
+    '- ' + r.crop_name + ' / ' + r.growth_stage + ' (' + (r.days_range || '') + '): Use ' + r.product_name + ' - ' + r.dosage + '. Method: ' + (r.application_method || 'soil application')
   ).join('\n');
-
   const langInstruction = language === 'hi'
     ? 'Respond in Hindi (Devanagari script). If the farmer writes in English, still reply in Hindi unless they explicitly ask for English.'
-    : language === 'en'
-    ? 'Respond in English.'
     : 'Detect the language the farmer is using and respond in the same language. If mixed Hindi-English (Hinglish), respond in Hindi.';
-
-  return `You are "VartMap Krishi Sahayak" - an AI agricultural assistant for Indian farmers, powered by Vartmaan Fertilizers (RCG Agro Private Limited).
-
-ROLE:
-- You are a helpful, knowledgeable agricultural advisor who speaks like a friendly local expert
-- You recommend Vartmaan Fertilizers products when relevant (never push products unnecessarily)
-- You help with crop advice, soil health, pest/disease identification, weather guidance, government schemes, and mandi prices
-- Keep responses concise (under 300 words) since this is WhatsApp - use short paragraphs, not long essays
-- Use simple language that farmers understand
-
-LANGUAGE:
-${langInstruction}
-
-FARMER CONTEXT:
-- Name: ${farmer.name || 'Kisan'}
-- Phone: ${farmer.phone || 'unknown'}
-- Village: ${farmer.village || 'unknown'}
-- State: ${farmer.state || 'unknown'}
-- Primary Crop: ${farmer.primary_crop || 'unknown'}
-- Soil Type: ${farmer.soil_type || 'unknown'}
-
-VARTMAAN FERTILIZERS PRODUCT CATALOG:
-${productList || 'No products loaded'}
-
-CROP-SPECIFIC RECOMMENDATIONS:
-${recoList || 'No specific recommendations loaded'}
-
-GUIDELINES:
-1. When a farmer mentions a crop + problem/stage, recommend the most relevant Vartmaan product with exact dosage
-2. For zinc deficiency: recommend VARTIZIN products
-3. For iron deficiency/chlorosis: recommend VARTIFER products  
-4. For sugarcane: recommend VARTIMIX Ganna Special 10%
-5. For general micronutrient needs: recommend VARTIMIX Multi-Crop 6% or Balshali 4%
-6. For premium/alkaline soil needs: recommend Kavach (chelated) variants
-7. If you do not know something, say so honestly - do not make up information
-8. For pest/disease images, describe what you see and suggest treatment
-9. Always be respectful and address the farmer warmly
-10. If asked about prices, say "Please contact your nearest dealer or call our helpline"
-11. Do not discuss competitor products by name
-12. For emergency pest attacks, advise contacting local Krishi Vigyan Kendra (KVK)`;
+  return 'You are "VartMap Krishi Sahayak" - an AI agricultural assistant for Indian farmers, powered by Vartmaan Fertilizers (RCG Agro Private Limited).\n\nROLE:\n- You are a helpful, knowledgeable agricultural advisor who speaks like a friendly local expert\n- You recommend Vartmaan Fertilizers products when relevant (never push products unnecessarily)\n- You help with crop advice, soil health, pest/disease identification, weather guidance, government schemes, and mandi prices\n- Keep responses concise (under 300 words) since this is WhatsApp - use short paragraphs, not long essays\n- Use simple language that farmers understand\n\nLANGUAGE:\n' + langInstruction + '\n\nFARMER CONTEXT:\n- Name: ' + (farmer.name || 'Kisan') + '\n- Phone: ' + (farmer.phone || 'unknown') + '\n- Village: ' + (farmer.village || 'unknown') + '\n- State: ' + (farmer.state || 'unknown') + '\n- Primary Crop: ' + (farmer.primary_crop || 'unknown') + '\n- Soil Type: ' + (farmer.soil_type || 'unknown') + '\n\nVARTMAAN FERTILIZERS PRODUCT CATALOG:\n' + (productList || 'No products loaded') + '\n\nCROP-SPECIFIC RECOMMENDATIONS:\n' + (recoList || 'No specific recommendations loaded') + '\n\nGUIDELINES:\n1. When a farmer mentions a crop + problem/stage, recommend the most relevant Vartmaan product with exact dosage\n2. For zinc deficiency: recommend VARTIZIN products\n3. For iron deficiency/chlorosis: recommend VARTIFER products\n4. For sugarcane: recommend VARTIMIX Ganna Special 10%\n5. For general micronutrient needs: recommend VARTIMIX Multi-Crop 6% or Balshali 4%\n6. For premium/alkaline soil needs: recommend Kavach (chelated) variants\n7. If you do not know something, say so honestly - do not make up information\n8. For pest/disease images, describe what you see and suggest treatment\n9. Always be respectful and address the farmer warmly\n10. If asked about prices, say "Please contact your nearest dealer or call our helpline"\n11. Do not discuss competitor products by name\n12. For emergency pest attacks, advise contacting local Krishi Vigyan Kendra (KVK)';
 }
 
 async function getChatHistory(farmerId, limit) {
   if (!pool) return [];
   try {
-    const r = await pool.query(
-      'SELECT role, content FROM ai_chat_history WHERE farmer_id=$1 ORDER BY created_at DESC LIMIT $2',
-      [farmerId, limit || 10]
-    );
+    const r = await pool.query('SELECT role, content FROM ai_chat_history WHERE farmer_id=$1 ORDER BY created_at DESC LIMIT $2', [farmerId, limit || 10]);
     return r.rows.reverse();
   } catch (e) { return []; }
 }
@@ -129,85 +87,123 @@ async function getChatHistory(farmerId, limit) {
 async function saveChatHistory(farmerId, sessionId, role, content, lang, model) {
   if (!pool) return;
   try {
-    await pool.query(
-      'INSERT INTO ai_chat_history (id, farmer_id, session_id, role, content, language, model, created_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW())',
-      [farmerId, sessionId, role, content, lang || 'hi', model || 'gemini-2.0-flash']
-    );
+    await pool.query('INSERT INTO ai_chat_history (id, farmer_id, session_id, role, content, language, model, created_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW())', [farmerId, sessionId, role, content, lang || 'hi', model || 'gemini']);
   } catch (e) { console.error('Save chat history error:', e.message); }
 }
 
+async function getGroqResponse(systemPrompt, history, messageText) {
+  if (!groqClient) return null;
+  try {
+    const messages = [{ role: 'system', content: systemPrompt }];
+    for (const h of history) {
+      messages.push({ role: h.role === 'assistant' ? 'assistant' : 'user', content: h.content });
+    }
+    messages.push({ role: 'user', content: messageText });
+    const completion = await groqClient.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages: messages,
+      max_tokens: 1024,
+      temperature: 0.7
+    });
+    return completion.choices[0]?.message?.content || null;
+  } catch (e) {
+    console.error('Groq error:', e.message);
+    return null;
+  }
+}
+
+async function getGeminiResponse(systemPrompt, history, userParts, modelName) {
+  if (!genAI) return null;
+  try {
+    const model = genAI.getGenerativeModel({ model: modelName || 'gemini-2.5-flash-lite' });
+    const chatMessages = [];
+    chatMessages.push({ role: 'user', parts: [{ text: 'System instructions: ' + systemPrompt }] });
+    chatMessages.push({ role: 'model', parts: [{ text: 'Understood. I am VartMap Krishi Sahayak, ready to help farmers.' }] });
+    for (const h of history) {
+      chatMessages.push({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: h.content }] });
+    }
+    chatMessages.push({ role: 'user', parts: userParts });
+    const chat = model.startChat({ history: chatMessages.slice(0, -1) });
+    const result = await chat.sendMessage(userParts);
+    return result.response.text();
+  } catch (e) {
+    console.error('Gemini (' + (modelName || 'gemini-2.5-flash-lite') + ') error:', e.message);
+    return null;
+  }
+}
+
 async function getAIResponse(farmerId, sessionId, farmer, messageText, messageType, mediaUrl) {
-  if (!genAI) {
+  if (!genAI && !groqClient) {
     return 'AI service is not configured. Our team will respond shortly.';
   }
-
   try {
     const catalog = await getProductCatalog();
     const detectedLang = /[\u0900-\u097F]/.test(messageText) ? 'hi' : 'en';
     const systemPrompt = buildSystemPrompt(catalog, farmer, detectedLang);
     const history = await getChatHistory(farmerId, 8);
+    let response = null;
+    let modelUsed = 'unknown';
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
-    const chatMessages = [];
-    chatMessages.push({ role: 'user', parts: [{ text: 'System instructions: ' + systemPrompt }] });
-    chatMessages.push({ role: 'model', parts: [{ text: 'Understood. I am VartMap Krishi Sahayak, ready to help farmers with agricultural advice and Vartmaan Fertilizers product recommendations.' }] });
-
-    for (const h of history) {
-      chatMessages.push({
-        role: h.role === 'user' ? 'user' : 'model',
-        parts: [{ text: h.content }]
-      });
-    }
-
-    let userParts = [];
-
-    if (messageType === 'image' && mediaUrl) {
+    // For image/voice: must use Gemini (multimodal)
+    if ((messageType === 'image' || messageType === 'audio') && mediaUrl) {
+      let userParts = [];
       try {
-        const imgResp = await axios.get(mediaUrl, {
+        const mediaResp = await axios.get(mediaUrl, {
           headers: { 'Authorization': 'Bearer ' + process.env.WA_ACCESS_TOKEN },
           responseType: 'arraybuffer'
         });
-        const base64 = Buffer.from(imgResp.data).toString('base64');
-        const mimeType = imgResp.headers['content-type'] || 'image/jpeg';
+        const base64 = Buffer.from(mediaResp.data).toString('base64');
+        const mimeType = mediaResp.headers['content-type'] || (messageType === 'image' ? 'image/jpeg' : 'audio/ogg');
         userParts.push({ inlineData: { data: base64, mimeType: mimeType } });
-        userParts.push({ text: messageText || 'Please analyze this crop/plant image. Identify any disease, pest damage, or nutrient deficiency. Recommend treatment using Vartmaan Fertilizers products if applicable.' });
-      } catch (imgErr) {
-        console.error('Image download error:', imgErr.message);
-        userParts.push({ text: messageText || 'The farmer sent an image but I could not load it. Please ask them to describe the problem.' });
+        if (messageType === 'image') {
+          userParts.push({ text: messageText || 'Please analyze this crop/plant image. Identify any disease, pest damage, or nutrient deficiency. Recommend treatment using Vartmaan Fertilizers products if applicable.' });
+        } else {
+          userParts.push({ text: 'The farmer sent a voice message. Listen to it, understand their question (may be in Hindi or another Indian language), and respond helpfully in the same language.' });
+        }
+      } catch (mediaErr) {
+        console.error('Media download error:', mediaErr.message);
+        userParts = [{ text: messageText || 'The farmer sent media but it could not be loaded. Ask them to describe the problem in text.' }];
       }
-    } else if (messageType === 'audio' && mediaUrl) {
-      try {
-        const audioResp = await axios.get(mediaUrl, {
-          headers: { 'Authorization': 'Bearer ' + process.env.WA_ACCESS_TOKEN },
-          responseType: 'arraybuffer'
-        });
-        const base64 = Buffer.from(audioResp.data).toString('base64');
-        const mimeType = audioResp.headers['content-type'] || 'audio/ogg';
-        userParts.push({ inlineData: { data: base64, mimeType: mimeType } });
-        userParts.push({ text: 'The farmer sent a voice message. Please listen to it, understand their question (it may be in Hindi, Marathi, Telugu, Tamil, or another Indian language), and respond helpfully in the same language they spoke.' });
-      } catch (audioErr) {
-        console.error('Audio download error:', audioErr.message);
-        userParts.push({ text: 'The farmer sent a voice note but I could not load it. Ask them to type their question instead.' });
+      // Try Gemini models in order for multimodal
+      response = await getGeminiResponse(systemPrompt, history, userParts, 'gemini-2.5-flash-lite');
+      modelUsed = 'gemini-2.5-flash-lite';
+      if (!response) {
+        response = await getGeminiResponse(systemPrompt, history, userParts, 'gemini-2.0-flash');
+        modelUsed = 'gemini-2.0-flash';
+      }
+      if (!response) {
+        response = await getGeminiResponse(systemPrompt, history, userParts, 'gemini-2.5-flash');
+        modelUsed = 'gemini-2.5-flash';
       }
     } else {
-      userParts.push({ text: messageText });
+      // Text messages: try Gemini first, then Groq fallback
+      const userParts = [{ text: messageText }];
+      response = await getGeminiResponse(systemPrompt, history, userParts, 'gemini-2.5-flash-lite');
+      modelUsed = 'gemini-2.5-flash-lite';
+      if (!response) {
+        response = await getGeminiResponse(systemPrompt, history, userParts, 'gemini-2.0-flash');
+        modelUsed = 'gemini-2.0-flash';
+      }
+      if (!response) {
+        console.log('Gemini exhausted, trying Groq...');
+        response = await getGroqResponse(systemPrompt, history, messageText);
+        modelUsed = 'groq-llama-3.3-70b';
+      }
     }
 
-    chatMessages.push({ role: 'user', parts: userParts });
+    if (!response) {
+      return 'Maaf kijiye, abhi humara AI system busy hai. Kripya thodi der baad dobara try karein ya "help" type karein.';
+    }
 
-    const chat = model.startChat({ history: chatMessages.slice(0, -1) });
-    const result = await chat.sendMessage(userParts);
-    const response = result.response.text();
-
-    await saveChatHistory(farmerId, sessionId, 'user', messageText || '[media]', detectedLang, 'gemini-2.0-flash');
-    await saveChatHistory(farmerId, sessionId, 'assistant', response, detectedLang, 'gemini-2.0-flash');
-
+    await saveChatHistory(farmerId, sessionId, 'user', messageText || '[media]', detectedLang, modelUsed);
+    await saveChatHistory(farmerId, sessionId, 'assistant', response, detectedLang, modelUsed);
+    console.log('AI response via ' + modelUsed + ' (' + response.length + ' chars)');
     return response;
   } catch (e) {
     console.error('AI response error:', e.message);
     return 'Sorry, I could not process your request right now. Please try again or type "help" for options.';
   }
+}
 }
 
 // --- WHATSAPP SEND ---
