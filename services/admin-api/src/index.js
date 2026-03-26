@@ -2175,8 +2175,6 @@ app.post('/api/v1/public/referrals/redeem', async (req, res) => {
     res.json({ message: 'Referral successful', referrer_points: referrerBonus, referee_points: refereeBonus, farmer: newFarmer.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
-@'
-// ─── BRAND PRODUCT CATALOG ───
 
 app.get('/api/v1/catalog/products', auth, async (req, res) => {
   try {
@@ -2304,6 +2302,5 @@ app.get('/api/v1/catalog/ai-context', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-'@ | Set-Content "C:\Users\devas\OneDrive\Desktop\vartmap\temp-catalog.js" -Encoding UTF8
 // ─── START SERVER ───
 app.listen(PORT, () => console.log(`VartMap Admin API running on port ${PORT}`));
