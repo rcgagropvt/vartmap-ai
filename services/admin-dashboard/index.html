@@ -533,9 +533,157 @@ async function searchFarmers() {
 async function viewFarmer(id) {
   const d = await api('/api/v1/farmers/' + id);
   const f = d.farmer;
-  openModal('Farmer Details', `
+  const crops = Array.isArray(f.crops) ? f.crops.join(', ') : (f.crops || '-');
+  const joinDate = f.created_at ? new Date(f.created_at).toLocaleDateString('en-IN') : '-';
+  const lastActive = f.last_interaction_at ? new Date(f.last_interaction_at).toLocaleString('en-IN') : 'Never';
+  const tierName = d.loyalty?.tier || 'None';
+  const loyaltyPts = f.loyalty_points || 0;
+  const lifetimePts = f.lifetime_points || 0;
+
+  // Fetch chat sessions for this farmer
+  let chatHtml = '<p style="color:var(--text-secondary)">No conversations yet</p>';
+  try {
+    const chatsData = await api('/api/v1/chats?search=' + f.phone + '&limit=10');
+    const chats = chatsData.chats || [];
+    if (chats.length > 0) {
+      chatHtml = '<div id="farmerChatList" style="max-height:200px;overflow-y:auto">' + chats.map(c => 
+        '<div onclick="loadFarmerChat(\'' + c.id + '\',\'' + id + '\')" style="padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;cursor:pointer;transition:background 0.2s" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'transparent\'">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center">' +
+        '<span style="font-weight:600"><i class="fas fa-comments" style="color:var(--primary);margin-right:6px"></i>Session ' + c.status + '</span>' +
+        '<span style="font-size:12px;color:var(--text-secondary)">' + new Date(c.last_message_at).toLocaleString('en-IN') + '</span>' +
+        '</div></div>'
+      ).join('') + '</div>';
+    }
+  } catch(e) { console.log('Chat fetch error:', e); }
+
+  const spinHtml = (d.spin_history || []).length > 0 
+    ? d.spin_history.map(s => '<span class="tag" style="margin:2px">' + (s.prize_type === 'better_luck' ? 'Better Luck' : (s.prize_label || s.prize_type)) + ': ₹' + s.prize_value + '</span>').join('')
+    : '<span style="color:var(--text-secondary)">No spins yet</span>';
+
+  const profileHtml = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+      <!-- LEFT: Profile Info -->
+      <div>
+        <div style="text-align:center;padding:20px;background:linear-gradient(135deg,var(--primary),#2d8a4e);border-radius:12px;color:#fff;margin-bottom:16px">
+          <div style="width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:28px;font-weight:700">${(f.name || 'K')[0].toUpperCase()}</div>
+          <h3 style="margin:0;color:#fff">${f.name || 'Unknown'}</h3>
+          <p style="margin:4px 0;opacity:0.9"><i class="fas fa-phone"></i> +${f.phone}</p>
+          <div style="display:flex;justify-content:center;gap:12px;margin-top:12px">
+            <span style="background:rgba(255,255,255,0.2);padding:4px 12px;border-radius:20px;font-size:12px"><i class="fas fa-star"></i> ${tierName}</span>
+            <span style="background:rgba(255,255,255,0.2);padding:4px 12px;border-radius:20px;font-size:12px">${f.onboarding_stage || 'unknown'}</span>
+          </div>
+        </div>
+
+        <div style="background:var(--bg);padding:16px;border-radius:10px;margin-bottom:12px">
+          <h4 style="margin:0 0 12px;color:var(--primary)"><i class="fas fa-info-circle"></i> Details</h4>
+          <table style="width:100%;font-size:14px">
+            <tr><td style="padding:6px 0;color:var(--text-secondary);width:40%">Village</td><td style="padding:6px 0;font-weight:500">${f.village || '-'}</td></tr>
+            <tr><td style="padding:6px 0;color:var(--text-secondary)">District</td><td style="padding:6px 0;font-weight:500">${f.district_name || '-'}</td></tr>
+            <tr><td style="padding:6px 0;color:var(--text-secondary)">State</td><td style="padding:6px 0;font-weight:500">${f.state_name || '-'}</td></tr>
+            <tr><td style="padding:6px 0;color:var(--text-secondary)">Pin Code</td><td style="padding:6px 0;font-weight:500">${f.pin_code || '-'}</td></tr>
+            <tr><td style="padding:6px 0;color:var(--text-secondary)">Language</td><td style="padding:6px 0;font-weight:500">${f.language === 'hi' ? 'Hindi' : f.language === 'en' ? 'English' : (f.language || '-')}</td></tr>
+            <tr><td style="padding:6px 0;color:var(--text-secondary)">Joined</td><td style="padding:6px 0;font-weight:500">${joinDate}</td></tr>
+            <tr><td style="padding:6px 0;color:var(--text-secondary)">Last Active</td><td style="padding:6px 0;font-weight:500">${lastActive}</td></tr>
+          </table>
+        </div>
+
+        <div style="background:var(--bg);padding:16px;border-radius:10px;margin-bottom:12px">
+          <h4 style="margin:0 0 12px;color:var(--primary)"><i class="fas fa-seedling"></i> Farming Profile</h4>
+          <table style="width:100%;font-size:14px">
+            <tr><td style="padding:6px 0;color:var(--text-secondary);width:40%">Crops</td><td style="padding:6px 0;font-weight:500">${crops}</td></tr>
+            <tr><td style="padding:6px 0;color:var(--text-secondary)">Land Holding</td><td style="padding:6px 0;font-weight:500">${f.land_holding_acres ? f.land_holding_acres + ' acres' : '-'}</td></tr>
+            <tr><td style="padding:6px 0;color:var(--text-secondary)">Soil Type</td><td style="padding:6px 0;font-weight:500">${f.soil_type || '-'}</td></tr>
+            <tr><td style="padding:6px 0;color:var(--text-secondary)">Irrigation</td><td style="padding:6px 0;font-weight:500">${f.irrigation_type || '-'}</td></tr>
+            <tr><td style="padding:6px 0;color:var(--text-secondary)">Farming Type</td><td style="padding:6px 0;font-weight:500">${f.farming_type || '-'}</td></tr>
+          </table>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <div style="background:var(--bg);padding:12px;border-radius:10px;text-align:center">
+            <div style="font-size:24px;font-weight:700;color:var(--primary)">${f.total_interactions || 0}</div>
+            <div style="font-size:11px;color:var(--text-secondary)">Interactions</div>
+          </div>
+          <div style="background:var(--bg);padding:12px;border-radius:10px;text-align:center">
+            <div style="font-size:24px;font-weight:700;color:#f59e0b">${loyaltyPts}</div>
+            <div style="font-size:11px;color:var(--text-secondary)">Points</div>
+          </div>
+          <div style="background:var(--bg);padding:12px;border-radius:10px;text-align:center">
+            <div style="font-size:24px;font-weight:700;color:#8b5cf6">${lifetimePts}</div>
+            <div style="font-size:11px;color:var(--text-secondary)">Lifetime Pts</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Conversations & Activity -->
+      <div>
+        <div style="background:var(--bg);padding:16px;border-radius:10px;margin-bottom:12px">
+          <h4 style="margin:0 0 12px;color:var(--primary)"><i class="fas fa-comments"></i> Conversations</h4>
+          ${chatHtml}
+          <div id="farmerChatMessages" style="margin-top:12px"></div>
+        </div>
+
+        <div style="background:var(--bg);padding:16px;border-radius:10px;margin-bottom:12px">
+          <h4 style="margin:0 0 12px;color:var(--primary)"><i class="fas fa-dharmachakra"></i> Spin History</h4>
+          <div style="display:flex;flex-wrap:wrap;gap:4px">${spinHtml}</div>
+        </div>
+
+        ${(d.soil_cards || []).length > 0 ? '<div style="background:var(--bg);padding:16px;border-radius:10px"><h4 style="margin:0 0 12px;color:var(--primary)"><i class="fas fa-flask"></i> Soil Cards</h4>' + d.soil_cards.map(s => '<span class="tag">' + (s.status || 'pending') + '</span>').join('') + '</div>' : ''}
+      </div>
+    </div>
+  `;
+
+  openModal(f.name || 'Farmer Details', profileHtml, 
+    '<button class="btn btn-outline" onclick="editFarmerFromProfile(\'' + id + '\')"><i class="fas fa-edit"></i> Edit</button> ' +
+    '<button class="btn btn-primary" onclick="startChatWithFarmer(\'' + id + '\')"><i class="fab fa-whatsapp"></i> Send Message</button>'
+  );
+}
+
+async function loadFarmerChat(sessionId, farmerId) {
+  const el = document.getElementById('farmerChatMessages');
+  if (!el) return;
+  el.innerHTML = '<div style="text-align:center;padding:20px"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+  try {
+    const data = await api('/api/v1/chats/' + sessionId + '/messages?limit=50');
+    const msgs = (data.messages || []).reverse();
+    if (msgs.length === 0) {
+      el.innerHTML = '<p style="color:var(--text-secondary);text-align:center">No messages</p>';
+      return;
+    }
+    el.innerHTML = '<div style="max-height:400px;overflow-y:auto;padding:8px;background:#fff;border-radius:8px;border:1px solid var(--border)">' +
+      msgs.map(m => {
+        const isInbound = m.direction === 'inbound';
+        const time = new Date(m.created_at).toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit'});
+        const date = new Date(m.created_at).toLocaleDateString('en-IN');
+        const bgColor = isInbound ? '#dcf8c6' : '#e3f2fd';
+        const align = isInbound ? 'flex-start' : 'flex-end';
+        const icon = isInbound ? '<i class="fas fa-user" style="color:var(--primary);font-size:10px"></i>' : '<i class="fas fa-robot" style="color:#1976d2;font-size:10px"></i>';
+        const label = isInbound ? 'Farmer' : (m.sender_type === 'admin' ? 'Admin' : 'AI Bot');
+        const mediaTag = m.message_type === 'image' ? '<div style="margin-bottom:4px"><i class="fas fa-image" style="color:#9c27b0"></i> <em>Image sent</em></div>' : 
+                         m.message_type === 'audio' ? '<div style="margin-bottom:4px"><i class="fas fa-microphone" style="color:#e91e63"></i> <em>Voice message</em></div>' : '';
+        return '<div style="display:flex;justify-content:' + align + ';margin-bottom:8px">' +
+          '<div style="max-width:80%;background:' + bgColor + ';padding:8px 12px;border-radius:12px;font-size:13px">' +
+          '<div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;font-size:11px;color:#666">' + icon + ' <strong>' + label + '</strong> · ' + date + ' ' + time + '</div>' +
+          mediaTag +
+          '<div style="white-space:pre-wrap;word-break:break-word">' + (m.content || '').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>' +
+          '</div></div>';
+      }).join('') +
+    '</div>';
+  } catch(e) {
+    el.innerHTML = '<p style="color:red">Error loading messages: ' + e.message + '</p>';
+  }
+}
+
+function editFarmerFromProfile(id) {
+  closeModal();
+  setTimeout(() => viewFarmerEdit(id), 300);
+}
+
+async function viewFarmerEdit(id) {
+  const d = await api('/api/v1/farmers/' + id);
+  const f = d.farmer;
+  openModal('Edit Farmer', `
     <div class="form-row">
-      <div class="form-group"><label>Name</label><input value="${f.name || ''}" onchange="this.dataset.changed='1'" data-field="name"></div>
+      <div class="form-group"><label>Name</label><input value="${f.name || ''}" data-field="name"></div>
       <div class="form-group"><label>Phone</label><input value="${f.phone || ''}" data-field="phone"></div>
     </div>
     <div class="form-row">
@@ -550,9 +698,11 @@ async function viewFarmer(id) {
       <div class="form-group"><label>Soil Type</label><input value="${f.soil_type || ''}" data-field="soil_type"></div>
       <div class="form-group"><label>Status</label><select data-field="status"><option ${f.status==='active'?'selected':''}>active</option><option ${f.status==='inactive'?'selected':''}>inactive</option></select></div>
     </div>
-    ${d.loyalty ? `<div style="margin-top:16px;padding:12px;background:var(--bg);border-radius:8px"><strong>Loyalty:</strong> ${d.loyalty.available_points} pts (${d.loyalty.tier})</div>` : ''}
-    ${d.spin_history.length ? `<div style="margin-top:16px"><strong>Spin History:</strong> ${d.spin_history.map(s => `<span class="tag">${s.prize_label}: â‚¹${s.prize_value}</span>`).join('')}</div>` : ''}
-  `, `<button class="btn btn-primary" onclick="saveFarmerEdit('${id}')"><i class="fas fa-save"></i> Save</button>`);
+    <div class="form-row">
+      <div class="form-group"><label>Language</label><select data-field="language"><option value="hi" ${f.language==='hi'?'selected':''}>Hindi</option><option value="en" ${f.language==='en'?'selected':''}>English</option></select></div>
+      <div class="form-group"><label>Irrigation</label><input value="${f.irrigation_type || ''}" data-field="irrigation_type"></div>
+    </div>
+  `, '<button class="btn btn-primary" onclick="saveFarmerEdit(\'' + id + '\')"><i class="fas fa-save"></i> Save</button>');
 }
 
 async function saveFarmerEdit(id) {
