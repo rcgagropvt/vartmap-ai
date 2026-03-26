@@ -1830,7 +1830,7 @@ async function createCoupon() {
 async function viewCouponDealers(campaignId) {
   try {
     const d = await api('/api/v1/coupons/' + campaignId + '/dealers');
-    const batches = d.batches || [];
+    const batches = Array.isArray(d) ? d : (d.batches || []);
     openModal('Dealer Assignments', `
       <div style="margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="showDealerAssignModal('${campaignId}')">+ Assign Dealer</button></div>
       ${batches.length === 0 ? '<p style="color:#6b7280">No dealer assignments yet.</p>' : `
