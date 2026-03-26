@@ -2061,42 +2061,107 @@ async function loadRewards() {
 
 function newRewardModal() {
   openModal('Award Reward', `
-    <div class="form-group"><label>Farmer ID</label><input id="rwFarmer" placeholder="Farmer UUID"></div>
+    <div class="form-group"><label>Search Farmer</label>
+      <input id="rwSearch" placeholder="Type name or phone..." oninput="searchFarmerForReward(this.value)" autocomplete="off">
+      <div id="rwResults" style="max-height:150px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;margin-top:4px;display:none"></div>
+      <input type="hidden" id="rwFarmer">
+      <div id="rwSelected" style="margin-top:6px;font-size:13px;color:#10b981"></div>
+    </div>
     <div class="form-row">
-      <div class="form-group"><label>Type</label><select id="rwType"><option value="bonus">Bonus</option><option value="referral">Referral</option><option value="spin">Spin Win</option><option value="purchase">Purchase</option></select></div>
+      <div class="form-group"><label>Type</label><select id="rwType"><option value="bonus">Bonus</option><option value="referral">Referral</option><option value="spin">Spin Win</option><option value="purchase">Purchase</option><option value="activity">Activity</option></select></div>
       <div class="form-group"><label>Points</label><input id="rwPoints" type="number" value="10"></div>
     </div>
-    <div class="form-group"><label>Description</label><input id="rwDesc"></div>
+    <div class="form-group"><label>Description</label><input id="rwDesc" placeholder="Reason for reward"></div>
   `, `<button class="btn btn-primary" onclick="awardReward()"><i class="fas fa-gift"></i> Award</button>`);
 }
 
+async function searchFarmerForReward(q) {
+  const box = document.getElementById('rwResults');
+  if (!q || q.length < 2) { box.style.display = 'none'; return; }
+  try {
+    const d = await api('/api/v1/farmers?search=' + encodeURIComponent(q) + '&limit=10');
+    const farmers = d.farmers || [];
+    if (!farmers.length) { box.innerHTML = '<div style="padding:8px;color:#6b7280">No farmers found</div>'; box.style.display = 'block'; return; }
+    box.innerHTML = farmers.map(f => `<div style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between" onclick="selectFarmerForReward('${f.id}','${(f.name||'').replace(/'/g,"\\'")}','${f.phone}')"><span><strong>${f.name||'Unknown'}</strong></span><span style="color:#6b7280;font-size:12px">${f.phone}</span></div>`).join('');
+    box.style.display = 'block';
+  } catch(e) { box.style.display = 'none'; }
+}
+
+function selectFarmerForReward(id, name, phone) {
+  document.getElementById('rwFarmer').value = id;
+  document.getElementById('rwSearch').value = name + ' (' + phone + ')';
+  document.getElementById('rwSelected').innerHTML = 'Selected: <strong>' + name + '</strong> - ' + phone;
+  document.getElementById('rwResults').style.display = 'none';
+}
+
 async function awardReward() {
+  const farmerId = document.getElementById('rwFarmer').value;
+  if (!farmerId) { alert('Please search and select a farmer first'); return; }
   await api('/api/v1/rewards', { method: 'POST', body: JSON.stringify({
-    farmer_id: document.getElementById('rwFarmer').value, type: document.getElementById('rwType').value,
+    farmer_id: farmerId, type: document.getElementById('rwType').value,
     points: +document.getElementById('rwPoints').value, description: document.getElementById('rwDesc').value
   })});
   closeModal(); loadRewards();
 }
 
-// â”€â”€â”€ 11. REFERRALS â”€â”€â”€
 async function loadReferrals() {
   const el = document.getElementById('pageContent');
   try {
     const d = await api('/api/v1/referrals');
     el.innerHTML = `
     <div class="table-wrap mb-24">
-      <div class="table-header"><h3>Referral Codes (${d.codes.length})</h3></div>
-      <table><tr><th>Code</th><th>Farmer</th><th>Phone</th><th>Uses</th><th>Max</th><th>Status</th></tr>
-      ${d.codes.map(c => `<tr><td><strong>${c.code}</strong></td><td>${c.farmer_name || '-'}</td><td>${c.phone || '-'}</td><td>${c.total_uses}</td><td>${c.max_uses}</td><td><span class="status ${c.status}">${c.status}</span></td></tr>`).join('')}
+      <div class="table-header"><h3>Referral Codes (${d.codes.length})</h3><button class="btn btn-primary btn-sm" onclick="showGenReferralModal()"><i class="fas fa-plus"></i> Generate Code</button></div>
+      <table><tr><th>Code</th><th>Farmer</th><th>Phone</th><th>Uses</th><th>Max</th><th>Points Earned</th><th>Status</th></tr>
+      ${d.codes.map(c => `<tr><td><strong>${c.code}</strong></td><td>${c.farmer_name || '-'}</td><td>${c.phone || '-'}</td><td>${c.current_uses || c.total_uses || 0}</td><td>${c.max_uses || 5}</td><td style="color:#10b981;font-weight:600">${c.points_earned || 0}</td><td><span class="status ${c.status}">${c.status}</span></td></tr>`).join('')}
       </table>
     </div>
     <div class="table-wrap">
       <div class="table-header"><h3>Referral History (${d.referrals.length})</h3></div>
-      <table><tr><th>Referrer</th><th>Referee</th><th>Status</th><th>Date</th></tr>
-      ${d.referrals.map(r => `<tr><td>${r.referrer_name || '-'}</td><td>${r.referee_name || '-'}</td><td><span class="status ${r.status}">${r.status}</span></td><td>${fmtDate(r.created_at)}</td></tr>`).join('')}
+      <table><tr><th>Referrer</th><th>Referee</th><th>Referrer Pts</th><th>Referee Pts</th><th>Status</th><th>Date</th></tr>
+      ${d.referrals.map(r => `<tr><td>${r.referrer_name || '-'}</td><td>${r.referee_name || '-'}</td><td style="color:#3b82f6;font-weight:600">${r.referrer_points || 0}</td><td style="color:#10b981;font-weight:600">${r.referee_points || 0}</td><td><span class="status ${r.status}">${r.status}</span></td><td>${fmtDate(r.created_at)}</td></tr>`).join('')}
       </table>
     </div>`;
-  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error: ' + e.message + '</p></div>'; }
+}
+
+function showGenReferralModal() {
+  openModal('Generate Referral Code', `
+    <div class="form-group"><label>Search Farmer</label>
+      <input id="refSearch" placeholder="Type name or phone..." oninput="searchFarmerForReferral(this.value)" autocomplete="off">
+      <div id="refResults" style="max-height:150px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;margin-top:4px;display:none"></div>
+      <input type="hidden" id="refFarmer">
+      <div id="refSelected" style="margin-top:6px;font-size:13px;color:#10b981"></div>
+    </div>
+  `, `<button class="btn btn-primary" onclick="generateReferralCode()"><i class="fas fa-link"></i> Generate Code</button>`);
+}
+
+async function searchFarmerForReferral(q) {
+  const box = document.getElementById('refResults');
+  if (!q || q.length < 2) { box.style.display = 'none'; return; }
+  try {
+    const d = await api('/api/v1/farmers?search=' + encodeURIComponent(q) + '&limit=10');
+    const farmers = d.farmers || [];
+    if (!farmers.length) { box.innerHTML = '<div style="padding:8px;color:#6b7280">No farmers found</div>'; box.style.display = 'block'; return; }
+    box.innerHTML = farmers.map(f => `<div style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between" onclick="selectFarmerForReferral('${f.id}','${(f.name||'').replace(/'/g,"\\'")}','${f.phone}')"><span><strong>${f.name||'Unknown'}</strong></span><span style="color:#6b7280;font-size:12px">${f.phone}</span></div>`).join('');
+    box.style.display = 'block';
+  } catch(e) { box.style.display = 'none'; }
+}
+
+function selectFarmerForReferral(id, name, phone) {
+  document.getElementById('refFarmer').value = id;
+  document.getElementById('refSearch').value = name + ' (' + phone + ')';
+  document.getElementById('refSelected').innerHTML = 'Selected: <strong>' + name + '</strong> - ' + phone;
+  document.getElementById('refResults').style.display = 'none';
+}
+
+async function generateReferralCode() {
+  const farmerId = document.getElementById('refFarmer').value;
+  if (!farmerId) { alert('Please search and select a farmer first'); return; }
+  try {
+    const d = await api('/api/v1/referrals/generate', { method: 'POST', body: JSON.stringify({ farmer_id: farmerId }) });
+    alert('Referral code generated: ' + (d.code?.code || 'Success'));
+    closeModal(); loadReferrals();
+  } catch(e) { alert('Error: ' + e.message); }
 }
 
 // â”€â”€â”€ 12. SOIL DATA â”€â”€â”€
