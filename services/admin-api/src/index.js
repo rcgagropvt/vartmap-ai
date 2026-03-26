@@ -1973,7 +1973,7 @@ app.post('/api/v1/public/spin-wheel/:id/verify', async (req, res) => {
     );
     if (!coupon.rows.length) return res.status(400).json({ error: "Invalid coupon code" });
     if (coupon.rows[0].status === "used") return res.status(400).json({ error: "This coupon code has already been used" });
-    if (coupon.rows[0].status !== "active") return res.status(400).json({ error: "This coupon code is not active" });
+    if (coupon.rows[0].status !== "available") return res.status(400).json({ error: "This coupon code is not active" });
     // Mark coupon as used
     await pool.query("UPDATE coupon_codes SET status='used', used_by=$1, used_at=NOW() WHERE id=$2", [farmerId, coupon.rows[0].id]);
     
