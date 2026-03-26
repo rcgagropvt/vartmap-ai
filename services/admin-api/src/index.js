@@ -1965,19 +1965,17 @@ app.post('/api/v1/public/spin-wheel/:id/verify', async (req, res) => {
     }
     const farmerId = farmer.rows[0].id;
     
-    // Verify coupon if provided
-    if (coupon_code) {
-      const coupon = await pool.query(
-        "SELECT * FROM coupon_codes WHERE UPPER(code)=$1 AND status='active'",
-        [coupon_code.toUpperCase()]
-      );
-      if (!coupon.rows.length) {
-        // Allow spin without coupon for now (coupon is optional)
-        // return res.status(400).json({ error: 'Invalid or already used coupon code' });
-      } else {
-        await pool.query("UPDATE coupon_codes SET status='used', used_by=$1, used_at=NOW() WHERE id=$2", [farmerId, coupon.rows[0].id]);
-      }
-    }
+    // Verify coupon code (REQUIRED - one coupon = one spin)
+    if (!coupon_code) return res.status(400).json({ error: "Coupon code is required to spin" });
+    const coupon = await pool.query(
+      "SELECT cc.*, camp.name as campaign_name FROM coupon_codes cc JOIN coupon_campaigns camp ON camp.id = cc.campaign_id WHERE UPPER(cc.code)=$1",
+      [coupon_code.toUpperCase()]
+    );
+    if (!coupon.rows.length) return res.status(400).json({ error: "Invalid coupon code" });
+    if (coupon.rows[0].status === "used") return res.status(400).json({ error: "This coupon code has already been used" });
+    if (coupon.rows[0].status !== "active") return res.status(400).json({ error: "This coupon code is not active" });
+    // Mark coupon as used
+    await pool.query("UPDATE coupon_codes SET status='used', used_by=$1, used_at=NOW() WHERE id=$2", [farmerId, coupon.rows[0].id]);
     
     // Check spin count
     const spinCount = await pool.query(
