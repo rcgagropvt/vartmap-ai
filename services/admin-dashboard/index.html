@@ -209,6 +209,7 @@ tr:hover{background:rgba(76,175,80,.03)}
       <div class="nav-item" onclick="navigate('schemes')"><i class="fas fa-university"></i> Govt Schemes</div>
       <div class="nav-item" onclick="navigate('settings')"><i class="fas fa-cog"></i> Settings</div>
       <div class="nav-item" onclick="navigate('products')"><i class="fas fa-box"></i> Products</div>
+      <div class="nav-item" onclick="navigate('catalog')"><i class="fas fa-seedling"></i> Product Catalog</div>
       <div class="nav-item" onclick="navigate('mandi-prices')"><i class="fas fa-chart-line"></i> Mandi Prices</div>
       <div class="nav-item" onclick="navigate('dealers')"><i class="fas fa-store"></i> Dealers</div>
     </div>
@@ -325,7 +326,7 @@ function navigate(page) {
     'soil-data':'Soil Nutrient Database','schemes':'Government Schemes','products':'Products',
     'mandi-prices':'Mandi Prices','dealers':'Dealers','field-agents':'Field Agents','orders':'Orders',
     'moderation':'Moderation Queue','notifications':'Notification Logs','analytics':'Analytics',
-    'services':'Service Health','admin-users':'Admin Users','audit-log':'Audit Log','settings':'Settings'
+    'services':'Service Health','admin-users':'Admin Users','audit-log':'Audit Log','settings':'Settings','catalog':'Product Catalog'
   };
   document.getElementById('pageTitle').textContent = titles[page] || page;
   const loaders = {
@@ -336,7 +337,7 @@ function navigate(page) {
     'mandi-prices':loadMandi,'dealers':loadDealers,'field-agents':loadFieldAgents,'orders':loadOrders,
     'moderation':loadModeration,'notifications':loadNotifications,'analytics':loadAnalytics,
     'services':loadServices,'admin-users':loadAdminUsers,'audit-log':loadAuditLog,'settings':loadSettings
-  };
+    'services':loadServices,'admin-users':loadAdminUsers,'audit-log':loadAuditLog,'settings':loadSettings,'catalog':loadProductCatalog
   const loader = loaders[page];
   if (loader) loader(); else document.getElementById('pageContent').innerHTML = '<div class="empty"><i class="fas fa-construction"></i><p>Coming soon</p></div>';
 }
@@ -1989,6 +1990,257 @@ function viewQRSheet(campaignId) {
 }
 
 
+@'
+async function loadProductCatalog() {
+  const el = document.getElementById("pageContent");
+  el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading catalog...</p></div>';
+  try {
+    const d = await api("/api/v1/catalog/products");
+    const products = d.products || [];
+    el.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <div><strong>${products.length}</strong> products in catalog</div>
+        <div style="display:flex;gap:8px">
+          <button onclick="showAddProductModal()" style="padding:8px 16px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer">+ Add Product</button>
+          <button onclick="showAddRecoModal()" style="padding:8px 16px;background:#6366f1;color:#fff;border:none;border-radius:8px;cursor:pointer">+ Crop Recommendation</button>
+          <button onclick="viewAllRecommendations()" style="padding:8px 16px;background:#f59e0b;color:#fff;border:none;border-radius:8px;cursor:pointer">View Recommendations</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px">
+        ${products.map(p => `
+          <div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,0.08);border-left:4px solid ${p.is_active ? '#10b981' : '#ef4444'}">
+            <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
+              <h3 style="margin:0;font-size:15px;color:#1e293b">${p.product_name}</h3>
+              <span style="font-size:11px;padding:2px 8px;border-radius:4px;background:${p.is_active ? '#d1fae5' : '#fee2e2'};color:${p.is_active ? '#065f46' : '#991b1b'}">${p.is_active ? 'Active' : 'Inactive'}</span>
+            </div>
+            <div style="font-size:12px;color:#6b7280;margin-bottom:4px">${p.product_code || ''} | ${p.category || ''}</div>
+            <div style="font-size:12px;color:#374151;margin-bottom:8px">${p.composition || ''}</div>
+            <div style="font-size:12px;color:#6b7280;margin-bottom:8px">${p.description || ''}</div>
+            ${p.target_crops && p.target_crops.length ? '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">' + p.target_crops.map(c => '<span style="font-size:10px;padding:2px 6px;background:#e0f2fe;color:#0369a1;border-radius:3px">' + c + '</span>').join('') + '</div>' : ''}
+            ${p.dosage_per_acre ? '<div style="font-size:12px;color:#059669;margin-bottom:8px">Dosage: ' + p.dosage_per_acre + '</div>' : ''}
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button onclick="editProductModal('${p.id}')" style="padding:4px 10px;font-size:11px;background:#3b82f6;color:#fff;border:none;border-radius:4px;cursor:pointer">Edit</button>
+              <button onclick="viewProductRecos('${p.id}','${p.product_name.replace(/'/g,'')}')" style="padding:4px 10px;font-size:11px;background:#8b5cf6;color:#fff;border:none;border-radius:4px;cursor:pointer">Recommendations</button>
+              <button onclick="toggleProduct('${p.id}',${!p.is_active})" style="padding:4px 10px;font-size:11px;background:${p.is_active ? '#ef4444' : '#10b981'};color:#fff;border:none;border-radius:4px;cursor:pointer">${p.is_active ? 'Deactivate' : 'Activate'}</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>`;
+  } catch(e) { el.innerHTML = '<div style="padding:40px;text-align:center;color:red">Error: ' + e.message + '</div>'; }
+}
+
+function showAddProductModal() {
+  openModal("Add Product", `
+    <div style="display:grid;gap:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label style="font-size:12px;font-weight:600">Product Name *</label><input id="cpName" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. VARTIZIN Mono Zinc 33%"></div>
+        <div><label style="font-size:12px;font-weight:600">Product Code</label><input id="cpCode" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. VZ-33"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label style="font-size:12px;font-weight:600">Category</label><select id="cpCat" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"><option value="micronutrient">Micronutrient</option><option value="micronutrient_mix">Micronutrient Mix</option><option value="fertilizer">Fertilizer</option><option value="pesticide">Pesticide</option><option value="seed">Seed</option><option value="bio">Bio Product</option><option value="other">Other</option></select></div>
+        <div><label style="font-size:12px;font-weight:600">Brand Name</label><input id="cpBrand" value="Vartmaan Fertilizers" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>
+      </div>
+      <div><label style="font-size:12px;font-weight:600">Composition</label><input id="cpComp" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. Zinc Sulphate Monohydrate 33% Zn"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label style="font-size:12px;font-weight:600">Description (English)</label><textarea id="cpDesc" rows="2" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></textarea></div>
+        <div><label style="font-size:12px;font-weight:600">Description (Hindi)</label><textarea id="cpDescHi" rows="2" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></textarea></div>
+      </div>
+      <div><label style="font-size:12px;font-weight:600">Target Crops (comma-separated)</label><input id="cpCrops" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="Wheat, Rice, Maize, Cotton"></div>
+      <div><label style="font-size:12px;font-weight:600">Dosage per Acre</label><input id="cpDosage" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. 10 kg/acre"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label style="font-size:12px;font-weight:600">Benefits (English)</label><textarea id="cpBenefits" rows="2" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></textarea></div>
+        <div><label style="font-size:12px;font-weight:600">Benefits (Hindi)</label><textarea id="cpBenefitsHi" rows="2" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></textarea></div>
+      </div>
+      <div><label style="font-size:12px;font-weight:600">Price Range</label><input id="cpPrice" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. Rs. 150-300"></div>
+      <div><label style="font-size:12px;font-weight:600">Pack Sizes (comma-separated)</label><input id="cpPacks" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. 1kg, 5kg, 25kg"></div>
+      <button onclick="submitProduct()" style="padding:10px 20px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">Save Product</button>
+    </div>`);
+}
+
+async function submitProduct() {
+  try {
+    const crops = document.getElementById("cpCrops").value.split(",").map(s => s.trim()).filter(Boolean);
+    const packs = document.getElementById("cpPacks").value.split(",").map(s => s.trim()).filter(Boolean);
+    await api("/api/v1/catalog/products", {
+      method: "POST",
+      body: JSON.stringify({
+        product_name: document.getElementById("cpName").value,
+        product_code: document.getElementById("cpCode").value,
+        category: document.getElementById("cpCat").value,
+        brand_name: document.getElementById("cpBrand").value,
+        composition: document.getElementById("cpComp").value,
+        description: document.getElementById("cpDesc").value,
+        description_hi: document.getElementById("cpDescHi").value,
+        target_crops: crops,
+        dosage_per_acre: document.getElementById("cpDosage").value,
+        benefits: document.getElementById("cpBenefits").value,
+        benefits_hi: document.getElementById("cpBenefitsHi").value,
+        price_range: document.getElementById("cpPrice").value,
+        pack_sizes: packs
+      })
+    });
+    closeModal(); loadProductCatalog();
+  } catch(e) { alert("Error: " + e.message); }
+}
+
+async function editProductModal(id) {
+  try {
+    const d = await api("/api/v1/catalog/products/" + id);
+    const p = d.product;
+    openModal("Edit Product: " + p.product_name, `
+      <div style="display:grid;gap:12px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div><label style="font-size:12px;font-weight:600">Product Name</label><input id="epName" value="${p.product_name || ''}" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>
+          <div><label style="font-size:12px;font-weight:600">Product Code</label><input id="epCode" value="${p.product_code || ''}" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div><label style="font-size:12px;font-weight:600">Category</label><input id="epCat" value="${p.category || ''}" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>
+          <div><label style="font-size:12px;font-weight:600">Brand</label><input id="epBrand" value="${p.brand_name || ''}" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>
+        </div>
+        <div><label style="font-size:12px;font-weight:600">Composition</label><input id="epComp" value="${p.composition || ''}" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div><label style="font-size:12px;font-weight:600">Description</label><textarea id="epDesc" rows="2" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px">${p.description || ''}</textarea></div>
+          <div><label style="font-size:12px;font-weight:600">Description (Hindi)</label><textarea id="epDescHi" rows="2" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px">${p.description_hi || ''}</textarea></div>
+        </div>
+        <div><label style="font-size:12px;font-weight:600">Target Crops</label><input id="epCrops" value="${(p.target_crops || []).join(', ')}" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>
+        <div><label style="font-size:12px;font-weight:600">Dosage per Acre</label><input id="epDosage" value="${p.dosage_per_acre || ''}" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div><label style="font-size:12px;font-weight:600">Benefits</label><textarea id="epBenefits" rows="2" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px">${p.benefits || ''}</textarea></div>
+          <div><label style="font-size:12px;font-weight:600">Benefits (Hindi)</label><textarea id="epBenefitsHi" rows="2" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px">${p.benefits_hi || ''}</textarea></div>
+        </div>
+        <div><label style="font-size:12px;font-weight:600">Price Range</label><input id="epPrice" value="${p.price_range || ''}" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>
+        <div><label style="font-size:12px;font-weight:600">Pack Sizes</label><input id="epPacks" value="${(p.pack_sizes || []).join(', ')}" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>
+        <button onclick="submitEditProduct('${id}')" style="padding:10px 20px;background:#3b82f6;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">Update Product</button>
+      </div>`);
+  } catch(e) { alert("Error: " + e.message); }
+}
+
+async function submitEditProduct(id) {
+  try {
+    const crops = document.getElementById("epCrops").value.split(",").map(s => s.trim()).filter(Boolean);
+    const packs = document.getElementById("epPacks").value.split(",").map(s => s.trim()).filter(Boolean);
+    await api("/api/v1/catalog/products/" + id, {
+      method: "PUT",
+      body: JSON.stringify({
+        product_name: document.getElementById("epName").value,
+        product_code: document.getElementById("epCode").value,
+        category: document.getElementById("epCat").value,
+        brand_name: document.getElementById("epBrand").value,
+        composition: document.getElementById("epComp").value,
+        description: document.getElementById("epDesc").value,
+        description_hi: document.getElementById("epDescHi").value,
+        target_crops: crops,
+        dosage_per_acre: document.getElementById("epDosage").value,
+        benefits: document.getElementById("epBenefits").value,
+        benefits_hi: document.getElementById("epBenefitsHi").value,
+        price_range: document.getElementById("epPrice").value,
+        pack_sizes: packs
+      })
+    });
+    closeModal(); loadProductCatalog();
+  } catch(e) { alert("Error: " + e.message); }
+}
+
+async function toggleProduct(id, activate) {
+  try {
+    if (activate) {
+      await api("/api/v1/catalog/products/" + id, { method: "PUT", body: JSON.stringify({ is_active: true }) });
+    } else {
+      await api("/api/v1/catalog/products/" + id, { method: "DELETE" });
+    }
+    loadProductCatalog();
+  } catch(e) { alert("Error: " + e.message); }
+}
+
+async function viewProductRecos(productId, productName) {
+  try {
+    const d = await api("/api/v1/catalog/recommendations?product_id=" + productId);
+    const recs = d.recommendations || [];
+    openModal("Recommendations: " + productName, `
+      <div style="margin-bottom:12px"><button onclick="showAddRecoModal('${productId}')" style="padding:6px 12px;background:#10b981;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px">+ Add Recommendation</button></div>
+      ${recs.length ? '<table style="width:100%;font-size:13px;border-collapse:collapse"><tr style="background:#f1f5f9"><th style="padding:8px;text-align:left">Crop</th><th style="padding:8px">Stage</th><th style="padding:8px">Days</th><th style="padding:8px">Dosage</th><th style="padding:8px">Method</th><th style="padding:8px">Actions</th></tr>' +
+        recs.map(r => '<tr style="border-bottom:1px solid #e5e7eb"><td style="padding:8px">' + r.crop_name + '</td><td style="padding:8px">' + r.growth_stage + '</td><td style="padding:8px">' + (r.days_range || '-') + '</td><td style="padding:8px">' + r.dosage + '</td><td style="padding:8px">' + (r.application_method || '-') + '</td><td style="padding:8px"><button onclick="deleteReco(\'' + r.id + '\',\'' + productId + '\',\'' + productName.replace(/'/g,'') + '\')" style="padding:2px 8px;background:#ef4444;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px">Delete</button></td></tr>').join('') + '</table>'
+        : '<div style="padding:20px;text-align:center;color:#9ca3af">No recommendations yet. Add crop-specific dosage recommendations.</div>'}
+    `);
+  } catch(e) { alert("Error: " + e.message); }
+}
+
+async function viewAllRecommendations() {
+  try {
+    const d = await api("/api/v1/catalog/recommendations");
+    const recs = d.recommendations || [];
+    openModal("All Crop Recommendations (" + recs.length + ")", `
+      ${recs.length ? '<table style="width:100%;font-size:12px;border-collapse:collapse"><tr style="background:#f1f5f9"><th style="padding:8px;text-align:left">Crop</th><th style="padding:8px">Stage</th><th style="padding:8px">Days</th><th style="padding:8px">Product</th><th style="padding:8px">Dosage</th><th style="padding:8px">Method</th></tr>' +
+        recs.map(r => '<tr style="border-bottom:1px solid #e5e7eb"><td style="padding:8px"><strong>' + r.crop_name + '</strong></td><td style="padding:8px">' + r.growth_stage + '</td><td style="padding:8px">' + (r.days_range || '-') + '</td><td style="padding:8px">' + r.product_name + '</td><td style="padding:8px">' + r.dosage + '</td><td style="padding:8px">' + (r.application_method || '-') + '</td></tr>').join('') + '</table>'
+        : '<div style="padding:20px;text-align:center;color:#9ca3af">No recommendations yet.</div>'}
+    `);
+  } catch(e) { alert("Error: " + e.message); }
+}
+
+let _catalogProducts = [];
+async function showAddRecoModal(presetProductId) {
+  if (!_catalogProducts.length) {
+    const d = await api("/api/v1/catalog/products");
+    _catalogProducts = d.products || [];
+  }
+  openModal("Add Crop Recommendation", `
+    <div style="display:grid;gap:12px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label style="font-size:12px;font-weight:600">Crop Name (English) *</label><input id="rcCrop" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. Wheat"></div>
+        <div><label style="font-size:12px;font-weight:600">Crop Name (Hindi)</label><input id="rcCropHi" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. गेहूं"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label style="font-size:12px;font-weight:600">Growth Stage *</label><input id="rcStage" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. Sowing, Tillering, Flowering"></div>
+        <div><label style="font-size:12px;font-weight:600">Growth Stage (Hindi)</label><input id="rcStageHi" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. बुवाई, कल्ले निकलना"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label style="font-size:12px;font-weight:600">Days Range</label><input id="rcDays" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. 20-30 days"></div>
+        <div><label style="font-size:12px;font-weight:600">Soil Type</label><input id="rcSoil" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. All, Black, Alluvial"></div>
+      </div>
+      <div><label style="font-size:12px;font-weight:600">Product *</label><select id="rcProduct" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px">
+        ${_catalogProducts.map(p => '<option value="' + p.id + '"' + (p.id === presetProductId ? ' selected' : '') + '>' + p.product_name + ' (' + (p.product_code || '') + ')</option>').join('')}
+      </select></div>
+      <div><label style="font-size:12px;font-weight:600">Dosage *</label><input id="rcDosage" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. 10 kg/acre mixed with soil"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label style="font-size:12px;font-weight:600">Application Method</label><input id="rcMethod" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. Soil application, Foliar spray"></div>
+        <div><label style="font-size:12px;font-weight:600">Application Method (Hindi)</label><input id="rcMethodHi" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. मिट्टी में मिलाएं"></div>
+      </div>
+      <div><label style="font-size:12px;font-weight:600">Notes</label><textarea id="rcNotes" rows="2" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="Additional notes"></textarea></div>
+      <button onclick="submitReco()" style="padding:10px 20px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">Save Recommendation</button>
+    </div>`);
+}
+
+async function submitReco() {
+  try {
+    await api("/api/v1/catalog/recommendations", {
+      method: "POST",
+      body: JSON.stringify({
+        crop_name: document.getElementById("rcCrop").value,
+        crop_name_hi: document.getElementById("rcCropHi").value,
+        growth_stage: document.getElementById("rcStage").value,
+        growth_stage_hi: document.getElementById("rcStageHi").value,
+        days_range: document.getElementById("rcDays").value,
+        soil_type: document.getElementById("rcSoil").value,
+        product_id: document.getElementById("rcProduct").value,
+        dosage: document.getElementById("rcDosage").value,
+        application_method: document.getElementById("rcMethod").value,
+        application_method_hi: document.getElementById("rcMethodHi").value,
+        notes: document.getElementById("rcNotes").value
+      })
+    });
+    closeModal(); alert("Recommendation added!");
+  } catch(e) { alert("Error: " + e.message); }
+}
+
+async function deleteReco(recoId, productId, productName) {
+  if (!confirm("Delete this recommendation?")) return;
+  try {
+    await api("/api/v1/catalog/recommendations/" + recoId, { method: "DELETE" });
+    viewProductRecos(productId, productName);
+  } catch(e) { alert("Error: " + e.message); }
+}
+
+'@ | Set-Content "C:\Users\devas\OneDrive\Desktop\vartmap\temp-catalog-ui.js" -Encoding UTF8
 async function loadSettings() {
   const el = document.getElementById("pageContent");
   try {

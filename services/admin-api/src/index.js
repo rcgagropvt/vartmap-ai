@@ -2175,5 +2175,135 @@ app.post('/api/v1/public/referrals/redeem', async (req, res) => {
     res.json({ message: 'Referral successful', referrer_points: referrerBonus, referee_points: refereeBonus, farmer: newFarmer.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+@'
+// ─── BRAND PRODUCT CATALOG ───
+
+app.get('/api/v1/catalog/products', auth, async (req, res) => {
+  try {
+    const { search, category, active_only } = req.query;
+    let q = 'SELECT * FROM brand_products WHERE 1=1';
+    const p = [];
+    if (search) { p.push('%' + search + '%'); q += ` AND (product_name ILIKE $${p.length} OR product_code ILIKE $${p.length} OR composition ILIKE $${p.length})`; }
+    if (category) { p.push(category); q += ` AND category=$${p.length}`; }
+    if (active_only === 'true') q += ' AND is_active=true';
+    q += ' ORDER BY sort_order, product_name';
+    const r = await pool.query(q, p);
+    res.json({ products: r.rows, total: r.rows.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/v1/catalog/products/:id', auth, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT * FROM brand_products WHERE id=$1', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Product not found' });
+    const recs = await pool.query('SELECT * FROM crop_recommendations WHERE product_id=$1 AND is_active=true ORDER BY priority DESC, crop_name, growth_stage', [req.params.id]);
+    res.json({ product: r.rows[0], recommendations: recs.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/v1/catalog/products', auth, async (req, res) => {
+  try {
+    const { brand_name, product_name, product_code, category, subcategory, composition, description, description_hi, target_crops, soil_types, application_stages, dosage_per_acre, dosage_details, benefits, benefits_hi, price_range, pack_sizes, image_url, sort_order } = req.body;
+    if (!product_name) return res.status(400).json({ error: 'product_name required' });
+    const r = await pool.query(
+      `INSERT INTO brand_products (brand_name, product_name, product_code, category, subcategory, composition, description, description_hi, target_crops, soil_types, application_stages, dosage_per_acre, dosage_details, benefits, benefits_hi, price_range, pack_sizes, image_url, sort_order)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`,
+      [brand_name || 'Vartmaan Fertilizers', product_name, product_code, category || 'micronutrient', subcategory, composition, description, description_hi, target_crops || '{}', soil_types || '{}', application_stages || '{}', dosage_per_acre, dosage_details || '{}', benefits, benefits_hi, price_range, pack_sizes || '{}', image_url, sort_order || 0]
+    );
+    res.json({ product: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/v1/catalog/products/:id', auth, async (req, res) => {
+  try {
+    const fields = req.body;
+    const sets = []; const vals = []; let idx = 1;
+    for (const [k, v] of Object.entries(fields)) {
+      if (['id','created_at'].includes(k)) continue;
+      sets.push(`${k}=$${idx}`);
+      vals.push(typeof v === 'object' && v !== null ? JSON.stringify(v) : v);
+      idx++;
+    }
+    if (!sets.length) return res.status(400).json({ error: 'No fields to update' });
+    sets.push(`updated_at=NOW()`);
+    vals.push(req.params.id);
+    const r = await pool.query(`UPDATE brand_products SET ${sets.join(',')} WHERE id=$${idx} RETURNING *`, vals);
+    if (!r.rows.length) return res.status(404).json({ error: 'Product not found' });
+    res.json({ product: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/v1/catalog/products/:id', auth, async (req, res) => {
+  try {
+    await pool.query('UPDATE brand_products SET is_active=false WHERE id=$1', [req.params.id]);
+    res.json({ message: 'Product deactivated' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── CROP RECOMMENDATIONS ───
+
+app.get('/api/v1/catalog/recommendations', auth, async (req, res) => {
+  try {
+    const { crop, stage, product_id } = req.query;
+    let q = `SELECT cr.*, bp.product_name, bp.product_code, bp.brand_name, bp.composition
+             FROM crop_recommendations cr JOIN brand_products bp ON cr.product_id=bp.id WHERE cr.is_active=true`;
+    const p = [];
+    if (crop) { p.push(crop); q += ` AND cr.crop_name ILIKE $${p.length}`; }
+    if (stage) { p.push('%' + stage + '%'); q += ` AND cr.growth_stage ILIKE $${p.length}`; }
+    if (product_id) { p.push(product_id); q += ` AND cr.product_id=$${p.length}`; }
+    q += ' ORDER BY cr.crop_name, cr.priority DESC';
+    const r = await pool.query(q, p);
+    res.json({ recommendations: r.rows, total: r.rows.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/v1/catalog/recommendations', auth, async (req, res) => {
+  try {
+    const { crop_name, crop_name_hi, growth_stage, growth_stage_hi, days_range, soil_type, product_id, dosage, application_method, application_method_hi, notes, notes_hi, priority } = req.body;
+    if (!crop_name || !growth_stage || !product_id || !dosage) return res.status(400).json({ error: 'crop_name, growth_stage, product_id, and dosage required' });
+    const r = await pool.query(
+      `INSERT INTO crop_recommendations (crop_name, crop_name_hi, growth_stage, growth_stage_hi, days_range, soil_type, product_id, dosage, application_method, application_method_hi, notes, notes_hi, priority)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+      [crop_name, crop_name_hi, growth_stage, growth_stage_hi, days_range, soil_type, product_id, dosage, application_method, application_method_hi, notes, notes_hi, priority || 0]
+    );
+    res.json({ recommendation: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/v1/catalog/recommendations/:id', auth, async (req, res) => {
+  try {
+    const fields = req.body;
+    const sets = []; const vals = []; let idx = 1;
+    for (const [k, v] of Object.entries(fields)) {
+      if (['id','created_at'].includes(k)) continue;
+      sets.push(`${k}=$${idx}`); vals.push(v); idx++;
+    }
+    if (!sets.length) return res.status(400).json({ error: 'No fields to update' });
+    vals.push(req.params.id);
+    const r = await pool.query(`UPDATE crop_recommendations SET ${sets.join(',')} WHERE id=$${idx} RETURNING *`, vals);
+    if (!r.rows.length) return res.status(404).json({ error: 'Recommendation not found' });
+    res.json({ recommendation: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/v1/catalog/recommendations/:id', auth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM crop_recommendations WHERE id=$1', [req.params.id]);
+    res.json({ message: 'Recommendation deleted' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── AI CATALOG ENDPOINT (for WhatsApp bot) ───
+
+app.get('/api/v1/catalog/ai-context', async (req, res) => {
+  try {
+    const products = await pool.query('SELECT product_name, product_code, brand_name, composition, description, description_hi, target_crops, dosage_per_acre, benefits, benefits_hi FROM brand_products WHERE is_active=true ORDER BY sort_order');
+    const recommendations = await pool.query(`SELECT cr.crop_name, cr.crop_name_hi, cr.growth_stage, cr.growth_stage_hi, cr.days_range, cr.soil_type, cr.dosage, cr.application_method, cr.application_method_hi, cr.notes, cr.notes_hi, bp.product_name, bp.product_code, bp.composition
+      FROM crop_recommendations cr JOIN brand_products bp ON cr.product_id=bp.id WHERE cr.is_active=true ORDER BY cr.crop_name, cr.priority DESC`);
+    res.json({ brand: 'Vartmaan Fertilizers', company: 'RCG Agro Private Limited', products: products.rows, recommendations: recommendations.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+'@ | Set-Content "C:\Users\devas\OneDrive\Desktop\vartmap\temp-catalog.js" -Encoding UTF8
 // ─── START SERVER ───
 app.listen(PORT, () => console.log(`VartMap Admin API running on port ${PORT}`));
