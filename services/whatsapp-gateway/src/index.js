@@ -109,8 +109,8 @@ async function getBotConfig() {
 
 // --- BUILD SYSTEM PROMPT (now includes knowledge base) ---
 function buildSystemPrompt(catalog, farmer, language, botConfig) {
-  const productList = (catalog.products || []).map(p =>
-    '- ' + p.product_name + ' (' + (p.product_code || '') + '): ' + (p.composition || '') + '. Crops: ' + (p.target_crops || []).join(', ') + '. ' + (p.benefits || '') + ' Dosage: ' + (p.dosage_per_acre || 'as per soil test')
+    const productList = (catalog.products || []).map(p =>
+    '- ' + p.product_name + ' (' + (p.product_code || '') + '): ' + (p.composition || '') + '. Crops: ' + (p.target_crops || []).join(', ') + '. ' + (p.benefits || '') + ' Dosage: ' + (p.dosage_per_acre || 'as per soil test') + (p.image_url ? ' [IMAGE:' + p.product_code + ']' : '')
   ).join('\n');
   const recoList = (catalog.recommendations || []).map(r =>
     '- ' + r.crop_name + ' / ' + r.growth_stage + ' (' + (r.days_range || '') + '): Use ' + r.product_name + ' - ' + r.dosage + '. Method: ' + (r.application_method || 'soil application')
@@ -144,7 +144,7 @@ function buildSystemPrompt(catalog, farmer, language, botConfig) {
     }
   }
 
-  return 'You are "VartMap Krishi Sahayak" - an AI agricultural assistant for Indian farmers, powered by Vartmaan Fertilizers (RCG Agro Private Limited).\n\nROLE:\n- You are a helpful, knowledgeable agricultural advisor who speaks like a friendly local expert\n- You recommend Vartmaan Fertilizers products when relevant (never push products unnecessarily)\n- You help with crop advice, soil health, pest/disease identification, weather guidance, government schemes, and mandi prices\n- Keep responses concise (under 300 words) since this is WhatsApp - use short paragraphs, not long essays\n- Use simple language that farmers understand\n\nLANGUAGE:\n' + langInstruction + '\n\nFARMER CONTEXT:\n- Name: ' + (farmer.name || 'Kisan') + '\n- Phone: ' + (farmer.phone || 'unknown') + '\n- Village: ' + (farmer.village || 'unknown') + '\n- State: ' + (farmer.state_name || 'unknown') + '\n- Primary Crop: ' + (farmer.crops || 'unknown') + '\n- Soil Type: ' + (farmer.soil_type || 'unknown') + '\n\nVARTMAAN FERTILIZERS PRODUCT CATALOG:\n' + (productList || 'No products loaded') + '\n\nCROP-SPECIFIC RECOMMENDATIONS:\n' + (recoList || 'No specific recommendations loaded') + knowledgeSection + menuSection + '\n\nGUIDELINES:\n1. When a farmer mentions a crop + problem/stage, recommend the most relevant Vartmaan product with exact dosage\n2. For zinc deficiency: recommend VARTIZIN products\n3. For iron deficiency/chlorosis: recommend VARTIFER products\n4. For sugarcane: recommend VARTIMIX Ganna Special 10%\n5. For general micronutrient needs: recommend VARTIMIX Multi-Crop 6% or Balshali 4%\n6. For premium/alkaline soil needs: recommend Kavach (chelated) variants\n7. If you do not know something, say so honestly - do not make up information\n8. For pest/disease images, describe what you see and suggest treatment\n9. Always be respectful and address the farmer warmly\n10. If asked about prices, say "Please contact your nearest dealer or call our helpline"\n11. Do not discuss competitor products by name\n12. For emergency pest attacks, advise contacting local Krishi Vigyan Kendra (KVK)';
+  return 'You are "VartMap Krishi Sahayak" - an AI agricultural assistant for Indian farmers, powered by Vartmaan Fertilizers (RCG Agro Private Limited).\n\nROLE:\n- You are a helpful, knowledgeable agricultural advisor who speaks like a friendly local expert\n- You recommend Vartmaan Fertilizers products when relevant (never push products unnecessarily)\n- You help with crop advice, soil health, pest/disease identification, weather guidance, government schemes, and mandi prices\n- Keep responses concise (under 300 words) since this is WhatsApp - use short paragraphs, not long essays\n- Use simple language that farmers understand\n\nLANGUAGE:\n' + langInstruction + '\n\nFARMER CONTEXT:\n- Name: ' + (farmer.name || 'Kisan') + '\n- Phone: ' + (farmer.phone || 'unknown') + '\n- Village: ' + (farmer.village || 'unknown') + '\n- State: ' + (farmer.state_name || 'unknown') + '\n- Primary Crop: ' + (farmer.crops || 'unknown') + '\n- Soil Type: ' + (farmer.soil_type || 'unknown') + '\n\nVARTMAAN FERTILIZERS PRODUCT CATALOG:\n' + (productList || 'No products loaded') + '\n\nCROP-SPECIFIC RECOMMENDATIONS:\n' + (recoList || 'No specific recommendations loaded') + knowledgeSection + menuSection + '\n\nGUIDELINES:\n1. When a farmer mentions a crop + problem/stage, recommend the most relevant Vartmaan product with exact dosage\n2. For zinc deficiency: recommend VARTIZIN products\n3. For iron deficiency/chlorosis: recommend VARTIFER products\n4. For sugarcane: recommend VARTIMIX Ganna Special 10%\n5. For general micronutrient needs: recommend VARTIMIX Multi-Crop 6% or Balshali 4%\n6. For premium/alkaline soil needs: recommend Kavach (chelated) variants\n7. If you do not know something, say so honestly - do not make up information\n8. For pest/disease images, describe what you see and suggest treatment\n9. Always be respectful and address the farmer warmly\n10. If asked about prices, say "Please contact your nearest dealer or call our helpline"10a. When recommending a product, if the product has [IMAGE:code] tag, include exactly this on a new line at the end: [SEND_IMAGE:product_code] - the system will automatically send the product image\n11. Do not discuss competitor products by name\n12. For emergency pest attacks, advise contacting local Krishi Vigyan Kendra (KVK)';
 }
 
 // --- CHAT HISTORY ---
@@ -297,6 +297,28 @@ async function sendWhatsAppMessage(to, text) {
     return false;
   }
 }
+
+async function sendWhatsAppImage(to, imageUrl, caption) {
+  if (!phoneNumberId || !accessToken) return false;
+  try {
+    const resp = await axios.post(
+      'https://graph.facebook.com/v21.0/' + phoneNumberId + '/messages',
+      {
+        messaging_product: 'whatsapp',
+        to: to,
+        type: 'image',
+        image: { link: imageUrl, caption: caption || '' }
+      },
+      { headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' } }
+    );
+    console.log('Image sent to ' + to);
+    return true;
+  } catch (e) {
+    console.error('Send image error:', e.response?.data || e.message);
+    return false;
+  }
+}
+
 
 // Send WhatsApp interactive buttons
 async function sendWhatsAppButtons(to, bodyText, buttons) {
@@ -731,7 +753,22 @@ app.post('/webhook', async (req, res) => {
           const effectiveMsgType = (msgType === 'voice') ? 'audio' : (msgType === 'interactive' ? 'text' : msgType);
           const replyText = await getAIResponse(farmerId, sessionId, farmerData, msgBody, effectiveMsgType, mediaUrl);
 
-          const sendResult = await sendWhatsAppMessage(from, replyText);
+          // Check if AI response contains image tags
+          let cleanReply = replyText;
+          const imageMatches = replyText.match(/\[SEND_IMAGE:([^\]]+)\]/g);
+          if (imageMatches) {
+            cleanReply = replyText.replace(/\[SEND_IMAGE:[^\]]+\]/g, '').trim();
+            const catalog = await getProductCatalog();
+            for (const tag of imageMatches) {
+              const code = tag.replace('[SEND_IMAGE:', '').replace(']', '').trim();
+              const product = (catalog.products || []).find(p => p.product_code === code || p.product_name.toLowerCase().includes(code.toLowerCase()));
+              if (product && product.image_url && product.image_url.startsWith('http')) {
+                await sendWhatsAppImage(from, product.image_url, product.product_name + ' - ' + (product.composition || ''));
+              }
+            }
+          }
+          const sendResult = await sendWhatsAppMessage(from, cleanReply);
+
 
           // 10. Store outbound reply
           await pool.query(

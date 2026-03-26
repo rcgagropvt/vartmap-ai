@@ -2295,7 +2295,7 @@ app.delete('/api/v1/catalog/recommendations/:id', auth, async (req, res) => {
 
 app.get('/api/v1/catalog/ai-context', async (req, res) => {
   try {
-    const products = await pool.query('SELECT product_name, product_code, brand_name, composition, description, description_hi, target_crops, dosage_per_acre, benefits, benefits_hi FROM brand_products WHERE is_active=true ORDER BY sort_order');
+    const products = await pool.query('SELECT product_name, product_code, brand_name, composition, description, description_hi, target_crops, dosage_per_acre, benefits, benefits_hi, image_url FROM brand_products WHERE is_active=true ORDER BY sort_order');
     const recommendations = await pool.query(`SELECT cr.crop_name, cr.crop_name_hi, cr.growth_stage, cr.growth_stage_hi, cr.days_range, cr.soil_type, cr.dosage, cr.application_method, cr.application_method_hi, cr.notes, cr.notes_hi, bp.product_name, bp.product_code, bp.composition
       FROM crop_recommendations cr JOIN brand_products bp ON cr.product_id=bp.id WHERE cr.is_active=true ORDER BY cr.crop_name, cr.priority DESC`);
     res.json({ brand: 'Vartmaan Fertilizers', company: 'RCG Agro Private Limited', products: products.rows, recommendations: recommendations.rows });
