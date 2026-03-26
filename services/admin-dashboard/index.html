@@ -1986,10 +1986,8 @@ function viewQRSheet(campaignId) {
   const token = localStorage.getItem('vartmap_token');
   window.open('https://vartmap-admin-api.onrender.com/api/v1/coupons/' + campaignId + '/qr-sheet?token=' + token, '_blank');
 }
-'@ | Set-Content "C:\Users\devas\OneDrive\Desktop\vartmap\services\admin-dashboard\coupon-functions.js" -Encoding UTF8
 
 
-// â”€â”€â”€ 10. REWARDS â”€â”€â”€
 async function loadRewards() {
   const el = document.getElementById('pageContent');
   try {
