@@ -206,7 +206,7 @@ app.post('/api/v1/farmers', auth, async (req, res) => {
 
 app.put('/api/v1/farmers/:id', auth, async (req, res) => {
   try {
-    const fields = ['name', 'phone', 'language', 'district_id', 'village', 'pin_code', 'land_holding_acres', 'crops', 'soil_type', 'irrigation_type', 'farming_type', 'status'];
+    const fields = ['name', 'phone', 'language', 'district_id', 'village', 'pin_code', 'land_holding_acres', 'crops', 'soil_type', 'irrigation_type', 'farming_type', 'status', 'onboarding_stage', 'profile_complete', 'primary_crop', 'state'];
     const sets = []; const vals = [];
     fields.forEach(f => { if (req.body[f] !== undefined) { vals.push(req.body[f]); sets.push(`${f}=$${vals.length}`); } });
     if (!sets.length) return res.status(400).json({ error: 'No fields to update' });
