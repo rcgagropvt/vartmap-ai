@@ -204,7 +204,6 @@ async function getAIResponse(farmerId, sessionId, farmer, messageText, messageTy
     return 'Sorry, I could not process your request right now. Please try again or type "help" for options.';
   }
 }
-
 // --- WHATSAPP SEND ---
 const phoneNumberId = process.env.WA_PHONE_NUMBER_ID;
 const accessToken = process.env.WA_ACCESS_TOKEN;
