@@ -2133,7 +2133,7 @@ app.post('/api/v1/referrals/generate', auth, async (req, res) => {
     if (!farmer_id) return res.status(400).json({ error: 'farmer_id required' });
     const farmer = await pool.query('SELECT * FROM farmers WHERE id=$1', [farmer_id]);
     if (!farmer.rows.length) return res.status(404).json({ error: 'Farmer not found' });
-    const code = 'REF' + farmer.rows[0].phone.slice(-6) + Math.random().toString(36).substring(2,6).toUpperCase();
+    const code = 'REF' + Math.random().toString(36).substring(2,9).toUpperCase();
     const existing = await pool.query('SELECT * FROM referral_codes WHERE farmer_id=$1 AND status=$2', [farmer_id, 'active']);
     if (existing.rows.length) return res.json({ code: existing.rows[0] });
     const r = await pool.query(
