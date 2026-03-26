@@ -271,7 +271,7 @@ let USER = JSON.parse(localStorage.getItem('vartmap_user') || 'null');
 let currentPage = 'overview';
 let currentChat = null;
 
-// ─── AUTH ───
+// â”€â”€â”€ AUTH â”€â”€â”€
 function doLogin() {
   const email = document.getElementById('loginEmail').value;
   const pass = document.getElementById('loginPass').value;
@@ -311,7 +311,7 @@ function api(path, opts = {}) {
   }).then(r => r.json());
 }
 
-// ─── NAVIGATION ───
+// â”€â”€â”€ NAVIGATION â”€â”€â”€
 function navigate(page) {
   currentPage = page;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -355,7 +355,7 @@ function timeAgo(d) {
 }
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '-'; }
 
-// ─── 1. OVERVIEW ───
+// â”€â”€â”€ 1. OVERVIEW â”€â”€â”€
 async function loadOverview() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
@@ -378,7 +378,7 @@ async function loadOverview() {
   } catch (e) { el.innerHTML = '<div class="empty"><i class="fas fa-exclamation-triangle"></i><p>Error loading dashboard</p></div>'; }
 }
 
-// ─── 2. WHATSAPP CHAT ───
+// â”€â”€â”€ 2. WHATSAPP CHAT â”€â”€â”€
 async function loadChats() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading chats...</p></div>';
@@ -395,7 +395,7 @@ async function loadChats() {
           ${d.chats.length ? d.chats.map(c => `
             <div class="chat-item" id="chat-${c.id}" onclick="openChatSession('${c.id}')">
               <div class="chat-name"><span>${c.farmer_name || 'Unknown'}</span><span style="font-size:11px;color:var(--text-light)">${timeAgo(c.last_message_at)}</span></div>
-              <div class="chat-preview">${c.farmer_phone || ''} · ${c.village || ''}</div>
+              <div class="chat-preview">${c.farmer_phone || ''} Â· ${c.village || ''}</div>
               <div class="chat-meta">
                 <span class="status ${c.status}">${c.status}</span>
                 ${c.unread_count > 0 ? `<span class="unread">${c.unread_count}</span>` : ''}
@@ -489,7 +489,7 @@ function searchChats(q) {
   });
 }
 
-// ─── 3. FARMERS ───
+// â”€â”€â”€ 3. FARMERS â”€â”€â”€
 async function loadFarmers() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
@@ -550,7 +550,7 @@ async function viewFarmer(id) {
       <div class="form-group"><label>Status</label><select data-field="status"><option ${f.status==='active'?'selected':''}>active</option><option ${f.status==='inactive'?'selected':''}>inactive</option></select></div>
     </div>
     ${d.loyalty ? `<div style="margin-top:16px;padding:12px;background:var(--bg);border-radius:8px"><strong>Loyalty:</strong> ${d.loyalty.available_points} pts (${d.loyalty.tier})</div>` : ''}
-    ${d.spin_history.length ? `<div style="margin-top:16px"><strong>Spin History:</strong> ${d.spin_history.map(s => `<span class="tag">${s.prize_label}: ₹${s.prize_value}</span>`).join('')}</div>` : ''}
+    ${d.spin_history.length ? `<div style="margin-top:16px"><strong>Spin History:</strong> ${d.spin_history.map(s => `<span class="tag">${s.prize_label}: â‚¹${s.prize_value}</span>`).join('')}</div>` : ''}
   `, `<button class="btn btn-primary" onclick="saveFarmerEdit('${id}')"><i class="fas fa-save"></i> Save</button>`);
 }
 
@@ -596,7 +596,7 @@ async function startChatWithFarmer(farmerId) {
   navigate('chats');
 }
 
-// ─── 4. CONVERSATIONS ───
+// â”€â”€â”€ 4. CONVERSATIONS â”€â”€â”€
 async function loadConversations() {
   const el = document.getElementById('pageContent');
   try {
@@ -611,7 +611,7 @@ async function loadConversations() {
   } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
 }
 
-// ─── 5. TEMPLATES ───
+// â”€â”€â”€ 5. TEMPLATES â”€â”€â”€
 async function loadTemplates() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
@@ -684,7 +684,7 @@ async function updateTemplate(id) {
 
 async function deleteTemplate(id) { if (confirm('Delete this template?')) { await api('/api/v1/templates/' + id, { method: 'DELETE' }); loadTemplates(); } }
 
-// ─── 6. CAMPAIGNS ───
+// â”€â”€â”€ 6. CAMPAIGNS â”€â”€â”€
 async function loadCampaigns() {
   const el = document.getElementById('pageContent');
   try {
@@ -733,8 +733,8 @@ async function createCampaign() {
 }
 
 async function updateCampaignStatus(id, status) { await api('/api/v1/campaigns/' + id, { method: 'PUT', body: JSON.stringify({ status }) }); loadCampaigns(); }
-// ─── 7. SPIN WHEELS ───
-// ─── 7. SPIN WHEELS ───
+// â”€â”€â”€ 7. SPIN WHEELS â”€â”€â”€
+// â”€â”€â”€ 7. SPIN WHEELS â”€â”€â”€
 async function loadSpinWheels() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
@@ -745,7 +745,7 @@ async function loadSpinWheels() {
       <div class="stat-card"><div class="stat-icon"><i class="fas fa-dharmachakra"></i></div><div class="stat-value">${d.wheels.length}</div><div class="stat-label">Total Wheels</div></div>
       <div class="stat-card accent"><div class="stat-icon"><i class="fas fa-play-circle" style="color:var(--accent)"></i></div><div class="stat-value">${d.wheels.filter(w=>w.status==='active').length}</div><div class="stat-label">Active Wheels</div></div>
       <div class="stat-card info"><div class="stat-icon"><i class="fas fa-trophy" style="color:var(--info)"></i></div><div class="stat-value">${d.wheels.reduce((a,w)=>a+(w.stats?.winners||0),0)}</div><div class="stat-label">Total Winners</div></div>
-      <div class="stat-card danger"><div class="stat-icon"><i class="fas fa-rupee-sign" style="color:var(--danger)"></i></div><div class="stat-value">₹${d.wheels.reduce((a,w)=>a+(w.spent_budget||0),0)}</div><div class="stat-label">Total Spent</div></div>
+      <div class="stat-card danger"><div class="stat-icon"><i class="fas fa-rupee-sign" style="color:var(--danger)"></i></div><div class="stat-value">â‚¹${d.wheels.reduce((a,w)=>a+(w.spent_budget||0),0)}</div><div class="stat-label">Total Spent</div></div>
     </div>
     <div class="flex justify-between items-center mb-16">
       <h3>Spin Wheels & Lucky Draw</h3>
@@ -759,9 +759,9 @@ async function loadSpinWheels() {
             <h3 style="font-size:18px;margin-bottom:4px">${w.name} <span class="status ${w.status}">${w.status}</span></h3>
             <p style="font-size:13px;color:var(--text-light)">${w.description || ''}</p>
             <div style="font-size:12px;color:var(--text-light);margin-top:6px">
-              <i class="fas fa-calendar"></i> ${fmtDate(w.start_date)} → ${fmtDate(w.end_date)} · 
-              <i class="fas fa-sync"></i> Max ${w.max_spins_per_farmer} spin/farmer · 
-              <i class="fas fa-wallet"></i> Budget: ₹${w.total_budget} (Spent: ₹${w.spent_budget || 0})
+              <i class="fas fa-calendar"></i> ${fmtDate(w.start_date)} â†’ ${fmtDate(w.end_date)} Â· 
+              <i class="fas fa-sync"></i> Max ${w.max_spins_per_farmer} spin/farmer Â· 
+              <i class="fas fa-wallet"></i> Budget: â‚¹${w.total_budget} (Spent: â‚¹${w.spent_budget || 0})
             </div>
           </div>
           <div class="flex gap-10 flex-wrap">
@@ -788,10 +788,10 @@ async function loadSpinWheels() {
                   <div class="segment-color" style="background:${s.color}"></div>
                   <div class="segment-info" style="flex:1">
                     <strong>${s.label}</strong>
-                    <small>${s.prize_type} · ₹${s.prize_value} · Prob: ${(s.probability * 100).toFixed(1)}%</small>
+                    <small>${s.prize_type} Â· â‚¹${s.prize_value} Â· Prob: ${(s.probability * 100).toFixed(1)}%</small>
                   </div>
                   <div style="text-align:right;font-size:12px">
-                    <div style="font-weight:700;color:${s.current_winners >= (s.max_winners||9999) ? 'var(--danger)' : 'var(--primary)'}">${s.current_winners}/${s.max_winners || '∞'}</div>
+                    <div style="font-weight:700;color:${s.current_winners >= (s.max_winners||9999) ? 'var(--danger)' : 'var(--primary)'}">${s.current_winners}/${s.max_winners || 'âˆž'}</div>
                     <small>winners</small>
                   </div>
                 </div>
@@ -801,7 +801,7 @@ async function loadSpinWheels() {
               <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;text-align:center">
                 <div><div style="font-size:22px;font-weight:700;color:var(--primary)">${w.stats?.total_spins || 0}</div><div style="font-size:11px;color:var(--text-light)">Total Spins</div></div>
                 <div><div style="font-size:22px;font-weight:700;color:var(--accent)">${w.stats?.winners || 0}</div><div style="font-size:11px;color:var(--text-light)">Winners</div></div>
-                <div><div style="font-size:22px;font-weight:700;color:var(--info)">₹${w.spent_budget || 0}</div><div style="font-size:11px;color:var(--text-light)">Spent</div></div>
+                <div><div style="font-size:22px;font-weight:700;color:var(--info)">â‚¹${w.spent_budget || 0}</div><div style="font-size:11px;color:var(--text-light)">Spent</div></div>
               </div>
               <div style="margin-top:10px">
                 <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px"><span>Budget Used</span><span>${w.total_budget ? Math.round(((w.spent_budget||0)/w.total_budget)*100) : 0}%</span></div>
@@ -852,7 +852,7 @@ function drawWheel(canvasId, segments) {
     ctx.save(); ctx.translate(cx, cy); ctx.rotate(start + arc / 2);
     ctx.fillStyle = '#fff'; ctx.font = 'bold 11px Inter'; ctx.textAlign = 'center';
     ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 3;
-    ctx.fillText(s.label.replace(/[🎉🎁⭐🏷️🍀]/g,'').trim().substring(0, 14), r * 0.65, 4);
+    ctx.fillText(s.label.replace(/[ðŸŽ‰ðŸŽâ­ðŸ·ï¸ðŸ€]/g,'').trim().substring(0, 14), r * 0.65, 4);
     ctx.restore();
   });
   
@@ -930,7 +930,7 @@ function testSpinWheel(wheelId) {
         setTimeout(() => {
           segItems[winIdx].style.background = '';
           segItems[winIdx].style.transform = '';
-          alert('🎉 Test Result: ' + label + '\n\n(This is a test spin - no actual prize awarded)');
+          alert('ðŸŽ‰ Test Result: ' + label + '\n\n(This is a test spin - no actual prize awarded)');
         }, 500);
       }
     }
@@ -1002,13 +1002,13 @@ function shareWheelLink(wheelId) {
     <div style="margin-top:16px">
       <h4 style="margin-bottom:8px">WhatsApp Message Template:</h4>
       <div style="padding:14px;background:#DCF8C6;border-radius:10px;font-size:13px">
-        🎉 <strong>Kisan Lucky Draw!</strong><br><br>
+        ðŸŽ‰ <strong>Kisan Lucky Draw!</strong><br><br>
         Spin the wheel and win exciting prizes!<br>
-        💰 Cash prizes up to ₹500<br>
-        ⭐ Loyalty points<br>
-        🏷️ Discount coupons<br><br>
-        👉 Spin now: ${link}<br><br>
-        🙏 VartMap Krishi Sahayak
+        ðŸ’° Cash prizes up to â‚¹500<br>
+        â­ Loyalty points<br>
+        ðŸ·ï¸ Discount coupons<br><br>
+        ðŸ‘‰ Spin now: ${link}<br><br>
+        ðŸ™ VartMap Krishi Sahayak
       </div>
     </div>
   `, `<button class="btn btn-primary" onclick="navigator.clipboard.writeText('${link}');alert('Link copied!')"><i class="fas fa-copy"></i> Copy Link</button>`);
@@ -1028,7 +1028,7 @@ async function loadLoyaltyProgram() {
 
     mainContent.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
-        <h2>🏆 Loyalty Program</h2>
+        <h2>ðŸ† Loyalty Program</h2>
         <div>
           <button onclick="showAddPointsModal()" style="padding:8px 16px;background:#10b981;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-right:8px">+ Award Points</button>
           <button onclick="showAddCatalogModal()" style="padding:8px 16px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer">+ Add Reward</button>
@@ -1057,11 +1057,11 @@ async function loadLoyaltyProgram() {
 
       <!-- Tabs -->
       <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
-        <button onclick="showLoyaltyTab('tiers')" id="tab-tiers" class="loyalty-tab active-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#1e293b;color:#fff">🏅 Tiers</button>
-        <button onclick="showLoyaltyTab('catalog')" id="tab-catalog" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">🎁 Rewards Catalog</button>
-        <button onclick="showLoyaltyTab('redemptions')" id="tab-redemptions" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">📋 Redemptions</button>
-        <button onclick="showLoyaltyTab('leaderboard')" id="tab-leaderboard" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">🏆 Leaderboard</button>
-        <button onclick="showLoyaltyTab('tierDist')" id="tab-tierDist" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">📊 Tier Distribution</button>
+        <button onclick="showLoyaltyTab('tiers')" id="tab-tiers" class="loyalty-tab active-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#1e293b;color:#fff">ðŸ… Tiers</button>
+        <button onclick="showLoyaltyTab('catalog')" id="tab-catalog" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">ðŸŽ Rewards Catalog</button>
+        <button onclick="showLoyaltyTab('redemptions')" id="tab-redemptions" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">ðŸ“‹ Redemptions</button>
+        <button onclick="showLoyaltyTab('leaderboard')" id="tab-leaderboard" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">ðŸ† Leaderboard</button>
+        <button onclick="showLoyaltyTab('tierDist')" id="tab-tierDist" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">ðŸ“Š Tier Distribution</button>
       </div>
 
       <div id="loyaltyTabContent"></div>
@@ -1091,10 +1091,10 @@ function showLoyaltyTab(tab) {
           <div style="background:linear-gradient(135deg,${t.color}22,${t.color}11);border:2px solid ${t.color};border-radius:12px;padding:24px;text-align:center">
             <div style="font-size:48px">${t.icon}</div>
             <h3 style="margin:8px 0;color:${t.color}">${t.name}</h3>
-            <div style="color:#6b7280;font-size:14px">${t.min_points} - ${t.max_points || '∞'} pts</div>
+            <div style="color:#6b7280;font-size:14px">${t.min_points} - ${t.max_points || 'âˆž'} pts</div>
             <div style="margin-top:8px;font-size:13px;color:#6b7280">Multiplier: ${t.multiplier}x</div>
             <div style="margin-top:12px;text-align:left">
-              ${(t.benefits?.perks || []).map(p => '<div style="font-size:12px;padding:2px 0">✅ ' + p + '</div>').join('')}
+              ${(t.benefits?.perks || []).map(p => '<div style="font-size:12px;padding:2px 0">âœ… ' + p + '</div>').join('')}
             </div>
           </div>
         `).join('')}
@@ -1117,8 +1117,8 @@ function showLoyaltyTab(tab) {
               <td style="padding:12px;font-weight:500">${c.name}</td>
               <td style="padding:12px"><span style="background:#e0e7ff;color:#4338ca;padding:2px 8px;border-radius:4px;font-size:12px">${c.category}</span></td>
               <td style="padding:12px;text-align:center;font-weight:600;color:#f59e0b">${c.points_required}</td>
-              <td style="padding:12px;text-align:center">${c.value_inr ? '₹' + c.value_inr : '—'}</td>
-              <td style="padding:12px;text-align:center">${c.stock === -1 ? '∞' : c.stock}</td>
+              <td style="padding:12px;text-align:center">${c.value_inr ? 'â‚¹' + c.value_inr : 'â€”'}</td>
+              <td style="padding:12px;text-align:center">${c.stock === -1 ? 'âˆž' : c.stock}</td>
               <td style="padding:12px;text-align:center">${c.redeemed_count}</td>
               <td style="padding:12px;text-align:center">${c.active ? '<span style="color:#10b981">Active</span>' : '<span style="color:#ef4444">Inactive</span>'}</td>
             </tr>`).join('')}
@@ -1165,8 +1165,8 @@ function showLoyaltyTab(tab) {
           </tr></thead>
           <tbody>
             ${leaderboard.map((f, i) => `<tr style="border-top:1px solid #f1f5f9">
-              <td style="padding:12px;text-align:center;font-weight:700;font-size:18px">${i < 3 ? ['🥇','🥈','🥉'][i] : i+1}</td>
-              <td style="padding:12px"><strong>${f.name}</strong><br><small style="color:#6b7280">${f.phone} · ${f.district || 'N/A'}</small></td>
+              <td style="padding:12px;text-align:center;font-weight:700;font-size:18px">${i < 3 ? ['ðŸ¥‡','ðŸ¥ˆ','ðŸ¥‰'][i] : i+1}</td>
+              <td style="padding:12px"><strong>${f.name}</strong><br><small style="color:#6b7280">${f.phone} Â· ${f.district || 'N/A'}</small></td>
               <td style="padding:12px;text-align:center"><span style="color:${f.tier_color || '#666'}">${f.tier_icon || ''} ${f.tier_name || 'None'}</span></td>
               <td style="padding:12px;text-align:center;font-weight:600;color:#f59e0b">${(f.loyalty_points||0).toLocaleString()}</td>
               <td style="padding:12px;text-align:center;color:#6b7280">${(f.lifetime_points||0).toLocaleString()}</td>
@@ -1363,7 +1363,7 @@ async function deliverRedemption(id) {
 }
 
 
-// ─── PRIZE FULFILLMENT ───
+// â”€â”€â”€ PRIZE FULFILLMENT â”€â”€â”€
 async function viewWheelResults(wheelId, wheelName) {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading prizes...</p></div>';
@@ -1375,7 +1375,7 @@ async function viewWheelResults(wheelId, wheelName) {
     el.innerHTML = `
     <div class="flex justify-between items-center mb-16">
       <div>
-        <h3><i class="fas fa-trophy"></i> Prize Fulfillment — ${wheelName || 'All Wheels'}</h3>
+        <h3><i class="fas fa-trophy"></i> Prize Fulfillment â€” ${wheelName || 'All Wheels'}</h3>
         <p style="font-size:13px;color:var(--text-light)">Approve, reject, and track prize delivery</p>
       </div>
       <button class="btn btn-outline" onclick="loadSpinWheels()"><i class="fas fa-arrow-left"></i> Back to Wheels</button>
@@ -1384,17 +1384,17 @@ async function viewWheelResults(wheelId, wheelName) {
     <div class="stats-grid mb-24">
       <div class="stat-card accent"><div class="stat-icon"><i class="fas fa-clock" style="color:var(--accent)"></i></div><div class="stat-value">${s.pending_approval || 0}</div><div class="stat-label">Pending Approval</div></div>
       <div class="stat-card info"><div class="stat-icon"><i class="fas fa-check-circle" style="color:var(--info)"></i></div><div class="stat-value">${s.verified || 0}</div><div class="stat-label">Verified</div></div>
-      <div class="stat-card"><div class="stat-icon"><i class="fas fa-rupee-sign"></i></div><div class="stat-value">₹${s.total_paid || 0}</div><div class="stat-label">Total Paid</div></div>
+      <div class="stat-card"><div class="stat-icon"><i class="fas fa-rupee-sign"></i></div><div class="stat-value">â‚¹${s.total_paid || 0}</div><div class="stat-label">Total Paid</div></div>
       <div class="stat-card danger"><div class="stat-icon"><i class="fas fa-times-circle" style="color:var(--danger)"></i></div><div class="stat-value">${s.rejected || 0}</div><div class="stat-label">Rejected</div></div>
     </div>
 
     <div class="flex gap-10 mb-16 flex-wrap">
       <button class="btn btn-sm ${!currentPrizeFilter ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','')">All</button>
-      <button class="btn btn-sm ${currentPrizeFilter==='won' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','won')">⏳ Pending</button>
-      <button class="btn btn-sm ${currentPrizeFilter==='verified' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','verified')">✅ Verified</button>
-      <button class="btn btn-sm ${currentPrizeFilter==='paid' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','paid')">💰 Paid</button>
-      <button class="btn btn-sm ${currentPrizeFilter==='delivered' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','delivered')">🎁 Delivered</button>
-      <button class="btn btn-sm ${currentPrizeFilter==='rejected' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','rejected')">❌ Rejected</button>
+      <button class="btn btn-sm ${currentPrizeFilter==='won' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','won')">â³ Pending</button>
+      <button class="btn btn-sm ${currentPrizeFilter==='verified' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','verified')">âœ… Verified</button>
+      <button class="btn btn-sm ${currentPrizeFilter==='paid' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','paid')">ðŸ’° Paid</button>
+      <button class="btn btn-sm ${currentPrizeFilter==='delivered' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','delivered')">ðŸŽ Delivered</button>
+      <button class="btn btn-sm ${currentPrizeFilter==='rejected' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','rejected')">âŒ Rejected</button>
     </div>
 
     <div class="table-wrap">
@@ -1407,16 +1407,16 @@ async function viewWheelResults(wheelId, wheelName) {
           <tr>
             <td>
               <strong>${p.farmer_name || 'Unknown'}</strong><br>
-              <small style="color:var(--text-light)">${p.farmer_phone} ${p.village ? '· ' + p.village : ''}</small>
+              <small style="color:var(--text-light)">${p.farmer_phone} ${p.village ? 'Â· ' + p.village : ''}</small>
             </td>
             <td>
               <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${p.segment_color || '#999'};margin-right:6px"></span>
               ${p.segment_label || p.prize_type}
             </td>
-            <td><strong>${p.prize_type === 'cash' ? '₹' + p.prize_value : p.prize_type === 'points' ? p.prize_value + ' pts' : p.prize_type === 'discount' ? p.prize_value + '%' : '-'}</strong></td>
+            <td><strong>${p.prize_type === 'cash' ? 'â‚¹' + p.prize_value : p.prize_type === 'points' ? p.prize_value + ' pts' : p.prize_type === 'discount' ? p.prize_value + '%' : '-'}</strong></td>
             <td><span class="status ${p.status === 'won' ? 'pending' : p.status === 'verified' ? 'active' : p.status === 'paid' || p.status === 'delivered' ? 'completed' : p.status === 'rejected' ? 'failed' : ''}">${p.status}</span>
-              ${p.coupon_code ? '<br><small style="color:var(--primary)">🏷️ ' + p.coupon_code + '</small>' : ''}
-              ${p.payment_reference ? '<br><small style="color:var(--info)">💳 ' + p.payment_reference + '</small>' : ''}
+              ${p.coupon_code ? '<br><small style="color:var(--primary)">ðŸ·ï¸ ' + p.coupon_code + '</small>' : ''}
+              ${p.payment_reference ? '<br><small style="color:var(--info)">ðŸ’³ ' + p.payment_reference + '</small>' : ''}
             </td>
             <td><small>${fmtDate(p.created_at)}</small>${p.paid_at ? '<br><small style="color:var(--primary)">Paid: ' + fmtDate(p.paid_at) + '</small>' : ''}</td>
             <td>
@@ -1428,7 +1428,7 @@ async function viewWheelResults(wheelId, wheelName) {
                 <button class="btn btn-sm btn-primary" onclick="markPrizePaid('${p.id}','${p.prize_type}','${p.prize_value}','${p.farmer_name}')"><i class="fas fa-rupee-sign"></i> Mark Paid</button>
               ` : ''}
               ${p.status === 'paid' || p.status === 'delivered' ? '<span style="color:var(--primary)"><i class="fas fa-check-double"></i> Done</span>' : ''}
-              ${p.status === 'no_prize' ? '<span style="color:var(--text-light)">—</span>' : ''}
+              ${p.status === 'no_prize' ? '<span style="color:var(--text-light)">â€”</span>' : ''}
               ${p.status === 'rejected' ? '<span style="color:var(--danger)" title="' + (p.rejection_reason || '') + '"><i class="fas fa-ban"></i> Rejected</span>' : ''}
             </td>
           </tr>
@@ -1452,8 +1452,8 @@ async function approvePrize(prizeId) {
       method: 'PUT',
       body: JSON.stringify({ notes: notes || '' })
     });
-    if (r.coupon_code) alert('✅ Approved! Coupon generated: ' + r.coupon_code + '\nWhatsApp notification sent to farmer.');
-    else alert('✅ Approved! WhatsApp notification sent to farmer.');
+    if (r.coupon_code) alert('âœ… Approved! Coupon generated: ' + r.coupon_code + '\nWhatsApp notification sent to farmer.');
+    else alert('âœ… Approved! WhatsApp notification sent to farmer.');
     viewWheelResults('', 'All Wheels');
   } catch (e) { alert('Error: ' + (e.message || 'Failed to approve')); }
 }
@@ -1466,13 +1466,13 @@ async function rejectPrize(prizeId) {
       method: 'PUT',
       body: JSON.stringify({ reason })
     });
-    alert('❌ Rejected. Farmer has been notified via WhatsApp.');
+    alert('âŒ Rejected. Farmer has been notified via WhatsApp.');
     viewWheelResults('', 'All Wheels');
   } catch (e) { alert('Error: ' + (e.message || 'Failed to reject')); }
 }
 
 async function markPrizePaid(prizeId, prizeType, value, farmerName) {
-  const method = prompt(`Payment method for ${farmerName} (₹${value}):\n\nOptions: UPI, Paytm, Bank Transfer, Cash, Coupon\n\nEnter method:`, 'UPI');
+  const method = prompt(`Payment method for ${farmerName} (â‚¹${value}):\n\nOptions: UPI, Paytm, Bank Transfer, Cash, Coupon\n\nEnter method:`, 'UPI');
   if (!method) return;
   const reference = prompt('Payment reference / Transaction ID:', '');
   try {
@@ -1480,7 +1480,7 @@ async function markPrizePaid(prizeId, prizeType, value, farmerName) {
       method: 'PUT',
       body: JSON.stringify({ payment_method: method, payment_reference: reference || '' })
     });
-    alert('💰 Marked as ' + (prizeType === 'cash' ? 'Paid' : 'Delivered') + '! Farmer notified via WhatsApp.');
+    alert('ðŸ’° Marked as ' + (prizeType === 'cash' ? 'Paid' : 'Delivered') + '! Farmer notified via WhatsApp.');
     viewWheelResults('', 'All Wheels');
   } catch (e) { alert('Error: ' + (e.message || 'Failed to update')); }
 }
@@ -1498,13 +1498,13 @@ function newSpinWheelModal() {
       <div class="form-group"><label>Start Date</label><input id="swStart" type="datetime-local"></div>
       <div class="form-group"><label>End Date</label><input id="swEnd" type="datetime-local"></div>
     </div>
-    <div class="form-group"><label>Total Budget (₹)</label><input id="swBudget" type="number" value="10000"></div>
+    <div class="form-group"><label>Total Budget (â‚¹)</label><input id="swBudget" type="number" value="10000"></div>
     <h4 style="margin:16px 0 8px">Segments (Prizes)</h4>
     <div id="segmentsList">
       <div class="segment-row" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
         <input placeholder="Label" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-label">
         <select style="padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-type"><option value="cash">Cash</option><option value="discount">Discount</option><option value="points">Points</option><option value="product">Product</option><option value="better_luck">Better Luck</option></select>
-        <input placeholder="Value ₹" type="number" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-value">
+        <input placeholder="Value â‚¹" type="number" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-value">
         <input placeholder="Prob (0-1)" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-prob" value="0.2">
         <input type="color" value="#4CAF50" class="seg-color" style="width:40px;height:36px;border:none;cursor:pointer">
       </div>
@@ -1518,7 +1518,7 @@ function addSegmentRow() {
     <div class="segment-row" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
       <input placeholder="Label" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-label">
       <select style="padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-type"><option value="cash">Cash</option><option value="discount">Discount</option><option value="points">Points</option><option value="product">Product</option><option value="better_luck">Better Luck</option></select>
-      <input placeholder="Value ₹" type="number" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-value">
+      <input placeholder="Value â‚¹" type="number" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-value">
       <input placeholder="Prob" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-prob" value="0.1">
       <input type="color" value="#FF9800" class="seg-color" style="width:40px;height:36px;border:none;cursor:pointer">
     </div>`;
@@ -1542,7 +1542,7 @@ async function createSpinWheel() {
 async function activateWheel(id) { await api('/api/v1/spin-wheels/' + id, { method: 'PUT', body: JSON.stringify({ status: 'active' }) }); loadSpinWheels(); }
 async function pauseWheel(id) { await api('/api/v1/spin-wheels/' + id, { method: 'PUT', body: JSON.stringify({ status: 'paused' }) }); loadSpinWheels(); }
 
-// ─── 9. COUPONS ───
+// â”€â”€â”€ 9. COUPONS â”€â”€â”€
 async function loadCoupons() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div style="padding:40px;text-align:center"><div class="spinner"></div><p>Loading Coupon Codes...</p></div>';
@@ -1826,8 +1826,6 @@ async function createCoupon() {
   } catch (e) { alert('Error: ' + e.message); }
 }
 
-@'
-// ─── COUPON DETAIL FUNCTIONS ───
 
 async function viewCouponDealers(campaignId) {
   try {
@@ -1991,7 +1989,7 @@ function viewQRSheet(campaignId) {
 '@ | Set-Content "C:\Users\devas\OneDrive\Desktop\vartmap\services\admin-dashboard\coupon-functions.js" -Encoding UTF8
 
 
-// ─── 10. REWARDS ───
+// â”€â”€â”€ 10. REWARDS â”€â”€â”€
 async function loadRewards() {
   const el = document.getElementById('pageContent');
   try {
@@ -2030,7 +2028,7 @@ async function awardReward() {
   closeModal(); loadRewards();
 }
 
-// ─── 11. REFERRALS ───
+// â”€â”€â”€ 11. REFERRALS â”€â”€â”€
 async function loadReferrals() {
   const el = document.getElementById('pageContent');
   try {
@@ -2051,7 +2049,7 @@ async function loadReferrals() {
   } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
 }
 
-// ─── 12. SOIL DATA ───
+// â”€â”€â”€ 12. SOIL DATA â”€â”€â”€
 async function loadSoilData() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
@@ -2097,7 +2095,7 @@ async function loadSoilData() {
           <div class="nutrient-bar"><div class="label"><span>Phosphorus (P)</span><span>L:${d.phosphorus_low_pct}% M:${d.phosphorus_medium_pct}% H:${d.phosphorus_high_pct}%</span></div><div class="bar"><div class="bar-low" style="width:${d.phosphorus_low_pct}%"></div><div class="bar-medium" style="width:${d.phosphorus_medium_pct}%"></div><div class="bar-high" style="width:${d.phosphorus_high_pct}%"></div></div></div>
           <div class="nutrient-bar"><div class="label"><span>Potassium (K)</span><span>L:${d.potassium_low_pct}% M:${d.potassium_medium_pct}% H:${d.potassium_high_pct}%</span></div><div class="bar"><div class="bar-low" style="width:${d.potassium_low_pct}%"></div><div class="bar-medium" style="width:${d.potassium_medium_pct}%"></div><div class="bar-high" style="width:${d.potassium_high_pct}%"></div></div></div>
           <div class="nutrient-bar"><div class="label"><span>Organic Carbon</span><span>L:${d.organic_carbon_low_pct}% M:${d.organic_carbon_medium_pct}% H:${d.organic_carbon_high_pct}%</span></div><div class="bar"><div class="bar-low" style="width:${d.organic_carbon_low_pct}%"></div><div class="bar-medium" style="width:${d.organic_carbon_medium_pct}%"></div><div class="bar-high" style="width:${d.organic_carbon_high_pct}%"></div></div></div>
-          <p style="font-size:12px;margin-top:8px">pH: ${d.avg_ph || '-'} · Soil: ${d.soil_type || '-'} · Samples: ${d.total_samples}</p>
+          <p style="font-size:12px;margin-top:8px">pH: ${d.avg_ph || '-'} Â· Soil: ${d.soil_type || '-'} Â· Samples: ${d.total_samples}</p>
         </div>
       `).join('')}
     </div>` : ''}`;
@@ -2167,7 +2165,7 @@ async function fetchSoilLive() {
   } catch (e) { alert('Error: ' + e.message); }
 }
 
-// ─── 13. SCHEMES ───
+// â”€â”€â”€ 13. SCHEMES â”€â”€â”€
 async function loadSchemes() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
@@ -2262,7 +2260,7 @@ async function updateScheme(id) {
   closeModal(); loadSchemes();
 }
 
-// ─── 14. PRODUCTS ───
+// â”€â”€â”€ 14. PRODUCTS â”€â”€â”€
 async function loadProducts() {
   const el = document.getElementById('pageContent');
   try {
@@ -2299,7 +2297,7 @@ async function createProduct() {
   closeModal(); loadProducts();
 }
 
-// ─── 15. MANDI PRICES ───
+// â”€â”€â”€ 15. MANDI PRICES â”€â”€â”€
 async function loadMandi() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
@@ -2336,8 +2334,8 @@ async function loadMandi() {
         <div class="table-actions"><div class="search-box"><i class="fas fa-search"></i><input id="mandiSearch" placeholder="Search commodity..." onkeydown="if(event.key==='Enter')filterMandiTable(this.value)"></div><button class="btn btn-primary btn-sm" onclick="newMandiModal()"><i class="fas fa-plus"></i> Add Price</button></div>
       </div>
       <div style="overflow-x:auto">
-      <table id="mandiTable"><tr><th>Commodity</th><th>Variety</th><th>Market</th><th>District</th><th>State</th><th>Min ₹</th><th>Max ₹</th><th>Modal ₹</th><th>Date</th></tr>
-      ${d.prices.map(p => `<tr><td><strong>${p.commodity}</strong></td><td>${p.variety || '-'}</td><td>${p.market_name || '-'}</td><td>${p.district || '-'}</td><td>${p.state || '-'}</td><td>${p.min_price || '-'}</td><td>${p.max_price || '-'}</td><td><strong>₹${p.modal_price || '-'}</strong></td><td>${fmtDate(p.price_date)}</td></tr>`).join('')}
+      <table id="mandiTable"><tr><th>Commodity</th><th>Variety</th><th>Market</th><th>District</th><th>State</th><th>Min â‚¹</th><th>Max â‚¹</th><th>Modal â‚¹</th><th>Date</th></tr>
+      ${d.prices.map(p => `<tr><td><strong>${p.commodity}</strong></td><td>${p.variety || '-'}</td><td>${p.market_name || '-'}</td><td>${p.district || '-'}</td><td>${p.state || '-'}</td><td>${p.min_price || '-'}</td><td>${p.max_price || '-'}</td><td><strong>â‚¹${p.modal_price || '-'}</strong></td><td>${fmtDate(p.price_date)}</td></tr>`).join('')}
       </table></div>
     </div>`;
   } catch (e) { el.innerHTML = '<div class="empty"><p>Error loading mandi prices</p></div>'; }
@@ -2354,8 +2352,8 @@ async function fetchMandiLive(state, commodity, limit) {
     if (resultEl) {
       resultEl.innerHTML = `<div style="padding:12px;background:#E8F5E9;border-radius:8px;font-size:13px">
         <strong><i class="fas fa-check-circle" style="color:#2E7D32"></i> ${r.message}</strong><br>
-        Fetched: ${r.fetched} · Inserted: ${r.inserted} into database
-        ${r.sample && r.sample.length ? '<br>Sample: ' + r.sample.map(s => s.commodity + ' ₹' + s.modal_price + ' (' + s.market + ')').join(', ') : ''}
+        Fetched: ${r.fetched} Â· Inserted: ${r.inserted} into database
+        ${r.sample && r.sample.length ? '<br>Sample: ' + r.sample.map(s => s.commodity + ' â‚¹' + s.modal_price + ' (' + s.market + ')').join(', ') : ''}
       </div>`;
     }
     setTimeout(() => loadMandi(), 2000);
@@ -2384,8 +2382,8 @@ function newMandiModal() {
     <div class="form-row"><div class="form-group"><label>Commodity</label><input id="mpComm"></div><div class="form-group"><label>Variety</label><input id="mpVar"></div></div>
     <div class="form-row"><div class="form-group"><label>Market Name</label><input id="mpMarket"></div><div class="form-group"><label>District</label><input id="mpDist"></div></div>
     <div class="form-row"><div class="form-group"><label>State</label><input id="mpState"></div><div class="form-group"><label>Price Date</label><input id="mpDate" type="date"></div></div>
-    <div class="form-row"><div class="form-group"><label>Min ₹/qtl</label><input id="mpMin" type="number"></div><div class="form-group"><label>Max ₹/qtl</label><input id="mpMax" type="number"></div></div>
-    <div class="form-group"><label>Modal ₹/qtl</label><input id="mpModal" type="number"></div>
+    <div class="form-row"><div class="form-group"><label>Min â‚¹/qtl</label><input id="mpMin" type="number"></div><div class="form-group"><label>Max â‚¹/qtl</label><input id="mpMax" type="number"></div></div>
+    <div class="form-group"><label>Modal â‚¹/qtl</label><input id="mpModal" type="number"></div>
   `, `<button class="btn btn-primary" onclick="createMandiPrice()"><i class="fas fa-save"></i> Save</button>`);
 }
 
@@ -2400,7 +2398,7 @@ async function createMandiPrice() {
   closeModal(); loadMandi();
 }
 
-// ─── 16. DEALERS ───
+// â”€â”€â”€ 16. DEALERS â”€â”€â”€
 async function loadDealers() {
   const el = document.getElementById('pageContent');
   try {
@@ -2409,7 +2407,7 @@ async function loadDealers() {
     <div class="table-wrap">
       <div class="table-header"><h3>Dealers (${d.dealers.length})</h3><button class="btn btn-primary btn-sm" onclick="newDealerModal()"><i class="fas fa-plus"></i> Add Dealer</button></div>
       <table><tr><th>Name</th><th>Phone</th><th>District</th><th>License</th><th>Verified</th><th>Status</th></tr>
-      ${d.dealers.map(d => `<tr><td><strong>${d.name}</strong></td><td>${d.phone}</td><td>${d.district_name || '-'}</td><td>${d.license_number || '-'}</td><td>${d.verified ? '✅' : '❌'}</td><td><span class="status ${d.status}">${d.status}</span></td></tr>`).join('')}
+      ${d.dealers.map(d => `<tr><td><strong>${d.name}</strong></td><td>${d.phone}</td><td>${d.district_name || '-'}</td><td>${d.license_number || '-'}</td><td>${d.verified ? 'âœ…' : 'âŒ'}</td><td><span class="status ${d.status}">${d.status}</span></td></tr>`).join('')}
       </table>
     </div>`;
   } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
@@ -2430,7 +2428,7 @@ async function createDealer() {
   closeModal(); loadDealers();
 }
 
-// ─── 17. FIELD AGENTS ───
+// â”€â”€â”€ 17. FIELD AGENTS â”€â”€â”€
 async function loadFieldAgents() {
   const el = document.getElementById('pageContent');
   try {
@@ -2460,7 +2458,7 @@ async function createAgent() {
   closeModal(); loadFieldAgents();
 }
 
-// ─── 18. ORDERS ───
+// â”€â”€â”€ 18. ORDERS â”€â”€â”€
 async function loadOrders() {
   const el = document.getElementById('pageContent');
   try {
@@ -2469,13 +2467,13 @@ async function loadOrders() {
     <div class="table-wrap">
       <div class="table-header"><h3>Orders (${d.orders.length})</h3></div>
       <table><tr><th>Farmer</th><th>Product</th><th>Dealer</th><th>Qty</th><th>Amount</th><th>Status</th><th>Payment</th><th>Date</th></tr>
-      ${d.orders.map(o => `<tr><td>${o.farmer_name || '-'}</td><td>${o.product_name || '-'}</td><td>${o.dealer_name || '-'}</td><td>${o.quantity}</td><td>₹${o.total_amount || 0}</td><td><span class="status ${o.status}">${o.status}</span></td><td><span class="status ${o.payment_status}">${o.payment_status}</span></td><td>${fmtDate(o.created_at)}</td></tr>`).join('')}
+      ${d.orders.map(o => `<tr><td>${o.farmer_name || '-'}</td><td>${o.product_name || '-'}</td><td>${o.dealer_name || '-'}</td><td>${o.quantity}</td><td>â‚¹${o.total_amount || 0}</td><td><span class="status ${o.status}">${o.status}</span></td><td><span class="status ${o.payment_status}">${o.payment_status}</span></td><td>${fmtDate(o.created_at)}</td></tr>`).join('')}
       </table>
     </div>`;
   } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
 }
 
-// ─── 19. MODERATION ───
+// â”€â”€â”€ 19. MODERATION â”€â”€â”€
 async function loadModeration() {
   const el = document.getElementById('pageContent');
   try {
@@ -2494,7 +2492,7 @@ async function loadModeration() {
 
 async function modAction(id, action) { await api('/api/v1/moderation/' + id + '/action', { method: 'POST', body: JSON.stringify({ action }) }); loadModeration(); }
 
-// ─── 20. NOTIFICATIONS ───
+// â”€â”€â”€ 20. NOTIFICATIONS â”€â”€â”€
 async function loadNotifications() {
   const el = document.getElementById('pageContent');
   try {
@@ -2509,7 +2507,7 @@ async function loadNotifications() {
   } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
 }
 
-// ─── 21. ANALYTICS ───
+// â”€â”€â”€ 21. ANALYTICS â”€â”€â”€
 async function loadAnalytics() {
   const el = document.getElementById('pageContent');
   try {
@@ -2536,14 +2534,14 @@ async function loadAnalytics() {
     <div id="usageTab" style="display:none">
       <div class="table-wrap">
         <div class="table-header"><h3>Usage by Feature</h3></div>
-        <table><tr><th>Feature</th><th>Count</th><th>Cost (₹)</th></tr>
-        ${usage.by_feature.map(f => `<tr><td>${f.feature}</td><td>${f.count}</td><td>₹${(+f.total_cost).toFixed(2)}</td></tr>`).join('')}
+        <table><tr><th>Feature</th><th>Count</th><th>Cost (â‚¹)</th></tr>
+        ${usage.by_feature.map(f => `<tr><td>${f.feature}</td><td>${f.count}</td><td>â‚¹${(+f.total_cost).toFixed(2)}</td></tr>`).join('')}
         </table>
       </div>
       <div class="table-wrap">
         <div class="table-header"><h3>Daily Costs</h3></div>
-        <table><tr><th>Date</th><th>Cost (₹)</th></tr>
-        ${usage.costs.map(c => `<tr><td>${c.date}</td><td>₹${(+c.cost).toFixed(2)}</td></tr>`).join('')}
+        <table><tr><th>Date</th><th>Cost (â‚¹)</th></tr>
+        ${usage.costs.map(c => `<tr><td>${c.date}</td><td>â‚¹${(+c.cost).toFixed(2)}</td></tr>`).join('')}
         </table>
       </div>
     </div>`;
@@ -2557,7 +2555,7 @@ function showAnalyticsTab(tabId, el) {
   document.getElementById('usageTab').style.display = tabId === 'usageTab' ? 'block' : 'none';
 }
 
-// ─── 22. SERVICES ───
+// â”€â”€â”€ 22. SERVICES â”€â”€â”€
 async function loadServices() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="stats-grid">' + SVCS.map(s => `<div class="stat-card" id="svc-${s.name.replace(/\s/g,'')}"><div class="stat-icon"><i class="fas fa-spinner fa-spin"></i></div><div class="stat-value">${s.name}</div><div class="stat-label">Checking...</div></div>`).join('') + '</div>';
@@ -2566,7 +2564,7 @@ async function loadServices() {
       const r = await fetch(s.url).then(r => r.json());
       const card = document.getElementById('svc-' + s.name.replace(/\s/g, ''));
       card.className = 'stat-card' + (r.status === 'healthy' ? '' : ' danger');
-      card.innerHTML = `<div class="stat-icon"><i class="fas ${r.status === 'healthy' ? 'fa-check-circle' : 'fa-times-circle'}" style="color:${r.status === 'healthy' ? '#4CAF50' : '#E53935'}"></i></div><div class="stat-value">${s.name}</div><div class="stat-label"><span class="status ${r.status === 'healthy' ? 'healthy' : 'unhealthy'}">${r.status}</span> · DB: ${r.database || '?'} · Redis: ${r.redis || '?'}</div>`;
+      card.innerHTML = `<div class="stat-icon"><i class="fas ${r.status === 'healthy' ? 'fa-check-circle' : 'fa-times-circle'}" style="color:${r.status === 'healthy' ? '#4CAF50' : '#E53935'}"></i></div><div class="stat-value">${s.name}</div><div class="stat-label"><span class="status ${r.status === 'healthy' ? 'healthy' : 'unhealthy'}">${r.status}</span> Â· DB: ${r.database || '?'} Â· Redis: ${r.redis || '?'}</div>`;
     } catch (e) {
       const card = document.getElementById('svc-' + s.name.replace(/\s/g, ''));
       card.className = 'stat-card danger';
@@ -2575,7 +2573,7 @@ async function loadServices() {
   }
 }
 
-// ─── 23. ADMIN USERS ───
+// â”€â”€â”€ 23. ADMIN USERS â”€â”€â”€
 async function loadAdminUsers() {
   const el = document.getElementById('pageContent');
   try {
@@ -2605,7 +2603,7 @@ async function createAdmin() {
   closeModal(); loadAdminUsers();
 }
 
-// ─── 24. AUDIT LOG ───
+// â”€â”€â”€ 24. AUDIT LOG â”€â”€â”€
 async function loadAuditLog() {
   const el = document.getElementById('pageContent');
   try {
@@ -2621,7 +2619,7 @@ async function loadAuditLog() {
   } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
 }
 
-// ─── INIT ───
+// â”€â”€â”€ INIT â”€â”€â”€
 if (TOKEN && USER) showApp();
 </script>
 </body>
