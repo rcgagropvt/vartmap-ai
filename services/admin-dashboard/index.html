@@ -1990,7 +1990,6 @@ function viewQRSheet(campaignId) {
 }
 
 
-@'
 async function loadProductCatalog() {
   const el = document.getElementById("pageContent");
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading catalog...</p></div>';
@@ -2240,7 +2239,6 @@ async function deleteReco(recoId, productId, productName) {
   } catch(e) { alert("Error: " + e.message); }
 }
 
-'@ | Set-Content "C:\Users\devas\OneDrive\Desktop\vartmap\temp-catalog-ui.js" -Encoding UTF8
 async function loadSettings() {
   const el = document.getElementById("pageContent");
   try {
