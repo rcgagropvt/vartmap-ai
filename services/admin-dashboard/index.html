@@ -1826,6 +1826,169 @@ async function createCoupon() {
   } catch (e) { alert('Error: ' + e.message); }
 }
 
+@'
+// ─── COUPON DETAIL FUNCTIONS ───
+
+async function viewCouponDealers(campaignId) {
+  try {
+    const d = await api('/api/v1/coupons/' + campaignId + '/dealers');
+    const batches = d.batches || [];
+    openModal('Dealer Assignments', `
+      <div style="margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="showDealerAssignModal('${campaignId}')">+ Assign Dealer</button></div>
+      ${batches.length === 0 ? '<p style="color:#6b7280">No dealer assignments yet.</p>' : `
+      <table style="width:100%"><tr><th>Dealer</th><th>Phone</th><th>Codes</th><th>Date</th><th>Notes</th></tr>
+      ${batches.map(b => `<tr><td><strong>${b.dealer_name}</strong></td><td>${b.dealer_phone}</td><td>${b.codes_count}</td><td>${new Date(b.assigned_at).toLocaleDateString()}</td><td>${b.notes||'-'}</td></tr>`).join('')}
+      </table>`}
+    `);
+  } catch(e) { alert('Error loading dealers: ' + e.message); }
+}
+
+function showDealerAssignModal(campaignId) {
+  openModal('Assign Codes to Dealer', `
+    <div style="display:grid;gap:12px">
+      <input id="da-name" placeholder="Dealer Name" style="padding:10px;border:1px solid #d1d5db;border-radius:8px">
+      <input id="da-phone" placeholder="Phone (e.g. 919876543210)" style="padding:10px;border:1px solid #d1d5db;border-radius:8px">
+      <input id="da-count" type="number" placeholder="Number of codes" value="10" style="padding:10px;border:1px solid #d1d5db;border-radius:8px">
+      <input id="da-notes" placeholder="Notes (optional)" style="padding:10px;border:1px solid #d1d5db;border-radius:8px">
+      <button class="btn btn-primary" onclick="submitDealerAssign('${campaignId}')">Assign Codes</button>
+    </div>
+  `);
+}
+
+async function submitDealerAssign(campaignId) {
+  try {
+    const d = await api('/api/v1/coupons/' + campaignId + '/assign-dealer', {
+      method: 'POST',
+      body: JSON.stringify({
+        dealer_name: document.getElementById('da-name').value,
+        dealer_phone: document.getElementById('da-phone').value,
+        codes_count: parseInt(document.getElementById('da-count').value),
+        notes: document.getElementById('da-notes').value
+      })
+    });
+    alert(d.message || 'Codes assigned!');
+    closeModal();
+    viewCouponDealers(campaignId);
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function showDistributeModal(campaignId) {
+  openModal('Distribute Codes via WhatsApp', `
+    <div style="display:grid;gap:12px">
+      <p style="color:#6b7280;font-size:14px">Search farmers to send coupon codes via WhatsApp</p>
+      <input id="dist-search" placeholder="Search farmers by name or phone..." oninput="searchFarmersForDist(this.value)" style="padding:10px;border:1px solid #d1d5db;border-radius:8px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-sm" onclick="selectAllFarmersForDist()" style="padding:4px 10px;background:#e5e7eb;border:none;border-radius:6px;cursor:pointer;font-size:12px">Select All</button>
+        <button class="btn btn-sm" onclick="selectActiveFarmersForDist()" style="padding:4px 10px;background:#d1fae5;border:none;border-radius:6px;cursor:pointer;font-size:12px">Active Only</button>
+        <button class="btn btn-sm" onclick="clearDistSelection()" style="padding:4px 10px;background:#fee2e2;border:none;border-radius:6px;cursor:pointer;font-size:12px">Clear</button>
+      </div>
+      <div id="dist-selected" style="font-size:13px;color:#6b7280">0 farmers selected</div>
+      <div id="dist-results" style="max-height:250px;overflow-y:auto"></div>
+      <input id="dist-msg" placeholder="Custom message (optional)" style="padding:10px;border:1px solid #d1d5db;border-radius:8px">
+      <button class="btn btn-primary" onclick="submitDistribution('${campaignId}')" style="background:#8b5cf6">Send Codes via WhatsApp</button>
+    </div>
+  `);
+  window._distFarmers = [];
+  window._distSelected = new Set();
+  searchFarmersForDist('');
+}
+
+async function searchFarmersForDist(query) {
+  try {
+    const d = await api('/api/v1/farmers?search=' + encodeURIComponent(query) + '&limit=50');
+    const farmers = d.farmers || [];
+    window._distFarmers = farmers;
+    const container = document.getElementById('dist-results');
+    if (!container) return;
+    container.innerHTML = farmers.map(f => `
+      <div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid #f3f4f6;cursor:pointer" onclick="toggleDistFarmer('${f.id}','${(f.name||'').replace(/'/g,"\\'")}','${f.phone}')">
+        <input type="checkbox" ${window._distSelected.has(f.id) ? 'checked' : ''} style="pointer-events:none">
+        <div><strong>${f.name||'Unknown'}</strong> <span style="color:#6b7280;font-size:12px">${f.phone}</span></div>
+      </div>
+    `).join('');
+  } catch(e) { console.log('Search error:', e); }
+}
+
+function toggleDistFarmer(id, name, phone) {
+  if (window._distSelected.has(id)) window._distSelected.delete(id);
+  else window._distSelected.add(id);
+  renderDistSelected();
+  searchFarmersForDist(document.getElementById('dist-search')?.value || '');
+}
+
+function renderDistSelected() {
+  const el = document.getElementById('dist-selected');
+  if (el) el.textContent = window._distSelected.size + ' farmers selected';
+}
+
+function selectAllFarmersForDist() {
+  (window._distFarmers || []).forEach(f => window._distSelected.add(f.id));
+  renderDistSelected();
+  searchFarmersForDist(document.getElementById('dist-search')?.value || '');
+}
+
+function selectActiveFarmersForDist() {
+  (window._distFarmers || []).filter(f => f.status === 'active').forEach(f => window._distSelected.add(f.id));
+  renderDistSelected();
+  searchFarmersForDist(document.getElementById('dist-search')?.value || '');
+}
+
+function clearDistSelection() {
+  window._distSelected = new Set();
+  renderDistSelected();
+  searchFarmersForDist(document.getElementById('dist-search')?.value || '');
+}
+
+async function submitDistribution(campaignId) {
+  if (window._distSelected.size === 0) return alert('Select at least one farmer');
+  try {
+    const d = await api('/api/v1/coupons/' + campaignId + '/distribute', {
+      method: 'POST',
+      body: JSON.stringify({
+        farmer_ids: Array.from(window._distSelected),
+        message: document.getElementById('dist-msg')?.value || ''
+      })
+    });
+    alert(d.message || 'Distribution started!');
+    closeModal();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function viewCouponGeoStats(campaignId) {
+  try {
+    const d = await api('/api/v1/coupons/' + campaignId + '/geo-stats');
+    const locs = d.locations || [];
+    openModal('Geographic Redemption Stats', `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div style="background:#eff6ff;padding:16px;border-radius:10px;text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#3b82f6">${d.total_redeemed || 0}</div>
+          <div style="font-size:12px;color:#6b7280">Total Redeemed</div>
+        </div>
+        <div style="background:#f0fdf4;padding:16px;border-radius:10px;text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#10b981">${d.geo_tracked || 0}</div>
+          <div style="font-size:12px;color:#6b7280">Geo Tracked</div>
+        </div>
+      </div>
+      ${locs.length === 0 ? '<p style="color:#6b7280;text-align:center">No geo-tracked redemptions yet.</p>' : `
+      <table style="width:100%"><tr><th>Location</th><th>Lat</th><th>Lng</th><th>Count</th></tr>
+      ${locs.map(l => `<tr><td>${l.location||'Unknown'}</td><td>${l.lat||'-'}</td><td>${l.lng||'-'}</td><td><strong>${l.count||1}</strong></td></tr>`).join('')}
+      </table>`}
+    `);
+  } catch(e) { alert('Error loading geo stats: ' + e.message); }
+}
+
+async function generateQRCodes(campaignId) {
+  try {
+    const d = await api('/api/v1/coupons/' + campaignId + '/generate-qr', { method: 'POST' });
+    alert(d.message || 'QR codes generated!');
+  } catch(e) { alert('Error generating QR: ' + e.message); }
+}
+
+function viewQRSheet(campaignId) {
+  const token = localStorage.getItem('vartmap_token');
+  window.open('https://vartmap-admin-api.onrender.com/api/v1/coupons/' + campaignId + '/qr-sheet?token=' + token, '_blank');
+}
+'@ | Set-Content "C:\Users\devas\OneDrive\Desktop\vartmap\services\admin-dashboard\coupon-functions.js" -Encoding UTF8
 
 
 // ─── 10. REWARDS ───
