@@ -1419,11 +1419,17 @@ app.get('/api/v1/rewards', auth, async (req, res) => {
 app.post('/api/v1/rewards', auth, async (req, res) => {
   try {
     const { farmer_id, type, points, description } = req.body;
+    if (!farmer_id || !points) return res.status(400).json({ error: 'farmer_id and points required' });
     const r = await pool.query(
       `INSERT INTO rewards (farmer_id, type, points, description, status) VALUES ($1,$2,$3,$4,'earned') RETURNING *`,
       [farmer_id, type || 'bonus', points, description]
     );
-    res.json({ reward: r.rows[0] });
+    const setting = await pool.query("SELECT value FROM app_settings WHERE key='reward_loyalty_enabled'");
+    if (!setting.rows.length || setting.rows[0].value === 'true') {
+      await pool.query('UPDATE farmers SET loyalty_points = COALESCE(loyalty_points,0) + $1, lifetime_points = COALESCE(lifetime_points,0) + $1 WHERE id = $2', [points, farmer_id]);
+      await pool.query("INSERT INTO loyalty_transactions (farmer_id, type, points, balance_after, source, description) VALUES ($1, 'earn', $2, (SELECT COALESCE(loyalty_points,0) FROM farmers WHERE id=$1), 'reward', $3)", [farmer_id, points, description || 'Admin reward: ' + (type || 'bonus')]);
+    }
+    res.json({ reward: r.rows[0], loyalty_updated: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -2100,5 +2106,74 @@ app.post('/api/v1/public/spin-wheel/:id/spin', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- SETTINGS API ---
+app.get('/api/v1/settings', auth, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT * FROM app_settings ORDER BY key');
+    const settings = {};
+    r.rows.forEach(s => { settings[s.key] = s.value; });
+    res.json({ settings, rows: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/v1/settings', auth, async (req, res) => {
+  try {
+    const updates = req.body;
+    for (const [key, value] of Object.entries(updates)) {
+      await pool.query('UPDATE app_settings SET value=$1, updated_at=NOW() WHERE key=$2', [String(value), key]);
+    }
+    res.json({ message: 'Settings updated' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- REFERRAL ENDPOINTS ---
+app.post('/api/v1/referrals/generate', auth, async (req, res) => {
+  try {
+    const { farmer_id } = req.body;
+    if (!farmer_id) return res.status(400).json({ error: 'farmer_id required' });
+    const farmer = await pool.query('SELECT * FROM farmers WHERE id=$1', [farmer_id]);
+    if (!farmer.rows.length) return res.status(404).json({ error: 'Farmer not found' });
+    const code = 'REF' + farmer.rows[0].phone.slice(-6) + Math.random().toString(36).substring(2,6).toUpperCase();
+    const existing = await pool.query('SELECT * FROM referral_codes WHERE farmer_id=$1 AND status=$2', [farmer_id, 'active']);
+    if (existing.rows.length) return res.json({ code: existing.rows[0] });
+    const r = await pool.query(
+      'INSERT INTO referral_codes (id, farmer_id, code, max_uses, current_uses, status, created_at) VALUES (gen_random_uuid(), $1, $2, 5, 0, $3, NOW()) RETURNING *',
+      [farmer_id, code, 'active']
+    );
+    res.json({ code: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/v1/public/referrals/redeem', async (req, res) => {
+  try {
+    const { referral_code, name, phone } = req.body;
+    if (!referral_code || !phone) return res.status(400).json({ error: 'referral_code and phone required' });
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    const rc = await pool.query("SELECT rc.*, f.name as referrer_name, f.phone as referrer_phone FROM referral_codes rc JOIN farmers f ON f.id = rc.farmer_id WHERE UPPER(rc.code)=$1 AND rc.status='active'", [referral_code.toUpperCase()]);
+    if (!rc.rows.length) return res.status(400).json({ error: 'Invalid or expired referral code' });
+    if (rc.rows[0].current_uses >= rc.rows[0].max_uses) return res.status(400).json({ error: 'Referral code has reached max uses' });
+    const existingFarmer = await pool.query('SELECT * FROM farmers WHERE phone=$1', [cleanPhone]);
+    if (existingFarmer.rows.length) return res.status(400).json({ error: 'This phone number is already registered' });
+    const settings = {};
+    const s = await pool.query('SELECT * FROM app_settings');
+    s.rows.forEach(r => { settings[r.key] = r.value; });
+    const referrerBonus = parseInt(settings.referral_bonus_referrer || '50');
+    const refereeBonus = parseInt(settings.referral_bonus_referee || '25');
+    const newFarmer = await pool.query(
+      "INSERT INTO farmers (id, name, phone, status, onboarding_stage, profile_complete, total_interactions, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, 'active', 'referred', false, 0, NOW(), NOW()) RETURNING *",
+      [name || 'Unknown', cleanPhone]
+    );
+    await pool.query(
+      'INSERT INTO referrals (id, referrer_id, referee_id, referral_code_id, status, referrer_points, referee_points, created_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW())',
+      [rc.rows[0].farmer_id, newFarmer.rows[0].id, rc.rows[0].id, 'completed', referrerBonus, refereeBonus]
+    );
+    await pool.query('UPDATE referral_codes SET current_uses = current_uses + 1, points_earned = points_earned + $1 WHERE id=$2', [referrerBonus, rc.rows[0].id]);
+    await pool.query('UPDATE farmers SET loyalty_points = COALESCE(loyalty_points,0) + $1, lifetime_points = COALESCE(lifetime_points,0) + $1 WHERE id = $2', [referrerBonus, rc.rows[0].farmer_id]);
+    await pool.query("INSERT INTO loyalty_transactions (farmer_id, type, points, balance_after, source, description) VALUES ($1, 'earn', $2, (SELECT COALESCE(loyalty_points,0) FROM farmers WHERE id=$1), 'referral', $3)", [rc.rows[0].farmer_id, referrerBonus, 'Referral bonus: ' + (name || cleanPhone) + ' joined']);
+    await pool.query('UPDATE farmers SET loyalty_points = COALESCE(loyalty_points,0) + $1, lifetime_points = COALESCE(lifetime_points,0) + $1 WHERE id = $2', [refereeBonus, newFarmer.rows[0].id]);
+    await pool.query("INSERT INTO loyalty_transactions (farmer_id, type, points, balance_after, source, description) VALUES ($1, 'earn', $2, (SELECT COALESCE(loyalty_points,0) FROM farmers WHERE id=$1), 'referral', 'Welcome bonus for joining via referral')", [newFarmer.rows[0].id, refereeBonus]);
+    res.json({ message: 'Referral successful', referrer_points: referrerBonus, referee_points: refereeBonus, farmer: newFarmer.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 // ─── START SERVER ───
 app.listen(PORT, () => console.log(`VartMap Admin API running on port ${PORT}`));
