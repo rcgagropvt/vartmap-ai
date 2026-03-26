@@ -335,9 +335,7 @@ function navigate(page) {
     'loyalty':loadLoyaltyProgram,'coupons':loadCoupons,'rewards':loadRewards,'referrals':loadReferrals,
     'soil-data':loadSoilData,'schemes':loadSchemes,'products':loadProducts,
     'mandi-prices':loadMandi,'dealers':loadDealers,'field-agents':loadFieldAgents,'orders':loadOrders,
-    'moderation':loadModeration,'notifications':loadNotifications,'analytics':loadAnalytics,
-    'services':loadServices,'admin-users':loadAdminUsers,'audit-log':loadAuditLog,'settings':loadSettings
-    'services':loadServices,'admin-users':loadAdminUsers,'audit-log':loadAuditLog,'settings':loadSettings,'catalog':loadProductCatalog
+    'moderation':loadModeration,'notifications':loadNotifications,'analytics':loadAnalytics,'services':loadServices,'admin-users':loadAdminUsers,'audit-log':loadAuditLog,'settings':loadSettings,'catalog':loadProductCatalog};
   const loader = loaders[page];
   if (loader) loader(); else document.getElementById('pageContent').innerHTML = '<div class="empty"><i class="fas fa-construction"></i><p>Coming soon</p></div>';
 }
