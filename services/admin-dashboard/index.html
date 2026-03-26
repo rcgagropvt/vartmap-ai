@@ -207,6 +207,7 @@ tr:hover{background:rgba(76,175,80,.03)}
       <div class="nav-section-title">Data & Intelligence</div>
       <div class="nav-item" onclick="navigate('soil-data')"><i class="fas fa-globe-asia"></i> Soil Database</div>
       <div class="nav-item" onclick="navigate('schemes')"><i class="fas fa-university"></i> Govt Schemes</div>
+      <div class="nav-item" onclick="navigate('settings')"><i class="fas fa-cog"></i> Settings</div>
       <div class="nav-item" onclick="navigate('products')"><i class="fas fa-box"></i> Products</div>
       <div class="nav-item" onclick="navigate('mandi-prices')"><i class="fas fa-chart-line"></i> Mandi Prices</div>
       <div class="nav-item" onclick="navigate('dealers')"><i class="fas fa-store"></i> Dealers</div>
@@ -324,7 +325,7 @@ function navigate(page) {
     'soil-data':'Soil Nutrient Database','schemes':'Government Schemes','products':'Products',
     'mandi-prices':'Mandi Prices','dealers':'Dealers','field-agents':'Field Agents','orders':'Orders',
     'moderation':'Moderation Queue','notifications':'Notification Logs','analytics':'Analytics',
-    'services':'Service Health','admin-users':'Admin Users','audit-log':'Audit Log'
+    'services':'Service Health','admin-users':'Admin Users','audit-log':'Audit Log','settings':'Settings'
   };
   document.getElementById('pageTitle').textContent = titles[page] || page;
   const loaders = {
@@ -334,7 +335,7 @@ function navigate(page) {
     'soil-data':loadSoilData,'schemes':loadSchemes,'products':loadProducts,
     'mandi-prices':loadMandi,'dealers':loadDealers,'field-agents':loadFieldAgents,'orders':loadOrders,
     'moderation':loadModeration,'notifications':loadNotifications,'analytics':loadAnalytics,
-    'services':loadServices,'admin-users':loadAdminUsers,'audit-log':loadAuditLog
+    'services':loadServices,'admin-users':loadAdminUsers,'audit-log':loadAuditLog,'settings':loadSettings
   };
   const loader = loaders[page];
   if (loader) loader(); else document.getElementById('pageContent').innerHTML = '<div class="empty"><i class="fas fa-construction"></i><p>Coming soon</p></div>';
@@ -1987,6 +1988,57 @@ function viewQRSheet(campaignId) {
   window.open('https://vartmap-admin-api.onrender.com/api/v1/coupons/' + campaignId + '/qr-sheet?token=' + token, '_blank');
 }
 
+
+async function loadSettings() {
+  const el = document.getElementById("pageContent");
+  try {
+    const d = await api("/api/v1/settings");
+    const s = d.settings || {};
+    const rows = d.rows || [];
+    el.innerHTML = `
+      <div style="max-width:700px;margin:0 auto">
+        <h2 style="margin-bottom:24px">Settings</h2>
+        <div style="background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
+          <h3 style="margin-bottom:16px;color:#1e293b">Loyalty & Rewards Integration</h3>
+          <div style="display:grid;gap:16px">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:#f8fafc;border-radius:8px">
+              <div><strong>Reward to Loyalty</strong><br><small style="color:#6b7280">Auto-add reward points to loyalty balance</small></div>
+              <label style="position:relative;display:inline-block;width:50px;height:26px"><input type="checkbox" id="set-reward_loyalty_enabled" ${s.reward_loyalty_enabled==="true"?"checked":""} onchange="updateSetting('reward_loyalty_enabled',this.checked)" style="opacity:0;width:0;height:0"><span style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:${s.reward_loyalty_enabled==="true"?"#10b981":"#cbd5e1"};border-radius:26px;transition:.3s"></span></label>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:#f8fafc;border-radius:8px">
+              <div><strong>WhatsApp Share Reward</strong><br><small style="color:#6b7280">Earn points when sharing codes via WhatsApp</small></div>
+              <label style="position:relative;display:inline-block;width:50px;height:26px"><input type="checkbox" id="set-whatsapp_share_reward" ${s.whatsapp_share_reward==="true"?"checked":""} onchange="updateSetting('whatsapp_share_reward',this.checked)" style="opacity:0;width:0;height:0"><span style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:${s.whatsapp_share_reward==="true"?"#10b981":"#cbd5e1"};border-radius:26px;transition:.3s"></span></label>
+            </div>
+          </div>
+          <h3 style="margin:24px 0 16px;color:#1e293b">Points Configuration</h3>
+          <div style="display:grid;gap:12px">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:#f8fafc;border-radius:8px">
+              <div><strong>Referrer Bonus</strong><br><small style="color:#6b7280">Points for the farmer who refers</small></div>
+              <input type="number" id="set-referral_bonus_referrer" value="${s.referral_bonus_referrer||50}" onchange="updateSetting('referral_bonus_referrer',this.value)" style="width:80px;padding:8px;border:1px solid #d1d5db;border-radius:6px;text-align:center">
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:#f8fafc;border-radius:8px">
+              <div><strong>Referee Bonus</strong><br><small style="color:#6b7280">Points for the new farmer who joins</small></div>
+              <input type="number" id="set-referral_bonus_referee" value="${s.referral_bonus_referee||25}" onchange="updateSetting('referral_bonus_referee',this.value)" style="width:80px;padding:8px;border:1px solid #d1d5db;border-radius:6px;text-align:center">
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:#f8fafc;border-radius:8px">
+              <div><strong>WhatsApp Share Points</strong><br><small style="color:#6b7280">Points per code shared via WhatsApp</small></div>
+              <input type="number" id="set-whatsapp_share_points" value="${s.whatsapp_share_points||10}" onchange="updateSetting('whatsapp_share_points',this.value)" style="width:80px;padding:8px;border:1px solid #d1d5db;border-radius:6px;text-align:center">
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  } catch(e) { el.innerHTML = "<div style=\"padding:40px;text-align:center;color:red\">Error loading settings: " + e.message + "</div>"; }
+}
+
+async function updateSetting(key, value) {
+  try {
+    const body = {};
+    body[key] = typeof value === "boolean" ? String(value) : value;
+    await api("/api/v1/settings", { method: "PUT", body: JSON.stringify(body) });
+    loadSettings();
+  } catch(e) { alert("Error updating setting: " + e.message); }
+}
 
 async function loadRewards() {
   const el = document.getElementById('pageContent');
