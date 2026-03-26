@@ -453,8 +453,9 @@ async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, 
   if (stage === 'awaiting_crops') {
     const crops = msgBody.trim();
     const farmerName = farmerData.name || 'Kisan';
-    await pool.query("UPDATE farmers SET crops = $1, onboarding_stage = 'complete', profile_complete = true, updated_at = NOW() WHERE id = $2",
-      [crops, farmerId]);
+        await pool.query("UPDATE farmers SET crops = $1, onboarding_stage = 'complete', profile_complete = true, updated_at = NOW() WHERE id = $2",
+      ['{' + crops.split(/[,\s]+/).map(c => c.trim()).filter(c => c).join(',') + '}', farmerId]);
+
 
     const done = (farmerData.language || 'hi') === 'hi'
       ? 'Bahut badhiya ' + farmerName + '! Aapki profile complete ho gayi. Ab main aapki har tarah se madad kar sakta hoon.'
