@@ -2302,5 +2302,255 @@ app.get('/api/v1/catalog/ai-context', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// --- BOT CONFIGURATION ---
+
+app.get('/api/v1/bot/config', auth, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT * FROM bot_config ORDER BY config_key');
+    const config = {};
+    r.rows.forEach(row => { config[row.config_key] = row.config_value; });
+    res.json({ config, rows: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/v1/bot/config/:key', auth, async (req, res) => {
+  try {
+    const { value } = req.body;
+    const r = await pool.query('UPDATE bot_config SET config_value=$1, updated_at=NOW() WHERE config_key=$2 RETURNING *', [JSON.stringify(value), req.params.key]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Config key not found' });
+    res.json({ config: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- BOT MENU ITEMS ---
+
+app.get('/api/v1/bot/menu', auth, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT * FROM bot_menu_items ORDER BY sort_order');
+    res.json({ items: r.rows, total: r.rows.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/v1/bot/menu', auth, async (req, res) => {
+  try {
+    const { menu_key, emoji, title_hi, title_en, description_hi, description_en, action_type, action_value, flow_id, sort_order } = req.body;
+    if (!menu_key || !title_hi || !title_en) return res.status(400).json({ error: 'menu_key, title_hi, title_en required' });
+    const r = await pool.query(
+      'INSERT INTO bot_menu_items (menu_key, emoji, title_hi, title_en, description_hi, description_en, action_type, action_value, flow_id, sort_order) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *',
+      [menu_key, emoji, title_hi, title_en, description_hi, description_en, action_type || 'ai_chat', action_value, flow_id, sort_order || 0]
+    );
+    res.json({ item: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/v1/bot/menu/:id', auth, async (req, res) => {
+  try {
+    const fields = req.body;
+    const sets = []; const vals = []; let idx = 1;
+    for (const [k, v] of Object.entries(fields)) {
+      if (['id','created_at'].includes(k)) continue;
+      sets.push(k + '=$' + idx); vals.push(v); idx++;
+    }
+    if (!sets.length) return res.status(400).json({ error: 'No fields' });
+    vals.push(req.params.id);
+    const r = await pool.query('UPDATE bot_menu_items SET ' + sets.join(',') + ' WHERE id=$' + idx + ' RETURNING *', vals);
+    if (!r.rows.length) return res.status(404).json({ error: 'Item not found' });
+    res.json({ item: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/v1/bot/menu/:id', auth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM bot_menu_items WHERE id=$1', [req.params.id]);
+    res.json({ message: 'Deleted' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- BOT FLOWS ---
+
+app.get('/api/v1/bot/flows', auth, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT f.*, (SELECT COUNT(*) FROM bot_flow_steps WHERE flow_id=f.id) as step_count FROM bot_flows f ORDER BY created_at DESC');
+    res.json({ flows: r.rows, total: r.rows.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/v1/bot/flows/:id', auth, async (req, res) => {
+  try {
+    const f = await pool.query('SELECT * FROM bot_flows WHERE id=$1', [req.params.id]);
+    if (!f.rows.length) return res.status(404).json({ error: 'Flow not found' });
+    const s = await pool.query('SELECT * FROM bot_flow_steps WHERE flow_id=$1 ORDER BY step_order', [req.params.id]);
+    res.json({ flow: f.rows[0], steps: s.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/v1/bot/flows', auth, async (req, res) => {
+  try {
+    const { name, description, trigger_keywords, trigger_menu_key } = req.body;
+    if (!name) return res.status(400).json({ error: 'name required' });
+    const r = await pool.query(
+      'INSERT INTO bot_flows (name, description, trigger_keywords, trigger_menu_key) VALUES ($1,$2,$3,$4) RETURNING *',
+      [name, description, trigger_keywords || '{}', trigger_menu_key]
+    );
+    res.json({ flow: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/v1/bot/flows/:id', auth, async (req, res) => {
+  try {
+    const { name, description, trigger_keywords, trigger_menu_key, is_active } = req.body;
+    const r = await pool.query(
+      'UPDATE bot_flows SET name=COALESCE($1,name), description=COALESCE($2,description), trigger_keywords=COALESCE($3,trigger_keywords), trigger_menu_key=COALESCE($4,trigger_menu_key), is_active=COALESCE($5,is_active), updated_at=NOW() WHERE id=$6 RETURNING *',
+      [name, description, trigger_keywords, trigger_menu_key, is_active, req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Flow not found' });
+    res.json({ flow: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/v1/bot/flows/:id', auth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM bot_flows WHERE id=$1', [req.params.id]);
+    res.json({ message: 'Flow deleted' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- BOT FLOW STEPS ---
+
+app.post('/api/v1/bot/flows/:flowId/steps', auth, async (req, res) => {
+  try {
+    const { step_order, message_hi, message_en, media_url, media_type, response_type, options, routing, save_response_as, trigger_ai, ai_context } = req.body;
+    if (!step_order) return res.status(400).json({ error: 'step_order required' });
+    const r = await pool.query(
+      'INSERT INTO bot_flow_steps (flow_id, step_order, message_hi, message_en, media_url, media_type, response_type, options, routing, save_response_as, trigger_ai, ai_context) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *',
+      [req.params.flowId, step_order, message_hi, message_en, media_url, media_type, response_type || 'free_text', JSON.stringify(options || []), JSON.stringify(routing || {}), save_response_as, trigger_ai || false, ai_context]
+    );
+    res.json({ step: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/v1/bot/flows/steps/:id', auth, async (req, res) => {
+  try {
+    const fields = req.body;
+    const sets = []; const vals = []; let idx = 1;
+    for (const [k, v] of Object.entries(fields)) {
+      if (['id','flow_id','created_at'].includes(k)) continue;
+      sets.push(k + '=$' + idx);
+      vals.push(typeof v === 'object' && v !== null ? JSON.stringify(v) : v);
+      idx++;
+    }
+    if (!sets.length) return res.status(400).json({ error: 'No fields' });
+    vals.push(req.params.id);
+    const r = await pool.query('UPDATE bot_flow_steps SET ' + sets.join(',') + ' WHERE id=$' + idx + ' RETURNING *', vals);
+    if (!r.rows.length) return res.status(404).json({ error: 'Step not found' });
+    res.json({ step: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/v1/bot/flows/steps/:id', auth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM bot_flow_steps WHERE id=$1', [req.params.id]);
+    res.json({ message: 'Step deleted' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- KNOWLEDGE BASE ---
+
+app.get('/api/v1/knowledge', auth, async (req, res) => {
+  try {
+    const { category, search } = req.query;
+    let q = 'SELECT * FROM knowledge_base WHERE is_active=true';
+    const p = [];
+    if (category) { p.push(category); q += ' AND category=$' + p.length; }
+    if (search) { p.push('%' + search + '%'); q += ' AND (title ILIKE $' + p.length + ' OR content_text ILIKE $' + p.length + ')'; }
+    q += ' ORDER BY created_at DESC';
+    const r = await pool.query(q, p);
+    res.json({ documents: r.rows, total: r.rows.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/v1/knowledge/:id', auth, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT * FROM knowledge_base WHERE id=$1', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Document not found' });
+    res.json({ document: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/v1/knowledge', auth, async (req, res) => {
+  try {
+    const { title, category, content_text, tags, language, file_url, file_type } = req.body;
+    if (!title || !content_text) return res.status(400).json({ error: 'title and content_text required' });
+    const chunks = [];
+    const words = content_text.split(/\s+/);
+    for (let i = 0; i < words.length; i += 200) {
+      chunks.push(words.slice(i, i + 200).join(' '));
+    }
+    const r = await pool.query(
+      'INSERT INTO knowledge_base (title, category, content_text, content_chunks, tags, language, file_url, file_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
+      [title, category || 'general', content_text, JSON.stringify(chunks), tags || '{}', language || 'hi', file_url, file_type]
+    );
+    res.json({ document: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/v1/knowledge/:id', auth, async (req, res) => {
+  try {
+    const fields = req.body;
+    if (fields.content_text) {
+      const words = fields.content_text.split(/\s+/);
+      const chunks = [];
+      for (let i = 0; i < words.length; i += 200) {
+        chunks.push(words.slice(i, i + 200).join(' '));
+      }
+      fields.content_chunks = JSON.stringify(chunks);
+    }
+    const sets = []; const vals = []; let idx = 1;
+    for (const [k, v] of Object.entries(fields)) {
+      if (['id','created_at'].includes(k)) continue;
+      sets.push(k + '=$' + idx);
+      vals.push(typeof v === 'object' && v !== null ? JSON.stringify(v) : v);
+      idx++;
+    }
+    sets.push('updated_at=NOW()');
+    vals.push(req.params.id);
+    const r = await pool.query('UPDATE knowledge_base SET ' + sets.join(',') + ' WHERE id=$' + idx + ' RETURNING *', vals);
+    if (!r.rows.length) return res.status(404).json({ error: 'Document not found' });
+    res.json({ document: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/v1/knowledge/:id', auth, async (req, res) => {
+  try {
+    await pool.query('UPDATE knowledge_base SET is_active=false, updated_at=NOW() WHERE id=$1', [req.params.id]);
+    res.json({ message: 'Document archived' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- BOT CONTEXT (for WhatsApp gateway) ---
+
+app.get('/api/v1/bot/context', async (req, res) => {
+  try {
+    const config = await pool.query('SELECT * FROM bot_config');
+    const menu = await pool.query('SELECT * FROM bot_menu_items WHERE is_active=true ORDER BY sort_order');
+    const flows = await pool.query('SELECT * FROM bot_flows WHERE is_active=true');
+    const configObj = {};
+    config.rows.forEach(row => { configObj[row.config_key] = row.config_value; });
+    res.json({ config: configObj, menu: menu.rows, flows: flows.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/v1/bot/knowledge-context', async (req, res) => {
+  try {
+    const { query, category } = req.query;
+    let q = 'SELECT id, title, category, content_chunks, tags FROM knowledge_base WHERE is_active=true';
+    const p = [];
+    if (category) { p.push(category); q += ' AND category=$' + p.length; }
+    if (query) { p.push('%' + query + '%'); q += ' AND (title ILIKE $' + p.length + ' OR content_text ILIKE $' + p.length + ')'; }
+    q += ' LIMIT 5';
+    const r = await pool.query(q, p);
+    res.json({ documents: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 // ─── START SERVER ───
 app.listen(PORT, () => console.log(`VartMap Admin API running on port ${PORT}`));
