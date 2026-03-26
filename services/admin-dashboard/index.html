@@ -678,6 +678,20 @@ function editFarmerFromProfile(id) {
   setTimeout(() => viewFarmerEdit(id), 300);
 }
 
+function previewProductImage(input, previewId, urlId) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { alert('Image must be under 2MB'); return; }
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    document.getElementById(previewId).innerHTML = '<img src="' + e.target.result + '" style="max-width:150px;max-height:150px;border-radius:8px;border:1px solid #d1d5db">';
+    document.getElementById(urlId).value = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+
+
 async function viewFarmerEdit(id) {
   const d = await api('/api/v1/farmers/' + id);
   const f = d.farmer;
@@ -2201,6 +2215,8 @@ function showAddProductModal() {
       </div>
       <div><label style="font-size:12px;font-weight:600">Price Range</label><input id="cpPrice" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. Rs. 150-300"></div>
       <div><label style="font-size:12px;font-weight:600">Pack Sizes (comma-separated)</label><input id="cpPacks" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. 1kg, 5kg, 25kg"></div>
+                  <div><label style="font-size:12px;font-weight:600">Product Image</label><div style="display:flex;gap:8px;align-items:start"><input id="cpImage" style="flex:1;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="Paste image URL (https://...)"><label style="padding:8px 12px;background:#6366f1;color:#fff;border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap"><i class="fas fa-upload"></i> Upload<input type="file" id="cpImageFile" accept="image/*" onchange="previewProductImage(this,'cpImagePreview','cpImage')" style="display:none"></label></div><div id="cpImagePreview" style="margin-top:8px"></div></div>
+
       <button onclick="submitProduct()" style="padding:10px 20px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">Save Product</button>
     </div>`);
 }
@@ -2224,7 +2240,8 @@ async function submitProduct() {
         benefits: document.getElementById("cpBenefits").value,
         benefits_hi: document.getElementById("cpBenefitsHi").value,
         price_range: document.getElementById("cpPrice").value,
-        pack_sizes: packs
+        pack_sizes: packs,
+        image_url: document.getElementById("cpImage").value
       })
     });
     closeModal(); loadProductCatalog();
@@ -2258,6 +2275,8 @@ async function editProductModal(id) {
         </div>
         <div><label style="font-size:12px;font-weight:600">Price Range</label><input id="epPrice" value="${p.price_range || ''}" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>
         <div><label style="font-size:12px;font-weight:600">Pack Sizes</label><input id="epPacks" value="${(p.pack_sizes || []).join(', ')}" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>
+                <div><label style="font-size:12px;font-weight:600">Product Image</label><div style="display:flex;gap:8px;align-items:start"><input id="epImage" value="${p.image_url || ''}" style="flex:1;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="Paste image URL"><label style="padding:8px 12px;background:#6366f1;color:#fff;border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap"><i class="fas fa-upload"></i> Upload<input type="file" id="epImageFile" accept="image/*" onchange="previewProductImage(this,'epImagePreview','epImage')" style="display:none"></label></div><div id="epImagePreview" style="margin-top:8px">${p.image_url ? '<img src="' + p.image_url + '" style="max-width:150px;max-height:150px;border-radius:8px;border:1px solid #d1d5db">' : ''}</div></div>
+
         <button onclick="submitEditProduct('${id}')" style="padding:10px 20px;background:#3b82f6;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">Update Product</button>
       </div>`);
   } catch(e) { alert("Error: " + e.message); }
@@ -2282,7 +2301,8 @@ async function submitEditProduct(id) {
         benefits: document.getElementById("epBenefits").value,
         benefits_hi: document.getElementById("epBenefitsHi").value,
         price_range: document.getElementById("epPrice").value,
-        pack_sizes: packs
+        pack_sizes: packs,
+        image_url: document.getElementById("epImage").value
       })
     });
     closeModal(); loadProductCatalog();
