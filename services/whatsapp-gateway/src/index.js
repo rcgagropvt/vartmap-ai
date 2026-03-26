@@ -16,27 +16,20 @@ app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 
 // --- DATABASE ---
-const dbUrl = process.env.DATABASE_URL;
-let pool = null;
-if (dbUrl) {
-  pool = new Pool({ connectionString: dbUrl, ssl: { rejectUnauthorized: false }, max: 5 });
-  pool.on('error', (err) => console.error('DB pool error:', err));
-  console.log('Database pool created');
-} else {
-  console.warn('DATABASE_URL not set');
-}
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+pool.query('SELECT NOW()').then(() => console.log('Database connected')).catch(e => console.error('DB error:', e.message));
 
 // --- REDIS (optional) ---
 let redis = null;
 try {
-  const Redis = require('ioredis');
-  const redisUrl = process.env.REDIS_URL;
-  if (redisUrl) {
-    redis = new Redis(redisUrl, { maxRetriesPerRequest: 3, retryStrategy: (times) => Math.min(times * 200, 5000) });
-    redis.on('error', (err) => console.error('Redis error:', err.message));
+  if (process.env.REDIS_URL) {
+    const Redis = require('ioredis');
+    redis = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: 1, retryStrategy: (t) => (t > 3 ? null : Math.min(t * 200, 2000)) });
     redis.on('connect', () => console.log('Redis connected'));
+    redis.on('error', (e) => console.error('Redis error:', e.message));
   }
-} catch (e) { console.log('Redis not available:', e.message); }
+} catch (e) { console.log('Redis not available'); }
+
 // --- AI SETUP (Gemini + Groq fallback) ---
 const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
 let groqClient = null;
@@ -44,18 +37,23 @@ if (process.env.GROQ_API_KEY) {
   const Groq = require('groq-sdk');
   groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY });
 }
+
+// --- CACHES ---
 let catalogCache = null;
 let catalogCacheTime = 0;
+let botConfigCache = null;
+let botConfigCacheTime = 0;
 const CACHE_TTL = 5 * 60 * 1000;
 
+const ADMIN_API_URL = process.env.ADMIN_API_URL || 'https://vartmap-admin-api.onrender.com';
+
+// --- FETCH PRODUCT CATALOG ---
 async function getProductCatalog() {
-  const now = Date.now();
-  if (catalogCache && (now - catalogCacheTime) < CACHE_TTL) return catalogCache;
+  if (catalogCache && (Date.now() - catalogCacheTime < CACHE_TTL)) return catalogCache;
   try {
-    const adminApiUrl = process.env.ADMIN_API_URL || 'https://vartmap-admin-api.onrender.com';
-    const resp = await axios.get(adminApiUrl + '/api/v1/catalog/ai-context');
+    const resp = await axios.get(ADMIN_API_URL + '/api/v1/catalog/ai-context');
     catalogCache = resp.data;
-    catalogCacheTime = now;
+    catalogCacheTime = Date.now();
     return catalogCache;
   } catch (e) {
     console.error('Failed to fetch catalog:', e.message);
@@ -63,7 +61,54 @@ async function getProductCatalog() {
   }
 }
 
-function buildSystemPrompt(catalog, farmer, language) {
+// --- FETCH BOT CONFIG (welcome, menu, flows, knowledge) ---
+async function getBotConfig() {
+  if (botConfigCache && (Date.now() - botConfigCacheTime < CACHE_TTL)) return botConfigCache;
+  try {
+    const token = process.env.ADMIN_API_TOKEN || '';
+    const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+
+    const [configResp, menuResp, flowsResp, knowledgeResp] = await Promise.allSettled([
+      axios.get(ADMIN_API_URL + '/api/v1/bot/config', { headers }),
+      axios.get(ADMIN_API_URL + '/api/v1/bot/menu', { headers }),
+      axios.get(ADMIN_API_URL + '/api/v1/bot/flows', { headers }),
+      axios.get(ADMIN_API_URL + '/api/v1/knowledge', { headers })
+    ]);
+
+    const configRows = configResp.status === 'fulfilled' ? (configResp.value.data.config || []) : [];
+    const configMap = {};
+    for (const row of configRows) {
+      try { configMap[row.config_key] = JSON.parse(row.config_value); } catch { configMap[row.config_key] = row.config_value; }
+    }
+
+    botConfigCache = {
+      welcome_hi: configMap.welcome_message_hi || 'Namaste! Main VartMap Krishi Sahayak hoon. Aapki kaise madad kar sakta hoon?',
+      welcome_en: configMap.welcome_message_en || 'Hello! I am VartMap Krishi Sahayak. How can I help you?',
+      onboarding_enabled: configMap.onboarding_enabled !== undefined ? configMap.onboarding_enabled : true,
+      onboarding_fields: configMap.onboarding_fields || ['name', 'crops'],
+      menu_items: menuResp.status === 'fulfilled' ? (menuResp.value.data.items || []) : [],
+      flows: flowsResp.status === 'fulfilled' ? (flowsResp.value.data.flows || []) : [],
+      knowledge: knowledgeResp.status === 'fulfilled' ? (knowledgeResp.value.data.documents || knowledgeResp.value.data.items || []) : []
+    };
+    botConfigCacheTime = Date.now();
+    console.log('Bot config loaded: ' + botConfigCache.menu_items.length + ' menu items, ' + botConfigCache.flows.length + ' flows, ' + botConfigCache.knowledge.length + ' knowledge docs');
+    return botConfigCache;
+  } catch (e) {
+    console.error('Failed to fetch bot config:', e.message);
+    return botConfigCache || {
+      welcome_hi: 'Namaste! Main VartMap Krishi Sahayak hoon.',
+      welcome_en: 'Hello! I am VartMap Krishi Sahayak.',
+      onboarding_enabled: false,
+      onboarding_fields: [],
+      menu_items: [],
+      flows: [],
+      knowledge: []
+    };
+  }
+}
+
+// --- BUILD SYSTEM PROMPT (now includes knowledge base) ---
+function buildSystemPrompt(catalog, farmer, language, botConfig) {
   const productList = (catalog.products || []).map(p =>
     '- ' + p.product_name + ' (' + (p.product_code || '') + '): ' + (p.composition || '') + '. Crops: ' + (p.target_crops || []).join(', ') + '. ' + (p.benefits || '') + ' Dosage: ' + (p.dosage_per_acre || 'as per soil test')
   ).join('\n');
@@ -73,9 +118,36 @@ function buildSystemPrompt(catalog, farmer, language) {
   const langInstruction = language === 'hi'
     ? 'Respond in Hindi (Devanagari script). If the farmer writes in English, still reply in Hindi unless they explicitly ask for English.'
     : 'Detect the language the farmer is using and respond in the same language. If mixed Hindi-English (Hinglish), respond in Hindi.';
-  return 'You are "VartMap Krishi Sahayak" - an AI agricultural assistant for Indian farmers, powered by Vartmaan Fertilizers (RCG Agro Private Limited).\n\nROLE:\n- You are a helpful, knowledgeable agricultural advisor who speaks like a friendly local expert\n- You recommend Vartmaan Fertilizers products when relevant (never push products unnecessarily)\n- You help with crop advice, soil health, pest/disease identification, weather guidance, government schemes, and mandi prices\n- Keep responses concise (under 300 words) since this is WhatsApp - use short paragraphs, not long essays\n- Use simple language that farmers understand\n\nLANGUAGE:\n' + langInstruction + '\n\nFARMER CONTEXT:\n- Name: ' + (farmer.name || 'Kisan') + '\n- Phone: ' + (farmer.phone || 'unknown') + '\n- Village: ' + (farmer.village || 'unknown') + '\n- State: ' + (farmer.state || 'unknown') + '\n- Primary Crop: ' + (farmer.primary_crop || 'unknown') + '\n- Soil Type: ' + (farmer.soil_type || 'unknown') + '\n\nVARTMAAN FERTILIZERS PRODUCT CATALOG:\n' + (productList || 'No products loaded') + '\n\nCROP-SPECIFIC RECOMMENDATIONS:\n' + (recoList || 'No specific recommendations loaded') + '\n\nGUIDELINES:\n1. When a farmer mentions a crop + problem/stage, recommend the most relevant Vartmaan product with exact dosage\n2. For zinc deficiency: recommend VARTIZIN products\n3. For iron deficiency/chlorosis: recommend VARTIFER products\n4. For sugarcane: recommend VARTIMIX Ganna Special 10%\n5. For general micronutrient needs: recommend VARTIMIX Multi-Crop 6% or Balshali 4%\n6. For premium/alkaline soil needs: recommend Kavach (chelated) variants\n7. If you do not know something, say so honestly - do not make up information\n8. For pest/disease images, describe what you see and suggest treatment\n9. Always be respectful and address the farmer warmly\n10. If asked about prices, say "Please contact your nearest dealer or call our helpline"\n11. Do not discuss competitor products by name\n12. For emergency pest attacks, advise contacting local Krishi Vigyan Kendra (KVK)';
+
+  // Knowledge base injection
+  let knowledgeSection = '';
+  if (botConfig && botConfig.knowledge && botConfig.knowledge.length > 0) {
+    const knowledgeDocs = botConfig.knowledge
+      .filter(d => d.status === 'active' || d.is_active)
+      .map(d => '- [' + (d.title || d.name || 'Document') + ']: ' + (d.content || d.description || d.summary || '').substring(0, 500))
+      .join('\n');
+    if (knowledgeDocs) {
+      knowledgeSection = '\n\nKNOWLEDGE BASE (use this information to answer farmer questions):\n' + knowledgeDocs;
+    }
+  }
+
+  // Menu items for context
+  let menuSection = '';
+  if (botConfig && botConfig.menu_items && botConfig.menu_items.length > 0) {
+    const menuList = botConfig.menu_items
+      .filter(m => m.is_active !== false)
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+      .map(m => '- "' + (m.menu_key || '') + '": ' + (m.title_hi || m.title_en || ''))
+      .join('\n');
+    if (menuList) {
+      menuSection = '\n\nAVAILABLE MENU OPTIONS (farmers can select these):\n' + menuList + '\nWhen a farmer selects one of these options, provide relevant help on that topic.';
+    }
+  }
+
+  return 'You are "VartMap Krishi Sahayak" - an AI agricultural assistant for Indian farmers, powered by Vartmaan Fertilizers (RCG Agro Private Limited).\n\nROLE:\n- You are a helpful, knowledgeable agricultural advisor who speaks like a friendly local expert\n- You recommend Vartmaan Fertilizers products when relevant (never push products unnecessarily)\n- You help with crop advice, soil health, pest/disease identification, weather guidance, government schemes, and mandi prices\n- Keep responses concise (under 300 words) since this is WhatsApp - use short paragraphs, not long essays\n- Use simple language that farmers understand\n\nLANGUAGE:\n' + langInstruction + '\n\nFARMER CONTEXT:\n- Name: ' + (farmer.name || 'Kisan') + '\n- Phone: ' + (farmer.phone || 'unknown') + '\n- Village: ' + (farmer.village || 'unknown') + '\n- State: ' + (farmer.state || 'unknown') + '\n- Primary Crop: ' + (farmer.primary_crop || 'unknown') + '\n- Soil Type: ' + (farmer.soil_type || 'unknown') + '\n\nVARTMAAN FERTILIZERS PRODUCT CATALOG:\n' + (productList || 'No products loaded') + '\n\nCROP-SPECIFIC RECOMMENDATIONS:\n' + (recoList || 'No specific recommendations loaded') + knowledgeSection + menuSection + '\n\nGUIDELINES:\n1. When a farmer mentions a crop + problem/stage, recommend the most relevant Vartmaan product with exact dosage\n2. For zinc deficiency: recommend VARTIZIN products\n3. For iron deficiency/chlorosis: recommend VARTIFER products\n4. For sugarcane: recommend VARTIMIX Ganna Special 10%\n5. For general micronutrient needs: recommend VARTIMIX Multi-Crop 6% or Balshali 4%\n6. For premium/alkaline soil needs: recommend Kavach (chelated) variants\n7. If you do not know something, say so honestly - do not make up information\n8. For pest/disease images, describe what you see and suggest treatment\n9. Always be respectful and address the farmer warmly\n10. If asked about prices, say "Please contact your nearest dealer or call our helpline"\n11. Do not discuss competitor products by name\n12. For emergency pest attacks, advise contacting local Krishi Vigyan Kendra (KVK)';
 }
 
+// --- CHAT HISTORY ---
 async function getChatHistory(farmerId, limit) {
   if (!pool) return [];
   try {
@@ -91,6 +163,7 @@ async function saveChatHistory(farmerId, sessionId, role, content, lang, model) 
   } catch (e) { console.error('Save chat history error:', e.message); }
 }
 
+// --- GROQ RESPONSE ---
 async function getGroqResponse(systemPrompt, history, messageText) {
   if (!groqClient) return null;
   try {
@@ -112,6 +185,7 @@ async function getGroqResponse(systemPrompt, history, messageText) {
   }
 }
 
+// --- GEMINI RESPONSE ---
 async function getGeminiResponse(systemPrompt, history, userParts, modelName) {
   if (!genAI) return null;
   try {
@@ -132,14 +206,15 @@ async function getGeminiResponse(systemPrompt, history, userParts, modelName) {
   }
 }
 
+// --- AI RESPONSE (with Bot Config integration) ---
 async function getAIResponse(farmerId, sessionId, farmer, messageText, messageType, mediaUrl) {
   if (!genAI && !groqClient) {
     return 'AI service is not configured. Our team will respond shortly.';
   }
   try {
-    const catalog = await getProductCatalog();
+    const [catalog, botConfig] = await Promise.all([getProductCatalog(), getBotConfig()]);
     const detectedLang = /[\u0900-\u097F]/.test(messageText) ? 'hi' : 'en';
-    const systemPrompt = buildSystemPrompt(catalog, farmer, detectedLang);
+    const systemPrompt = buildSystemPrompt(catalog, farmer, detectedLang, botConfig);
     const history = await getChatHistory(farmerId, 8);
     let response = null;
     let modelUsed = 'unknown';
@@ -164,7 +239,6 @@ async function getAIResponse(farmerId, sessionId, farmer, messageText, messageTy
         console.error('Media download error:', mediaErr.message);
         userParts = [{ text: messageText || 'The farmer sent media but it could not be loaded. Ask them to describe the problem in text.' }];
       }
-      // Try Gemini models in order for multimodal
       response = await getGeminiResponse(systemPrompt, history, userParts, 'gemini-2.5-flash-lite');
       modelUsed = 'gemini-2.5-flash-lite';
       if (!response) {
@@ -192,7 +266,7 @@ async function getAIResponse(farmerId, sessionId, farmer, messageText, messageTy
     }
 
     if (!response) {
-      return 'Maaf kijiye, abhi humara AI system busy hai. Kripya thodi der baad dobara try karein ya "help" type karein.';
+      return 'Maaf kijiye, abhi humara AI system busy hai. Kripya thodi der baad dobara try karein ya "menu" type karein.';
     }
 
     await saveChatHistory(farmerId, sessionId, 'user', messageText || '[media]', detectedLang, modelUsed);
@@ -201,41 +275,277 @@ async function getAIResponse(farmerId, sessionId, farmer, messageText, messageTy
     return response;
   } catch (e) {
     console.error('AI response error:', e.message);
-    return 'Sorry, I could not process your request right now. Please try again or type "help" for options.';
+    return 'Sorry, I could not process your request right now. Please try again or type "menu" for options.';
   }
 }
+
 // --- WHATSAPP SEND ---
 const phoneNumberId = process.env.WA_PHONE_NUMBER_ID;
 const accessToken = process.env.WA_ACCESS_TOKEN;
 
 async function sendWhatsAppMessage(to, text) {
-  if (!phoneNumberId || !accessToken) {
-    console.log('WhatsApp not configured. Would send to', to, ':', text.substring(0, 100));
-    return false;
-  }
   try {
-    const url = 'https://graph.facebook.com/v21.0/' + phoneNumberId + '/messages';
-    const resp = await axios.post(url, {
-      messaging_product: 'whatsapp',
-      to: to,
-      type: 'text',
-      text: { body: text }
-    }, {
-      headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' }
-    });
-    console.log('WhatsApp message sent to', to, 'id:', resp.data?.messages?.[0]?.id);
+    const resp = await axios.post(
+      'https://graph.facebook.com/v21.0/' + phoneNumberId + '/messages',
+      { messaging_product: 'whatsapp', to: to, type: 'text', text: { body: text } },
+      { headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' } }
+    );
+    console.log('Message sent to ' + to + ', id: ' + resp.data.messages?.[0]?.id);
     return true;
   } catch (e) {
-    console.error('WhatsApp send error:', e.response?.data || e.message);
+    console.error('Send message error:', e.response?.data || e.message);
     return false;
   }
 }
 
+// Send WhatsApp interactive buttons
+async function sendWhatsAppButtons(to, bodyText, buttons) {
+  try {
+    const buttonPayload = buttons.slice(0, 3).map((btn, idx) => ({
+      type: 'reply',
+      reply: { id: btn.id || ('btn_' + idx), title: (btn.title || '').substring(0, 20) }
+    }));
+    const resp = await axios.post(
+      'https://graph.facebook.com/v21.0/' + phoneNumberId + '/messages',
+      {
+        messaging_product: 'whatsapp',
+        to: to,
+        type: 'interactive',
+        interactive: {
+          type: 'button',
+          body: { text: bodyText },
+          action: { buttons: buttonPayload }
+        }
+      },
+      { headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' } }
+    );
+    console.log('Buttons sent to ' + to);
+    return true;
+  } catch (e) {
+    console.error('Send buttons error:', e.response?.data || e.message);
+    // Fallback to plain text
+    return sendWhatsAppMessage(to, bodyText);
+  }
+}
+
+// Send WhatsApp interactive list
+async function sendWhatsAppList(to, bodyText, buttonLabel, sections) {
+  try {
+    const resp = await axios.post(
+      'https://graph.facebook.com/v21.0/' + phoneNumberId + '/messages',
+      {
+        messaging_product: 'whatsapp',
+        to: to,
+        type: 'interactive',
+        interactive: {
+          type: 'list',
+          body: { text: bodyText },
+          action: {
+            button: (buttonLabel || 'Menu').substring(0, 20),
+            sections: sections
+          }
+        }
+      },
+      { headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' } }
+    );
+    console.log('List sent to ' + to);
+    return true;
+  } catch (e) {
+    console.error('Send list error:', e.response?.data || e.message);
+    return sendWhatsAppMessage(to, bodyText);
+  }
+}
+
+// --- BUILD MENU MESSAGE ---
+async function sendMenuMessage(to, botConfig, language) {
+  const items = (botConfig.menu_items || [])
+    .filter(m => m.is_active !== false)
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+  if (items.length === 0) {
+    return; // No menu configured, AI will handle freely
+  }
+
+  if (items.length <= 3) {
+    // Use buttons for 1-3 items
+    const buttons = items.map(m => ({
+      id: m.menu_key || m.id,
+      title: (language === 'hi' ? (m.title_hi || m.title_en) : (m.title_en || m.title_hi)).substring(0, 20)
+    }));
+    const bodyText = language === 'hi'
+      ? 'Aap neeche diye gaye options mein se choose kar sakte hain:'
+      : 'You can choose from the options below:';
+    await sendWhatsAppButtons(to, bodyText, buttons);
+  } else {
+    // Use list for 4+ items
+    const rows = items.map(m => ({
+      id: m.menu_key || m.id,
+      title: (language === 'hi' ? (m.title_hi || m.title_en) : (m.title_en || m.title_hi)).substring(0, 24),
+      description: (language === 'hi' ? (m.description_hi || m.description_en || '') : (m.description_en || m.description_hi || '')).substring(0, 72)
+    }));
+    const bodyText = language === 'hi'
+      ? 'Aap neeche diye gaye options mein se choose kar sakte hain:'
+      : 'You can choose from the options below:';
+    await sendWhatsAppList(to, bodyText, 'Options', [{ title: 'Services', rows: rows }]);
+  }
+}
+
+// --- ONBOARDING HANDLER ---
+async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, botConfig) {
+  const stage = farmerData.onboarding_stage || 'new';
+  const lang = farmerData.language || 'hi';
+
+  if (stage === 'new') {
+    // First message ever - send welcome and ask name
+    const welcome = lang === 'hi' ? botConfig.welcome_hi : botConfig.welcome_en;
+    await sendWhatsAppMessage(from, welcome);
+
+    if (botConfig.onboarding_enabled && botConfig.onboarding_fields.includes('name')) {
+      const askName = lang === 'hi'
+        ? 'Sabse pehle, aapka naam bataiye?'
+        : 'First, what is your name?';
+      await sendWhatsAppMessage(from, askName);
+      await pool.query("UPDATE farmers SET onboarding_stage = 'awaiting_name', updated_at = NOW() WHERE id = $1", [farmerId]);
+
+      await pool.query(
+        "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
+        [sessionId, farmerId, welcome + '\n' + askName]
+      );
+      return true; // handled
+    } else {
+      // No onboarding, go straight to menu
+      await pool.query("UPDATE farmers SET onboarding_stage = 'complete', profile_complete = true, updated_at = NOW() WHERE id = $1", [farmerId]);
+      await sendMenuMessage(from, botConfig, lang);
+      return true;
+    }
+  }
+
+  if (stage === 'awaiting_name') {
+    const name = msgBody.trim();
+    if (name.length < 2 || name.length > 60) {
+      const retry = lang === 'hi' ? 'Kripya apna sahi naam batayein:' : 'Please tell me your correct name:';
+      await sendWhatsAppMessage(from, retry);
+      return true;
+    }
+    await pool.query("UPDATE farmers SET name = $1, onboarding_stage = $2, updated_at = NOW() WHERE id = $3",
+      [name, botConfig.onboarding_fields.includes('crops') ? 'awaiting_crops' : 'complete', farmerId]);
+
+    if (botConfig.onboarding_fields.includes('crops')) {
+      const askCrops = lang === 'hi'
+        ? 'Dhanyavaad ' + name + '! Aap kaun si phasalein ugaate hain? (jaise: gehun, dhan, ganna)'
+        : 'Thank you ' + name + '! What crops do you grow? (e.g., wheat, rice, sugarcane)';
+      await sendWhatsAppMessage(from, askCrops);
+      await pool.query(
+        "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
+        [sessionId, farmerId, askCrops]
+      );
+    } else {
+      await pool.query("UPDATE farmers SET profile_complete = true WHERE id = $1", [farmerId]);
+      const done = lang === 'hi'
+        ? 'Dhanyavaad ' + name + '! Aap ab mujhse kuch bhi pooch sakte hain.'
+        : 'Thank you ' + name + '! You can now ask me anything.';
+      await sendWhatsAppMessage(from, done);
+      await sendMenuMessage(from, botConfig, lang);
+    }
+    return true;
+  }
+
+  if (stage === 'awaiting_crops') {
+    const crops = msgBody.trim();
+    const farmerName = farmerData.name || 'Kisan';
+    await pool.query("UPDATE farmers SET primary_crop = $1, onboarding_stage = 'complete', profile_complete = true, updated_at = NOW() WHERE id = $2",
+      [crops, farmerId]);
+
+    const done = (farmerData.language || 'hi') === 'hi'
+      ? 'Bahut badhiya ' + farmerName + '! Aapki profile complete ho gayi. Ab main aapki har tarah se madad kar sakta hoon.'
+      : 'Excellent ' + farmerName + '! Your profile is complete. I can now help you with everything.';
+    await sendWhatsAppMessage(from, done);
+    await sendMenuMessage(from, botConfig, farmerData.language || 'hi');
+    await pool.query(
+      "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
+      [sessionId, farmerId, done]
+    );
+    return true;
+  }
+
+  return false; // Not in onboarding, continue normal flow
+}
+
+// --- FLOW ENGINE ---
+async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botConfig) {
+  const lang = farmerData.language || 'hi';
+  const lowerMsg = (msgBody || '').toLowerCase().trim();
+
+  // Check if message matches a menu key
+  const menuItems = (botConfig.menu_items || []).filter(m => m.is_active !== false);
+  let matchedMenu = null;
+
+  // Check interactive button/list reply IDs
+  for (const item of menuItems) {
+    const key = (item.menu_key || '').toLowerCase();
+    if (key && (lowerMsg === key || lowerMsg.includes(key))) {
+      matchedMenu = item;
+      break;
+    }
+  }
+
+  // Also check by title match
+  if (!matchedMenu) {
+    for (const item of menuItems) {
+      const titleHi = (item.title_hi || '').toLowerCase();
+      const titleEn = (item.title_en || '').toLowerCase();
+      if ((titleHi && lowerMsg.includes(titleHi)) || (titleEn && lowerMsg.includes(titleEn))) {
+        matchedMenu = item;
+        break;
+      }
+    }
+  }
+
+  if (!matchedMenu) return false;
+
+  console.log('Menu matched: ' + matchedMenu.menu_key + ' for farmer ' + farmerId);
+
+  // Check if this menu item has a linked flow
+  const linkedFlow = (botConfig.flows || []).find(f =>
+    f.menu_key === matchedMenu.menu_key || f.trigger_key === matchedMenu.menu_key
+  );
+
+  if (linkedFlow && linkedFlow.steps && linkedFlow.steps.length > 0) {
+    // Execute flow steps
+    const steps = linkedFlow.steps.sort((a, b) => (a.step_order || 0) - (b.step_order || 0));
+    for (const step of steps) {
+      if (step.step_type === 'text') {
+        const text = lang === 'hi' ? (step.content_hi || step.content_en || step.content || '') : (step.content_en || step.content_hi || step.content || '');
+        if (text) await sendWhatsAppMessage(from, text);
+      } else if (step.step_type === 'ai_query') {
+        // Let AI handle with a specific prompt context
+        return false; // Fall through to AI with the message
+      } else if (step.step_type === 'buttons') {
+        try {
+          const btns = typeof step.options === 'string' ? JSON.parse(step.options) : (step.options || []);
+          if (btns.length > 0) {
+            const text = lang === 'hi' ? (step.content_hi || step.content || '') : (step.content_en || step.content || '');
+            await sendWhatsAppButtons(from, text || 'Choose an option:', btns.slice(0, 3).map(b => ({ id: b.id || b.key, title: (b.title || b.label || '').substring(0, 20) })));
+          }
+        } catch (e) { console.error('Flow button parse error:', e.message); }
+      }
+    }
+    return true; // Flow handled the message
+  }
+
+  // Menu item matched but no flow — just acknowledge and let AI handle the topic
+  const ack = lang === 'hi'
+    ? (matchedMenu.title_hi || matchedMenu.title_en || 'Option') + ' ke baare mein jaankari de raha hoon...'
+    : 'Let me help you with ' + (matchedMenu.title_en || matchedMenu.title_hi || 'that') + '...';
+  // Don't send ack, let AI give a proper response
+  return false;
+}
+
+// --- MEDIA URL ---
 async function getMediaUrl(mediaId) {
-  if (!accessToken) return null;
   try {
     const resp = await axios.get('https://graph.facebook.com/v21.0/' + mediaId, {
-      headers: { 'Authorization': 'Bearer ' + accessToken }
+      headers: { 'Authorization': 'Bearer ' + process.env.WA_ACCESS_TOKEN }
     });
     return resp.data.url;
   } catch (e) {
@@ -244,35 +554,27 @@ async function getMediaUrl(mediaId) {
   }
 }
 
-// --- SEND MESSAGE API (for admin dashboard) ---
-app.post('/api/v1/send-message', async (req, res) => {
-  try {
-    const { phone, message, farmer_id } = req.body;
-    if (!phone || !message) return res.status(400).json({ error: 'phone and message required' });
-    const sent = await sendWhatsAppMessage(phone, message);
-    if (pool && farmer_id) {
-      let session = await pool.query('SELECT * FROM wa_chat_sessions WHERE farmer_id=$1 AND status=$2', [farmer_id, 'active']);
-      if (session.rows.length) {
-        await pool.query(
-          "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'admin', 'text', $3, $4, NOW())",
-          [session.rows[0].id, farmer_id, message, sent ? 'sent' : 'failed']
-        );
-      }
-    }
-    res.json({ success: sent });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
 // --- HEALTH ---
 app.get('/health', async (req, res) => {
-  const dbOk = pool ? await pool.query('SELECT 1').then(() => true).catch(() => false) : false;
-  res.json({
-    status: 'healthy', service: 'whatsapp-gateway',
-    timestamp: new Date().toISOString(),
-    database: dbOk ? 'connected' : 'disconnected',
-    ai: genAI ? 'gemini-ready' : 'not-configured',
-    whatsapp: phoneNumberId ? 'configured' : 'not-configured'
-  });
+  try {
+    const r = await pool.query('SELECT NOW()');
+    const botCfg = await getBotConfig();
+    res.json({
+      status: 'healthy',
+      service: 'whatsapp-gateway',
+      version: '3.0.0-bot-builder',
+      timestamp: r.rows[0].now,
+      database: 'connected',
+      ai: genAI ? 'gemini-ready' : 'not-configured',
+      groq: groqClient ? 'ready' : 'not-configured',
+      bot: {
+        menu_items: (botCfg.menu_items || []).length,
+        flows: (botCfg.flows || []).length,
+        knowledge_docs: (botCfg.knowledge || []).length,
+        onboarding: botCfg.onboarding_enabled ? 'enabled' : 'disabled'
+      }
+    });
+  } catch (e) { res.status(500).json({ status: 'unhealthy', error: e.message }); }
 });
 
 // --- WEBHOOK VERIFICATION ---
@@ -295,6 +597,8 @@ app.post('/webhook', async (req, res) => {
     const body = req.body;
     if (!body.object || body.object !== 'whatsapp_business_account') return;
 
+    const botConfig = await getBotConfig();
+
     const entries = body.entry || [];
     for (const entry of entries) {
       const changes = entry.changes || [];
@@ -312,7 +616,18 @@ app.post('/webhook', async (req, res) => {
           const profileName = contact.profile?.name || 'Unknown';
           const waMessageId = msg.id;
           const msgType = msg.type || 'text';
-          const msgBody = msg.text?.body || msg.image?.caption || msg.audio?.caption || '';
+
+          // Handle interactive replies (button clicks, list selections)
+          let msgBody = '';
+          if (msg.type === 'interactive') {
+            if (msg.interactive?.type === 'button_reply') {
+              msgBody = msg.interactive.button_reply.id || msg.interactive.button_reply.title || '';
+            } else if (msg.interactive?.type === 'list_reply') {
+              msgBody = msg.interactive.list_reply.id || msg.interactive.list_reply.title || '';
+            }
+          } else {
+            msgBody = msg.text?.body || msg.image?.caption || msg.audio?.caption || '';
+          }
 
           console.log('Incoming from ' + from + ' (' + profileName + ') [' + msgType + ']: ' + msgBody.substring(0, 100));
 
@@ -354,21 +669,48 @@ app.post('/webhook', async (req, res) => {
           }
 
           // 4. Store incoming message
-          const storedMsgType = (msgType === 'voice') ? 'audio' : msgType;
+          const storedMsgType = (msgType === 'voice') ? 'audio' : (msgType === 'interactive' ? 'text' : msgType);
           await pool.query(
             "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_message_id, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'inbound', 'farmer', $3, $4, $5, 'delivered', NOW())",
             [sessionId, farmerId, storedMsgType, msgBody || '[' + msgType + ']', waMessageId]
           );
 
-          // 5. Coupon code detection (text messages only)
-          if (msgType === 'text' && msgBody.trim()) {
+          // 5. ONBOARDING CHECK (new farmers)
+          const onboardingStage = farmerData.onboarding_stage || 'new';
+          if (onboardingStage !== 'complete' && botConfig.onboarding_enabled) {
+            const handled = await handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, botConfig);
+            if (handled) continue;
+          }
+
+          // 6. MENU / HELP trigger
+          const lowerMsg = (msgBody || '').toLowerCase().trim();
+          if (lowerMsg === 'menu' || lowerMsg === 'help' || lowerMsg === 'options' || lowerMsg === 'start') {
+            await sendMenuMessage(from, botConfig, farmerData.language || 'hi');
+            await pool.query(
+              "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
+              [sessionId, farmerId, '[menu sent]']
+            );
+            continue;
+          }
+
+          // 7. FLOW ENGINE (check if message matches a menu item / flow)
+          const flowHandled = await handleFlow(farmerId, farmerData, from, msgBody, sessionId, botConfig);
+          if (flowHandled) {
+            await pool.query(
+              "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
+              [sessionId, farmerId, '[flow: ' + lowerMsg + ']']
+            );
+            continue;
+          }
+
+          // 8. Coupon code detection (text messages only)
+          if ((msgType === 'text' || msgType === 'interactive') && msgBody.trim()) {
             const couponMatch = msgBody.trim().match(/^[A-Z0-9]{6,20}$/i);
             if (couponMatch) {
               try {
-                const adminApiUrl = process.env.ADMIN_API_URL || 'https://vartmap-admin-api.onrender.com';
-                const validateResp = await axios.post(adminApiUrl + '/api/v1/coupons/validate', { code: couponMatch[0] });
+                const validateResp = await axios.post(ADMIN_API_URL + '/api/v1/coupons/validate', { code: couponMatch[0] });
                 if (validateResp.data.valid) {
-                  const redeemResp = await axios.post(adminApiUrl + '/api/v1/coupons/redeem-geo', { code: couponMatch[0], phone: from });
+                  const redeemResp = await axios.post(ADMIN_API_URL + '/api/v1/coupons/redeem-geo', { code: couponMatch[0], phone: from });
                   const rd = redeemResp.data;
                   let couponReply = rd.redeemed
                     ? 'Coupon ' + couponMatch[0].toUpperCase() + ' redeemed! You got ' + rd.discount_value + (rd.discount_type === 'percentage' ? '% discount' : ' off') + ' from ' + rd.campaign_name + '. Thank you!'
@@ -384,13 +726,13 @@ app.post('/webhook', async (req, res) => {
             }
           }
 
-          // 6. AI-POWERED RESPONSE
-          const effectiveMsgType = (msgType === 'voice') ? 'audio' : msgType;
+          // 9. AI-POWERED RESPONSE
+          const effectiveMsgType = (msgType === 'voice') ? 'audio' : (msgType === 'interactive' ? 'text' : msgType);
           const replyText = await getAIResponse(farmerId, sessionId, farmerData, msgBody, effectiveMsgType, mediaUrl);
 
           const sendResult = await sendWhatsAppMessage(from, replyText);
 
-          // 7. Store outbound reply
+          // 10. Store outbound reply
           await pool.query(
             "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, $4, NOW())",
             [sessionId, farmerId, replyText, sendResult ? 'sent' : 'failed']
@@ -407,11 +749,12 @@ app.post('/webhook', async (req, res) => {
 
 // --- STATUS ---
 app.get('/api/v1/status', (req, res) => {
-  res.json({ status: 'running', service: 'whatsapp-gateway', version: '2.0.0-ai', ai: genAI ? 'active' : 'inactive' });
+  res.json({ status: 'running', service: 'whatsapp-gateway', version: '3.0.0-bot-builder', ai: genAI ? 'active' : 'inactive', groq: groqClient ? 'active' : 'inactive' });
 });
 
 app.listen(PORT, () => {
-  console.log('WhatsApp Gateway v2.0 (AI) running on port ' + PORT);
-  console.log('AI:', genAI ? 'Gemini ready' : 'NOT CONFIGURED - set GEMINI_API_KEY');
+  console.log('WhatsApp Gateway v3.0 (Bot Builder) running on port ' + PORT);
+  console.log('AI:', genAI ? 'Gemini ready' : 'NOT CONFIGURED');
+  console.log('Groq:', groqClient ? 'ready' : 'NOT CONFIGURED');
   console.log('WhatsApp:', phoneNumberId ? 'configured' : 'NOT CONFIGURED');
 });
