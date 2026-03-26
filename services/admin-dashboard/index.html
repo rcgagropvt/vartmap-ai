@@ -1028,7 +1028,7 @@ async function loadLoyaltyProgram() {
 
     mainContent.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
-        <h2>ðŸ† Loyalty Program</h2>
+        <h2>Loyalty Program</h2>
         <div>
           <button onclick="showAddPointsModal()" style="padding:8px 16px;background:#10b981;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-right:8px">+ Award Points</button>
           <button onclick="showAddCatalogModal()" style="padding:8px 16px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer">+ Add Reward</button>
@@ -1057,11 +1057,11 @@ async function loadLoyaltyProgram() {
 
       <!-- Tabs -->
       <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
-        <button onclick="showLoyaltyTab('tiers')" id="tab-tiers" class="loyalty-tab active-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#1e293b;color:#fff">ðŸ… Tiers</button>
-        <button onclick="showLoyaltyTab('catalog')" id="tab-catalog" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">ðŸŽ Rewards Catalog</button>
-        <button onclick="showLoyaltyTab('redemptions')" id="tab-redemptions" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">ðŸ“‹ Redemptions</button>
-        <button onclick="showLoyaltyTab('leaderboard')" id="tab-leaderboard" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">ðŸ† Leaderboard</button>
-        <button onclick="showLoyaltyTab('tierDist')" id="tab-tierDist" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">ðŸ“Š Tier Distribution</button>
+        <button onclick="showLoyaltyTab('tiers')" id="tab-tiers" class="loyalty-tab active-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#1e293b;color:#fff">Tiers</button>
+        <button onclick="showLoyaltyTab('catalog')" id="tab-catalog" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">Rewards Catalog</button>
+        <button onclick="showLoyaltyTab('redemptions')" id="tab-redemptions" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">Redemptions</button>
+        <button onclick="showLoyaltyTab('leaderboard')" id="tab-leaderboard" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">Leaderboard</button>
+        <button onclick="showLoyaltyTab('tierDist')" id="tab-tierDist" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">Tier Distribution</button>
       </div>
 
       <div id="loyaltyTabContent"></div>
@@ -1091,10 +1091,10 @@ function showLoyaltyTab(tab) {
           <div style="background:linear-gradient(135deg,${t.color}22,${t.color}11);border:2px solid ${t.color};border-radius:12px;padding:24px;text-align:center">
             <div style="font-size:48px">${t.icon}</div>
             <h3 style="margin:8px 0;color:${t.color}">${t.name}</h3>
-            <div style="color:#6b7280;font-size:14px">${t.min_points} - ${t.max_points || 'âˆž'} pts</div>
+            <div style="color:#6b7280;font-size:14px">${t.min_points} - ${t.max_points || 'No limit'} pts</div>
             <div style="margin-top:8px;font-size:13px;color:#6b7280">Multiplier: ${t.multiplier}x</div>
             <div style="margin-top:12px;text-align:left">
-              ${(t.benefits?.perks || []).map(p => '<div style="font-size:12px;padding:2px 0">âœ… ' + p + '</div>').join('')}
+              ${(t.benefits?.perks || []).map(p => '<div style="font-size:12px;padding:2px 0">&gt; ' + p + '</div>').join('')}
             </div>
           </div>
         `).join('')}
@@ -1117,8 +1117,8 @@ function showLoyaltyTab(tab) {
               <td style="padding:12px;font-weight:500">${c.name}</td>
               <td style="padding:12px"><span style="background:#e0e7ff;color:#4338ca;padding:2px 8px;border-radius:4px;font-size:12px">${c.category}</span></td>
               <td style="padding:12px;text-align:center;font-weight:600;color:#f59e0b">${c.points_required}</td>
-              <td style="padding:12px;text-align:center">${c.value_inr ? 'â‚¹' + c.value_inr : 'â€”'}</td>
-              <td style="padding:12px;text-align:center">${c.stock === -1 ? 'âˆž' : c.stock}</td>
+            <td style="padding:12px;text-align:center">${c.value_inr ? 'Rs.' + c.value_inr : '-'}</td>
+            <td style="padding:12px;text-align:center">${c.stock === -1 ? 'No limit' : c.stock}</td>
               <td style="padding:12px;text-align:center">${c.redeemed_count}</td>
               <td style="padding:12px;text-align:center">${c.active ? '<span style="color:#10b981">Active</span>' : '<span style="color:#ef4444">Inactive</span>'}</td>
             </tr>`).join('')}
