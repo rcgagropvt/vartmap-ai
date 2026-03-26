@@ -69,10 +69,10 @@ async function getBotConfig() {
     const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
 
     const [configResp, menuResp, flowsResp, knowledgeResp] = await Promise.allSettled([
-      axios.get(ADMIN_API_URL + '/api/v1/bot/config', { headers }),
-      axios.get(ADMIN_API_URL + '/api/v1/bot/menu', { headers }),
-      axios.get(ADMIN_API_URL + '/api/v1/bot/flows', { headers }),
-      axios.get(ADMIN_API_URL + '/api/v1/knowledge', { headers })
+      axios.get(ADMIN_API_URL + '/api/v1/public/bot/config'),
+      axios.get(ADMIN_API_URL + '/api/v1/public/bot/menu'),
+      axios.get(ADMIN_API_URL + '/api/v1/public/bot/flows'),
+      axios.get(ADMIN_API_URL + '/api/v1/public/knowledge')
     ]);
 
     const configRows = configResp.status === 'fulfilled' ? (configResp.value.data.config || []) : [];
