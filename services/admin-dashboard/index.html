@@ -210,6 +210,7 @@ tr:hover{background:rgba(76,175,80,.03)}
       <div class="nav-item" onclick="navigate('settings')"><i class="fas fa-cog"></i> Settings</div>
       <div class="nav-item" onclick="navigate('products')"><i class="fas fa-box"></i> Products</div>
       <div class="nav-item" onclick="navigate('catalog')"><i class="fas fa-seedling"></i> Product Catalog</div>
+      <div class="nav-item" onclick="navigate('bot-builder')"><i class="fas fa-robot"></i> Bot Builder</div>
       <div class="nav-item" onclick="navigate('mandi-prices')"><i class="fas fa-chart-line"></i> Mandi Prices</div>
       <div class="nav-item" onclick="navigate('dealers')"><i class="fas fa-store"></i> Dealers</div>
     </div>
@@ -326,7 +327,7 @@ function navigate(page) {
     'soil-data':'Soil Nutrient Database','schemes':'Government Schemes','products':'Products',
     'mandi-prices':'Mandi Prices','dealers':'Dealers','field-agents':'Field Agents','orders':'Orders',
     'moderation':'Moderation Queue','notifications':'Notification Logs','analytics':'Analytics',
-    'services':'Service Health','admin-users':'Admin Users','audit-log':'Audit Log','settings':'Settings','catalog':'Product Catalog'
+    'services':'Service Health','admin-users':'Admin Users','audit-log':'Audit Log','settings':'Settings','catalog':'Product Catalog','bot-builder':'Bot Builder'
   };
   document.getElementById('pageTitle').textContent = titles[page] || page;
   const loaders = {
@@ -335,7 +336,7 @@ function navigate(page) {
     'loyalty':loadLoyaltyProgram,'coupons':loadCoupons,'rewards':loadRewards,'referrals':loadReferrals,
     'soil-data':loadSoilData,'schemes':loadSchemes,'products':loadProducts,
     'mandi-prices':loadMandi,'dealers':loadDealers,'field-agents':loadFieldAgents,'orders':loadOrders,
-    'moderation':loadModeration,'notifications':loadNotifications,'analytics':loadAnalytics,'services':loadServices,'admin-users':loadAdminUsers,'audit-log':loadAuditLog,'settings':loadSettings,'catalog':loadProductCatalog};
+    'moderation':loadModeration,'notifications':loadNotifications,'analytics':loadAnalytics,'services':loadServices,'admin-users':loadAdminUsers,'audit-log':loadAuditLog,'settings':loadSettings,'catalog':loadProductCatalog,'bot-builder':loadBotBuilder};
   const loader = loaders[page];
   if (loader) loader(); else document.getElementById('pageContent').innerHTML = '<div class="empty"><i class="fas fa-construction"></i><p>Coming soon</p></div>';
 }
@@ -1989,6 +1990,408 @@ function viewQRSheet(campaignId) {
 
 
 async function loadProductCatalog() {
+// --- BOT BUILDER ---
+let _botTab = 'config';
+
+async function loadBotBuilder() {
+  const el = document.getElementById('pageContent');
+  const tabs = [
+    {key:'config',label:'Welcome & Config',icon:'fa-cog'},
+    {key:'menu',label:'Menu Items',icon:'fa-list'},
+    {key:'flows',label:'Flows',icon:'fa-project-diagram'},
+    {key:'knowledge',label:'Knowledge Base',icon:'fa-book'}
+  ];
+  el.innerHTML =
+    '<div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">' +
+    tabs.map(function(t){return '<button onclick="_botTab=\''+t.key+'\';loadBotBuilder()" style="padding:10px 20px;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px;background:'+(_botTab===t.key?'#10b981':'#e5e7eb')+';color:'+(_botTab===t.key?'#fff':'#374151')+'"><i class="fas '+t.icon+'" style="margin-right:6px"></i>'+t.label+'</button>';}).join('') +
+    '</div><div id="botContent"><div class="empty"><i class="fas fa-spinner fa-spin"></i></div></div>';
+  if(_botTab==='config') loadBotConfig();
+  else if(_botTab==='menu') loadBotMenu();
+  else if(_botTab==='flows') loadBotFlows();
+  else if(_botTab==='knowledge') loadBotKnowledge();
+}
+
+async function loadBotConfig() {
+  var el = document.getElementById('botContent');
+  try {
+    var d = await api('/api/v1/bot/config');
+    var cfg = d.config || {};
+    var welcome = cfg.welcome_message || {};
+    var menuMsg = cfg.menu_message || {};
+    var onboard = cfg.onboarding_enabled || {};
+    var pers = cfg.bot_personality || {};
+    var fields = ['name','village','district','crops','soil_type','land_size'];
+    var activeFields = onboard.fields || [];
+    el.innerHTML =
+      '<div style="display:grid;gap:20px">' +
+      '<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,0.08)">' +
+        '<h3 style="margin:0 0 12px;color:#1e293b"><i class="fas fa-comment-dots" style="margin-right:8px;color:#10b981"></i>Welcome Message</h3>' +
+        '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:#374151">Hindi</label><textarea id="bcWelcomeHi" rows="4" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;margin-top:4px">' + (welcome.hi||'') + '</textarea></div>' +
+        '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:#374151">English</label><textarea id="bcWelcomeEn" rows="3" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;margin-top:4px">' + (welcome.en||'') + '</textarea></div>' +
+        '<button onclick="saveBotConfig(\'welcome_message\',{hi:document.getElementById(\'bcWelcomeHi\').value,en:document.getElementById(\'bcWelcomeEn\').value})" style="padding:8px 20px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">Save Welcome Message</button>' +
+      '</div>' +
+      '<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,0.08)">' +
+        '<h3 style="margin:0 0 12px;color:#1e293b"><i class="fas fa-bars" style="margin-right:8px;color:#6366f1"></i>Menu Message</h3>' +
+        '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600">Hindi</label><textarea id="bcMenuHi" rows="2" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;margin-top:4px">' + (menuMsg.hi||'') + '</textarea></div>' +
+        '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600">English</label><textarea id="bcMenuEn" rows="2" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;margin-top:4px">' + (menuMsg.en||'') + '</textarea></div>' +
+        '<button onclick="saveBotConfig(\'menu_message\',{hi:document.getElementById(\'bcMenuHi\').value,en:document.getElementById(\'bcMenuEn\').value})" style="padding:8px 20px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">Save Menu Message</button>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">' +
+        '<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,0.08)">' +
+          '<h3 style="margin:0 0 12px;color:#1e293b"><i class="fas fa-user-plus" style="margin-right:8px;color:#f59e0b"></i>Onboarding</h3>' +
+          '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:12px"><input type="checkbox" id="bcOnboardOn" ' + (onboard.enabled?'checked':'') + ' style="width:18px;height:18px"> Enable farmer onboarding</label>' +
+          '<div style="font-size:12px;color:#6b7280;margin-bottom:8px">Fields to collect:</div>' +
+          '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">' +
+          fields.map(function(f){return '<label style="display:flex;align-items:center;gap:4px;font-size:13px;background:#f1f5f9;padding:4px 8px;border-radius:6px"><input type="checkbox" class="bcOF" value="'+f+'" '+(activeFields.indexOf(f)>=0?'checked':'')+'>'+f+'</label>';}).join('') +
+          '</div>' +
+          '<button onclick="saveBotOnboarding()" style="padding:8px 20px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">Save Onboarding</button>' +
+        '</div>' +
+        '<div style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,0.08)">' +
+          '<h3 style="margin:0 0 12px;color:#1e293b"><i class="fas fa-brain" style="margin-right:8px;color:#8b5cf6"></i>Bot Personality</h3>' +
+          '<div style="margin-bottom:8px"><label style="font-size:12px;font-weight:600">Bot Name</label><input id="bcPN" value="' + (pers.name||'') + '" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;margin-top:4px"></div>' +
+          '<div style="margin-bottom:8px"><label style="font-size:12px;font-weight:600">Tone</label><select id="bcPT" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;margin-top:4px"><option value="friendly_rural"'+(pers.tone==='friendly_rural'?' selected':'')+'>Friendly Rural</option><option value="formal"'+(pers.tone==='formal'?' selected':'')+'>Formal</option><option value="casual"'+(pers.tone==='casual'?' selected':'')+'>Casual</option></select></div>' +
+          '<div style="margin-bottom:8px"><label style="font-size:12px;font-weight:600">Default Language</label><select id="bcPL" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;margin-top:4px"><option value="hi"'+(pers.default_language==='hi'?' selected':'')+'>Hindi</option><option value="en"'+(pers.default_language==='en'?' selected':'')+'>English</option></select></div>' +
+          '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600">Max Response (words)</label><input id="bcPM" type="number" value="'+(pers.max_response_length||300)+'" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;margin-top:4px"></div>' +
+          '<button onclick="saveBotPersonality()" style="padding:8px 20px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">Save Personality</button>' +
+        '</div>' +
+      '</div></div>';
+  } catch(e) { el.innerHTML='<div style="color:red;padding:20px">Error: '+e.message+'</div>'; }
+}
+
+async function saveBotConfig(key, value) {
+  try { await api('/api/v1/bot/config/'+key,{method:'PUT',body:JSON.stringify({value:value})}); alert('Saved!'); }
+  catch(e) { alert('Error: '+e.message); }
+}
+
+async function saveBotOnboarding() {
+  var enabled = document.getElementById('bcOnboardOn').checked;
+  var checks = document.querySelectorAll('.bcOF:checked');
+  var flds = [];
+  checks.forEach(function(c){flds.push(c.value);});
+  saveBotConfig('onboarding_enabled', {enabled:enabled, fields:flds});
+}
+
+async function saveBotPersonality() {
+  saveBotConfig('bot_personality', {
+    name: document.getElementById('bcPN').value,
+    tone: document.getElementById('bcPT').value,
+    default_language: document.getElementById('bcPL').value,
+    max_response_length: parseInt(document.getElementById('bcPM').value)||300
+  });
+}
+
+// --- MENU ITEMS TAB ---
+async function loadBotMenu() {
+  var el = document.getElementById('botContent');
+  try {
+    var d = await api('/api/v1/bot/menu');
+    var items = d.items || [];
+    el.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
+        '<div><strong>' + items.length + '</strong> menu items</div>' +
+        '<button onclick="showAddMenuItem()" style="padding:8px 16px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">+ Add Menu Item</button>' +
+      '</div>' +
+      '<div style="display:grid;gap:12px">' +
+      items.map(function(m){return (
+        '<div style="background:#fff;border-radius:10px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,0.06);display:flex;justify-content:space-between;align-items:center;border-left:4px solid '+(m.is_active?'#10b981':'#ef4444')+'">' +
+          '<div>' +
+            '<div style="font-size:18px;margin-bottom:4px">' + (m.emoji||'') + ' <strong>' + m.title_hi + '</strong> <span style="color:#6b7280;font-size:13px">(' + m.title_en + ')</span></div>' +
+            '<div style="font-size:12px;color:#6b7280">' + (m.description_hi||'') + '</div>' +
+            '<div style="font-size:11px;color:#9ca3af;margin-top:4px">Key: ' + m.menu_key + ' | Action: ' + m.action_type + ' | Order: ' + m.sort_order + '</div>' +
+          '</div>' +
+          '<div style="display:flex;gap:6px">' +
+            '<button onclick="editMenuItem(\'' + m.id + '\')" style="padding:4px 10px;font-size:11px;background:#3b82f6;color:#fff;border:none;border-radius:4px;cursor:pointer">Edit</button>' +
+            '<button onclick="toggleMenuItem(\'' + m.id + '\',' + !m.is_active + ')" style="padding:4px 10px;font-size:11px;background:'+(m.is_active?'#ef4444':'#10b981')+';color:#fff;border:none;border-radius:4px;cursor:pointer">'+(m.is_active?'Disable':'Enable')+'</button>' +
+            '<button onclick="deleteMenuItem(\'' + m.id + '\')" style="padding:4px 10px;font-size:11px;background:#6b7280;color:#fff;border:none;border-radius:4px;cursor:pointer">Delete</button>' +
+          '</div>' +
+        '</div>'
+      );}).join('') +
+      '</div>';
+  } catch(e) { el.innerHTML='<div style="color:red;padding:20px">Error: '+e.message+'</div>'; }
+}
+
+function showAddMenuItem() {
+  openModal('Add Menu Item',
+    '<div style="display:grid;gap:12px">' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">' +
+      '<div><label style="font-size:12px;font-weight:600">Menu Key *</label><input id="miKey" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. crop_doctor"></div>' +
+      '<div><label style="font-size:12px;font-weight:600">Emoji</label><input id="miEmoji" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. &#128270;"></div>' +
+      '<div><label style="font-size:12px;font-weight:600">Sort Order</label><input id="miOrder" type="number" value="0" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
+      '<div><label style="font-size:12px;font-weight:600">Title Hindi *</label><input id="miTitleHi" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>' +
+      '<div><label style="font-size:12px;font-weight:600">Title English *</label><input id="miTitleEn" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
+      '<div><label style="font-size:12px;font-weight:600">Description Hindi</label><input id="miDescHi" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>' +
+      '<div><label style="font-size:12px;font-weight:600">Description English</label><input id="miDescEn" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>' +
+    '</div>' +
+    '<div><label style="font-size:12px;font-weight:600">Action Type</label><select id="miAction" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"><option value="ai_chat">AI Chat</option><option value="flow">Flow</option><option value="handoff">Handoff to Agent</option></select></div>' +
+    '<button onclick="submitMenuItem()" style="padding:10px 20px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">Save</button>' +
+    '</div>');
+}
+
+async function submitMenuItem() {
+  try {
+    await api('/api/v1/bot/menu', {method:'POST', body:JSON.stringify({
+      menu_key:document.getElementById('miKey').value, emoji:document.getElementById('miEmoji').value,
+      title_hi:document.getElementById('miTitleHi').value, title_en:document.getElementById('miTitleEn').value,
+      description_hi:document.getElementById('miDescHi').value, description_en:document.getElementById('miDescEn').value,
+      action_type:document.getElementById('miAction').value, sort_order:parseInt(document.getElementById('miOrder').value)||0
+    })});
+    closeModal(); _botTab='menu'; loadBotBuilder();
+  } catch(e){alert('Error: '+e.message);}
+}
+
+async function editMenuItem(id) {
+  try {
+    var d = await api('/api/v1/bot/menu');
+    var m = (d.items||[]).find(function(x){return x.id===id;});
+    if(!m) return alert('Item not found');
+    openModal('Edit Menu Item',
+      '<div style="display:grid;gap:12px">' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">' +
+        '<div><label style="font-size:12px;font-weight:600">Menu Key</label><input id="emiKey" value="'+m.menu_key+'" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>' +
+        '<div><label style="font-size:12px;font-weight:600">Emoji</label><input id="emiEmoji" value="'+(m.emoji||'')+'" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>' +
+        '<div><label style="font-size:12px;font-weight:600">Order</label><input id="emiOrder" type="number" value="'+m.sort_order+'" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
+        '<div><label style="font-size:12px;font-weight:600">Title Hindi</label><input id="emiTitleHi" value="'+m.title_hi+'" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>' +
+        '<div><label style="font-size:12px;font-weight:600">Title English</label><input id="emiTitleEn" value="'+m.title_en+'" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
+        '<div><label style="font-size:12px;font-weight:600">Desc Hindi</label><input id="emiDescHi" value="'+(m.description_hi||'')+'" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>' +
+        '<div><label style="font-size:12px;font-weight:600">Desc English</label><input id="emiDescEn" value="'+(m.description_en||'')+'" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>' +
+      '</div>' +
+      '<div><label style="font-size:12px;font-weight:600">Action</label><select id="emiAction" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"><option value="ai_chat"'+(m.action_type==='ai_chat'?' selected':'')+'>AI Chat</option><option value="flow"'+(m.action_type==='flow'?' selected':'')+'>Flow</option><option value="handoff"'+(m.action_type==='handoff'?' selected':'')+'>Handoff</option></select></div>' +
+      '<button onclick="submitEditMenuItem(\''+id+'\')" style="padding:10px 20px;background:#3b82f6;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">Update</button></div>');
+  } catch(e){alert('Error: '+e.message);}
+}
+
+async function submitEditMenuItem(id) {
+  try {
+    await api('/api/v1/bot/menu/'+id, {method:'PUT', body:JSON.stringify({
+      menu_key:document.getElementById('emiKey').value, emoji:document.getElementById('emiEmoji').value,
+      title_hi:document.getElementById('emiTitleHi').value, title_en:document.getElementById('emiTitleEn').value,
+      description_hi:document.getElementById('emiDescHi').value, description_en:document.getElementById('emiDescEn').value,
+      action_type:document.getElementById('emiAction').value, sort_order:parseInt(document.getElementById('emiOrder').value)||0
+    })});
+    closeModal(); _botTab='menu'; loadBotBuilder();
+  } catch(e){alert('Error: '+e.message);}
+}
+
+async function toggleMenuItem(id, active) {
+  try { await api('/api/v1/bot/menu/'+id, {method:'PUT',body:JSON.stringify({is_active:active})}); _botTab='menu'; loadBotBuilder(); }
+  catch(e){alert('Error: '+e.message);}
+}
+
+async function deleteMenuItem(id) {
+  if(!confirm('Delete this menu item?')) return;
+  try { await api('/api/v1/bot/menu/'+id, {method:'DELETE'}); _botTab='menu'; loadBotBuilder(); }
+  catch(e){alert('Error: '+e.message);}
+}
+
+// --- FLOWS TAB ---
+async function loadBotFlows() {
+  var el = document.getElementById('botContent');
+  try {
+    var d = await api('/api/v1/bot/flows');
+    var flows = d.flows || [];
+    el.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
+        '<div><strong>' + flows.length + '</strong> flows</div>' +
+        '<button onclick="showAddFlow()" style="padding:8px 16px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">+ Create Flow</button>' +
+      '</div>' +
+      '<div style="display:grid;gap:12px">' +
+      flows.map(function(f){return (
+        '<div style="background:#fff;border-radius:10px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid '+(f.is_active?'#6366f1':'#9ca3af')+'">' +
+          '<div style="display:flex;justify-content:space-between;align-items:start">' +
+            '<div>' +
+              '<div style="font-weight:700;font-size:15px;color:#1e293b">' + f.name + ' <span style="font-size:11px;padding:2px 8px;border-radius:4px;background:'+(f.is_active?'#d1fae5':'#fee2e2')+';color:'+(f.is_active?'#065f46':'#991b1b')+'">'+(f.is_active?'Active':'Inactive')+'</span></div>' +
+              '<div style="font-size:12px;color:#6b7280;margin-top:4px">' + (f.description||'No description') + '</div>' +
+              '<div style="font-size:11px;color:#9ca3af;margin-top:4px">' + (f.step_count||0) + ' steps | Triggers: ' + ((f.trigger_keywords||[]).join(', ')||'none') + '</div>' +
+            '</div>' +
+            '<div style="display:flex;gap:6px">' +
+              '<button onclick="viewFlowSteps(\''+f.id+'\',\''+f.name.replace(/'/g,'')+'\')" style="padding:6px 12px;font-size:12px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer">Edit Steps</button>' +
+              '<button onclick="deleteFlow(\''+f.id+'\')" style="padding:6px 12px;font-size:12px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer">Delete</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>'
+      );}).join('') +
+      '</div>';
+  } catch(e) { el.innerHTML='<div style="color:red;padding:20px">Error: '+e.message+'</div>'; }
+}
+
+function showAddFlow() {
+  openModal('Create Flow',
+    '<div style="display:grid;gap:12px">' +
+    '<div><label style="font-size:12px;font-weight:600">Flow Name *</label><input id="afName" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. Crop Doctor"></div>' +
+    '<div><label style="font-size:12px;font-weight:600">Description</label><textarea id="afDesc" rows="2" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></textarea></div>' +
+    '<div><label style="font-size:12px;font-weight:600">Trigger Keywords (comma-separated)</label><input id="afKeywords" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. doctor, bimari, rog"></div>' +
+    '<div><label style="font-size:12px;font-weight:600">Trigger Menu Key</label><input id="afMenuKey" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. crop_doctor"></div>' +
+    '<button onclick="submitFlow()" style="padding:10px 20px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">Create Flow</button></div>');
+}
+
+async function submitFlow() {
+  try {
+    var kw = document.getElementById('afKeywords').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
+    await api('/api/v1/bot/flows', {method:'POST', body:JSON.stringify({
+      name:document.getElementById('afName').value, description:document.getElementById('afDesc').value,
+      trigger_keywords:kw, trigger_menu_key:document.getElementById('afMenuKey').value||null
+    })});
+    closeModal(); _botTab='flows'; loadBotBuilder();
+  } catch(e){alert('Error: '+e.message);}
+}
+
+async function deleteFlow(id) {
+  if(!confirm('Delete this flow and all its steps?')) return;
+  try { await api('/api/v1/bot/flows/'+id, {method:'DELETE'}); _botTab='flows'; loadBotBuilder(); }
+  catch(e){alert('Error: '+e.message);}
+}
+
+async function viewFlowSteps(flowId, flowName) {
+  try {
+    var d = await api('/api/v1/bot/flows/'+flowId);
+    var steps = d.steps || [];
+    var html =
+      '<div style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">' +
+        '<div style="font-size:14px;color:#6b7280">Steps execute in order. Each step sends a message and waits for a response.</div>' +
+        '<button onclick="showAddStep(\''+flowId+'\','+(steps.length+1)+')" style="padding:6px 14px;background:#10b981;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">+ Add Step</button>' +
+      '</div>';
+    if(steps.length) {
+      html += '<div style="display:grid;gap:12px">';
+      steps.forEach(function(s,i){
+        html += '<div style="background:#f8fafc;border-radius:10px;padding:16px;border:1px solid #e2e8f0">' +
+          '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">' +
+            '<div style="font-weight:700;color:#6366f1">Step '+(i+1)+'</div>' +
+            '<div style="display:flex;gap:6px">' +
+              '<button onclick="deleteFlowStep(\''+s.id+'\',\''+flowId+'\',\''+flowName.replace(/'/g,'')+'\')" style="padding:2px 8px;font-size:11px;background:#ef4444;color:#fff;border:none;border-radius:4px;cursor:pointer">Delete</button>' +
+            '</div>' +
+          '</div>' +
+          '<div style="font-size:13px;color:#1e293b;margin-bottom:4px;white-space:pre-wrap">' + (s.message_hi||s.message_en||'No message') + '</div>' +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">' +
+            '<span style="font-size:11px;padding:2px 8px;background:#e0f2fe;color:#0369a1;border-radius:4px">Type: '+s.response_type+'</span>' +
+            (s.save_response_as ? '<span style="font-size:11px;padding:2px 8px;background:#fef3c7;color:#92400e;border-radius:4px">Saves as: '+s.save_response_as+'</span>' : '') +
+            (s.trigger_ai ? '<span style="font-size:11px;padding:2px 8px;background:#ede9fe;color:#5b21b6;border-radius:4px">Triggers AI</span>' : '') +
+          '</div>' +
+        '</div>';
+      });
+      html += '</div>';
+    } else {
+      html += '<div style="padding:30px;text-align:center;color:#9ca3af">No steps yet. Add your first step to build the flow.</div>';
+    }
+    openModal('Flow: ' + flowName, html);
+  } catch(e){alert('Error: '+e.message);}
+}
+
+function showAddStep(flowId, nextOrder) {
+  openModal('Add Step to Flow',
+    '<div style="display:grid;gap:12px">' +
+    '<div><label style="font-size:12px;font-weight:600">Step Order</label><input id="asOrder" type="number" value="'+nextOrder+'" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>' +
+    '<div><label style="font-size:12px;font-weight:600">Message Hindi *</label><textarea id="asHi" rows="3" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></textarea></div>' +
+    '<div><label style="font-size:12px;font-weight:600">Message English</label><textarea id="asEn" rows="2" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></textarea></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
+      '<div><label style="font-size:12px;font-weight:600">Response Type</label><select id="asType" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"><option value="free_text">Free Text</option><option value="buttons">Buttons (max 3)</option><option value="list">List</option><option value="none">No Response (info only)</option></select></div>' +
+      '<div><label style="font-size:12px;font-weight:600">Save Response As</label><input id="asSave" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. name, village, crops"></div>' +
+    '</div>' +
+    '<label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="asAI"> Trigger AI after this step</label>' +
+    '<div><label style="font-size:12px;font-weight:600">AI Context (optional)</label><textarea id="asAICtx" rows="2" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="Extra context for AI when triggered"></textarea></div>' +
+    '<button onclick="submitStep(\''+flowId+'\')" style="padding:10px 20px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">Add Step</button></div>');
+}
+
+async function submitStep(flowId) {
+  try {
+    await api('/api/v1/bot/flows/'+flowId+'/steps', {method:'POST', body:JSON.stringify({
+      step_order:parseInt(document.getElementById('asOrder').value), message_hi:document.getElementById('asHi').value,
+      message_en:document.getElementById('asEn').value, response_type:document.getElementById('asType').value,
+      save_response_as:document.getElementById('asSave').value||null, trigger_ai:document.getElementById('asAI').checked,
+      ai_context:document.getElementById('asAICtx').value||null
+    })});
+    closeModal(); alert('Step added!');
+  } catch(e){alert('Error: '+e.message);}
+}
+
+async function deleteFlowStep(stepId, flowId, flowName) {
+  if(!confirm('Delete this step?')) return;
+  try { await api('/api/v1/bot/flows/steps/'+stepId, {method:'DELETE'}); viewFlowSteps(flowId, flowName); }
+  catch(e){alert('Error: '+e.message);}
+}
+
+// --- KNOWLEDGE BASE TAB ---
+async function loadBotKnowledge() {
+  var el = document.getElementById('botContent');
+  try {
+    var d = await api('/api/v1/knowledge');
+    var docs = d.documents || [];
+    el.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
+        '<div><strong>' + docs.length + '</strong> documents in knowledge base</div>' +
+        '<button onclick="showAddKnowledge()" style="padding:8px 16px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">+ Add Document</button>' +
+      '</div>' +
+      '<div style="display:grid;gap:12px">' +
+      (docs.length ? docs.map(function(doc){
+        var chunks = [];
+        try { chunks = typeof doc.content_chunks === 'string' ? JSON.parse(doc.content_chunks) : (doc.content_chunks||[]); } catch(e){}
+        return '<div style="background:#fff;border-radius:10px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid #8b5cf6">' +
+          '<div style="display:flex;justify-content:space-between;align-items:start">' +
+            '<div>' +
+              '<div style="font-weight:700;font-size:14px;color:#1e293b">' + doc.title + '</div>' +
+              '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">' +
+                '<span style="font-size:11px;padding:2px 8px;background:#ede9fe;color:#5b21b6;border-radius:4px">' + doc.category + '</span>' +
+                '<span style="font-size:11px;padding:2px 8px;background:#f1f5f9;color:#475569;border-radius:4px">' + chunks.length + ' chunks</span>' +
+                '<span style="font-size:11px;padding:2px 8px;background:#f1f5f9;color:#475569;border-radius:4px">' + (doc.language||'hi') + '</span>' +
+                ((doc.tags||[]).map(function(t){return '<span style="font-size:11px;padding:2px 8px;background:#fef3c7;color:#92400e;border-radius:4px">'+t+'</span>';}).join('')) +
+              '</div>' +
+              '<div style="font-size:12px;color:#6b7280;margin-top:8px;max-height:60px;overflow:hidden">' + (doc.content_text||'').substring(0,200) + '...</div>' +
+            '</div>' +
+            '<div style="display:flex;gap:6px">' +
+              '<button onclick="viewKnowledge(\''+doc.id+'\')" style="padding:4px 10px;font-size:11px;background:#3b82f6;color:#fff;border:none;border-radius:4px;cursor:pointer">View</button>' +
+              '<button onclick="deleteKnowledge(\''+doc.id+'\')" style="padding:4px 10px;font-size:11px;background:#ef4444;color:#fff;border:none;border-radius:4px;cursor:pointer">Delete</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      }).join('') : '<div style="padding:30px;text-align:center;color:#9ca3af">No documents yet. Add product guides, crop manuals, government schemes, soil data.</div>') +
+      '</div>';
+  } catch(e) { el.innerHTML='<div style="color:red;padding:20px">Error: '+e.message+'</div>'; }
+}
+
+function showAddKnowledge() {
+  openModal('Add Knowledge Document',
+    '<div style="display:grid;gap:12px">' +
+    '<div><label style="font-size:12px;font-weight:600">Title *</label><input id="kbTitle" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. Wheat Growing Guide"></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
+      '<div><label style="font-size:12px;font-weight:600">Category</label><select id="kbCat" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"><option value="product_guide">Product Guide</option><option value="crop_guide">Crop Guide</option><option value="soil_data">Soil Data</option><option value="govt_scheme">Govt Scheme</option><option value="pest_disease">Pest & Disease</option><option value="weather">Weather</option><option value="general">General</option></select></div>' +
+      '<div><label style="font-size:12px;font-weight:600">Language</label><select id="kbLang" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"><option value="hi">Hindi</option><option value="en">English</option><option value="both">Both</option></select></div>' +
+    '</div>' +
+    '<div><label style="font-size:12px;font-weight:600">Tags (comma-separated)</label><input id="kbTags" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. wheat, rabi, zinc"></div>' +
+    '<div><label style="font-size:12px;font-weight:600">Content *</label><textarea id="kbContent" rows="10" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px" placeholder="Paste the full document content here. It will be automatically chunked for AI retrieval."></textarea></div>' +
+    '<button onclick="submitKnowledge()" style="padding:10px 20px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">Save Document</button></div>');
+}
+
+async function submitKnowledge() {
+  try {
+    var tags = document.getElementById('kbTags').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
+    await api('/api/v1/knowledge', {method:'POST', body:JSON.stringify({
+      title:document.getElementById('kbTitle').value, category:document.getElementById('kbCat').value,
+      language:document.getElementById('kbLang').value, tags:tags, content_text:document.getElementById('kbContent').value
+    })});
+    closeModal(); _botTab='knowledge'; loadBotBuilder();
+  } catch(e){alert('Error: '+e.message);}
+}
+
+async function viewKnowledge(id) {
+  try {
+    var d = await api('/api/v1/knowledge/'+id);
+    var doc = d.document;
+    openModal(doc.title, '<div style="max-height:500px;overflow-y:auto"><pre style="white-space:pre-wrap;font-size:13px;line-height:1.6">' + (doc.content_text||'') + '</pre></div>');
+  } catch(e){alert('Error: '+e.message);}
+}
+
+async function deleteKnowledge(id) {
+  if(!confirm('Archive this document?')) return;
+  try { await api('/api/v1/knowledge/'+id, {method:'DELETE'}); _botTab='knowledge'; loadBotBuilder(); }
+  catch(e){alert('Error: '+e.message);}
+}
   const el = document.getElementById("pageContent");
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading catalog...</p></div>';
   try {
