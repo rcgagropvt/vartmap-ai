@@ -2122,11 +2122,15 @@ app.put('/api/v1/settings', auth, async (req, res) => {
   try {
     const updates = req.body;
     for (const [key, value] of Object.entries(updates)) {
-      await pool.query('UPDATE app_settings SET value=$1, updated_at=NOW() WHERE key=$2', [String(value), key]);
+      await pool.query(
+        'INSERT INTO app_settings (key, value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (key) DO UPDATE SET value=$2, updated_at=NOW()',
+        [key, String(value)]
+      );
     }
     res.json({ message: 'Settings updated' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
 
 // --- REFERRAL ENDPOINTS ---
 app.post('/api/v1/referrals/generate', auth, async (req, res) => {
