@@ -2825,7 +2825,7 @@ async function submitKnowledgeFile() {
   formData.append('language', document.getElementById('kbLang').value);
   formData.append('tags', document.getElementById('kbTags').value);
   try {
-    var resp = await fetch(API_BASE + '/api/v1/knowledge/upload', {
+    var resp = await fetch(API + '/api/v1/knowledge/upload', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + localStorage.getItem('vartmap_token') },
       body: formData
