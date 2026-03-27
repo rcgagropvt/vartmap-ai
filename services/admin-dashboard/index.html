@@ -2910,6 +2910,44 @@ async function loadSettings() {
               <input type="number" id="set-whatsapp_share_points" value="${s.whatsapp_share_points||10}" onchange="updateSetting('whatsapp_share_points',this.value)" style="width:80px;padding:8px;border:1px solid #d1d5db;border-radius:6px;text-align:center">
             </div>
           </div>
+                  </div>
+
+        <div style="background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-top:24px">
+          <h3 style="margin-bottom:16px;color:#1e293b"><i class="fas fa-shield-alt" style="color:#ef4444;margin-right:8px"></i>AI Budget & Rate Limits</h3>
+          <p style="color:#6b7280;margin-bottom:16px;font-size:14px">Control AI API spending and prevent abuse. When limits are reached, the bot sends a static message instead of calling the AI.</p>
+          <div style="display:grid;gap:12px">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca">
+              <div><strong>Daily Limit per Farmer</strong><br><small style="color:#6b7280">Max AI messages one farmer can send per day</small></div>
+              <input type="number" value="${s.ai_daily_limit_per_farmer||20}" onchange="updateSetting('ai_daily_limit_per_farmer',this.value)" style="width:80px;padding:8px;border:1px solid #d1d5db;border-radius:6px;text-align:center">
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca">
+              <div><strong>Global Daily AI Calls</strong><br><small style="color:#6b7280">Max total AI calls per day across ALL farmers</small></div>
+              <input type="number" value="${s.ai_daily_limit_global||500}" onchange="updateSetting('ai_daily_limit_global',this.value)" style="width:80px;padding:8px;border:1px solid #d1d5db;border-radius:6px;text-align:center">
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca">
+              <div><strong>Monthly Budget (INR)</strong><br><small style="color:#6b7280">Stop AI calls when monthly spend exceeds this amount</small></div>
+              <div style="display:flex;align-items:center;gap:4px"><span style="font-weight:bold">&#8377;</span><input type="number" value="${s.ai_monthly_budget_inr||2000}" onchange="updateSetting('ai_monthly_budget_inr',this.value)" style="width:100px;padding:8px;border:1px solid #d1d5db;border-radius:6px;text-align:center"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca">
+              <div><strong>Rate Limit (per minute)</strong><br><small style="color:#6b7280">Max messages per farmer in 60 seconds (anti-spam)</small></div>
+              <input type="number" value="${s.ai_rate_limit_per_minute||5}" onchange="updateSetting('ai_rate_limit_per_minute',this.value)" style="width:80px;padding:8px;border:1px solid #d1d5db;border-radius:6px;text-align:center">
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca">
+              <div><strong>Budget Warning Threshold (%)</strong><br><small style="color:#6b7280">Alert in dashboard when budget usage exceeds this percentage</small></div>
+              <input type="number" value="${s.ai_budget_warning_threshold||80}" onchange="updateSetting('ai_budget_warning_threshold',this.value)" style="width:80px;padding:8px;border:1px solid #d1d5db;border-radius:6px;text-align:center" min="1" max="100">
+            </div>
+          </div>
+          <h4 style="margin:20px 0 12px;color:#1e293b">Limit Reached Messages</h4>
+          <div style="display:grid;gap:12px">
+            <div style="padding:12px;background:#f8fafc;border-radius:8px">
+              <label style="font-weight:600;font-size:14px">Hindi Message</label>
+              <input value="${s.ai_over_limit_message_hi||'Aaj ke liye aapki message limit poori ho gayi hai.'}" onchange="updateSetting('ai_over_limit_message_hi',this.value)" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;margin-top:6px">
+            </div>
+            <div style="padding:12px;background:#f8fafc;border-radius:8px">
+              <label style="font-weight:600;font-size:14px">English Message</label>
+              <input value="${s.ai_over_limit_message_en||'You have reached your daily message limit.'}" onchange="updateSetting('ai_over_limit_message_en',this.value)" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;margin-top:6px">
+            </div>
+          </div>
         </div>
       </div>
     `;

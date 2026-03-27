@@ -61,6 +61,67 @@ async function getProductCatalog() {
   }
 }
 
+// --- BUDGET & RATE LIMIT CHECK ---
+async function checkRateLimits(farmerId, farmerLanguage) {
+  try {
+    // Fetch settings from admin API
+    let settings = {};
+    try {
+      const resp = await axios.get(ADMIN_API_URL + '/api/v1/public/bot/config');
+      // Also fetch settings - use a simple cache
+      if (!global._settingsCache || Date.now() - global._settingsCacheTime > 300000) {
+        const sResp = await axios.get(ADMIN_API_URL + '/api/v1/settings', {
+          headers: { 'Authorization': 'Bearer ' + (process.env.INTERNAL_API_KEY || '') }
+        }).catch(() => null);
+        if (sResp && sResp.data) {
+          global._settingsCache = sResp.data.settings || {};
+          global._settingsCacheTime = Date.now();
+        }
+      }
+      settings = global._settingsCache || {};
+    } catch (e) { /* use defaults */ }
+
+    const dailyLimitPerFarmer = parseInt(settings.ai_daily_limit_per_farmer || '20');
+    const dailyLimitGlobal = parseInt(settings.ai_daily_limit_global || '500');
+    const ratePerMinute = parseInt(settings.ai_rate_limit_per_minute || '5');
+    const overLimitMsg = (farmerLanguage === 'en')
+      ? (settings.ai_over_limit_message_en || 'You have reached your daily message limit. Let us chat again tomorrow!')
+      : (settings.ai_over_limit_message_hi || 'Aaj ke liye aapki message limit poori ho gayi hai. Kal phir baat karte hain!');
+
+    // Check per-farmer daily count
+    const farmerDaily = await pool.query(
+      "SELECT COUNT(*) as cnt FROM wa_messages WHERE farmer_id=$1 AND direction='inbound' AND created_at > NOW() - INTERVAL '24 hours'",
+      [farmerId]
+    );
+    if (parseInt(farmerDaily.rows[0].cnt) >= dailyLimitPerFarmer) {
+      return { blocked: true, reason: 'farmer_daily', message: overLimitMsg };
+    }
+
+    // Check per-farmer rate (messages per minute)
+    const farmerRate = await pool.query(
+      "SELECT COUNT(*) as cnt FROM wa_messages WHERE farmer_id=$1 AND direction='inbound' AND created_at > NOW() - INTERVAL '1 minute'",
+      [farmerId]
+    );
+    if (parseInt(farmerRate.rows[0].cnt) >= ratePerMinute) {
+      return { blocked: true, reason: 'rate_limit', message: farmerLanguage === 'en' ? 'Please wait a moment before sending more messages.' : 'Kripya thodi der baad message karein.' };
+    }
+
+    // Check global daily count
+    const globalDaily = await pool.query(
+      "SELECT COUNT(*) as cnt FROM wa_messages WHERE direction='outbound' AND sender_type='system' AND created_at > NOW() - INTERVAL '24 hours'"
+    );
+    if (parseInt(globalDaily.rows[0].cnt) >= dailyLimitGlobal) {
+      return { blocked: true, reason: 'global_daily', message: overLimitMsg };
+    }
+
+    return { blocked: false };
+  } catch (e) {
+    console.error('Rate limit check error:', e.message);
+    return { blocked: false }; // fail open — don't block if check fails
+  }
+}
+
+
 // --- FETCH BOT CONFIG (welcome, menu, flows, knowledge) ---
 async function getBotConfig() {
   if (botConfigCache && (Date.now() - botConfigCacheTime < CACHE_TTL)) return botConfigCache;
@@ -796,9 +857,22 @@ app.post('/webhook', async (req, res) => {
             }
           }
 
+                    // 8.5 RATE LIMIT CHECK (before AI call)
+          const rateLimitResult = await checkRateLimits(farmerId, farmerData.language || 'hi');
+          if (rateLimitResult.blocked) {
+            console.log('Rate limited:', farmerId, rateLimitResult.reason);
+            await sendWhatsAppMessage(from, rateLimitResult.message);
+            await pool.query(
+              "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
+              [sessionId, farmerId, '[rate limited: ' + rateLimitResult.reason + ']']
+            );
+            continue;
+          }
+
           // 9. AI-POWERED RESPONSE
           const effectiveMsgType = (msgType === 'voice') ? 'audio' : (msgType === 'interactive' ? 'text' : msgType);
           const replyText = await getAIResponse(farmerId, sessionId, farmerData, msgBody, effectiveMsgType, mediaUrl);
+
 
                     // Check if AI response contains image tags
           let cleanReply = replyText;
