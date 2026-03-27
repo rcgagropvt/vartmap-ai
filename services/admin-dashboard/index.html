@@ -3549,42 +3549,147 @@ async function loadNotifications() {
 async function loadAnalytics() {
   const el = document.getElementById('pageContent');
   try {
-    const [overview, usage] = await Promise.all([api('/api/v1/analytics/overview'), api('/api/v1/analytics/usage')]);
+    const [overview, usage, settingsResp] = await Promise.all([
+      api('/api/v1/analytics/overview'),
+      api('/api/v1/analytics/usage'),
+      api('/api/v1/settings')
+    ]);
+    const s = settingsResp.settings || {};
+    const monthlyBudget = parseFloat(s.ai_monthly_budget_inr || '2000');
+    const dailyLimitGlobal = parseInt(s.ai_daily_limit_global || '500');
+    const dailyLimitPerFarmer = parseInt(s.ai_daily_limit_per_farmer || '20');
+    const warningThreshold = parseInt(s.ai_budget_warning_threshold || '80');
+
+    // Calculate totals
+    const totalCostMonth = usage.costs.reduce((sum, c) => sum + parseFloat(c.cost || 0), 0);
+    const totalCallsMonth = usage.by_feature.reduce((sum, f) => sum + parseInt(f.count || 0), 0);
+    const todayCalls = usage.daily.length > 0 ? parseInt(usage.daily[usage.daily.length - 1].count || 0) : 0;
+    const todayCost = usage.costs.length > 0 ? parseFloat(usage.costs[usage.costs.length - 1].cost || 0) : 0;
+    const budgetPercent = monthlyBudget > 0 ? Math.min((totalCostMonth / monthlyBudget) * 100, 100) : 0;
+    const dailyPercent = dailyLimitGlobal > 0 ? Math.min((todayCalls / dailyLimitGlobal) * 100, 100) : 0;
+    const budgetColor = budgetPercent >= warningThreshold ? '#ef4444' : budgetPercent >= 50 ? '#f59e0b' : '#10b981';
+    const dailyColor = dailyPercent >= 80 ? '#ef4444' : dailyPercent >= 50 ? '#f59e0b' : '#10b981';
+
     el.innerHTML = `
     <div class="tabs">
-      <div class="tab active" onclick="showAnalyticsTab('convTab',this)">Conversations</div>
-      <div class="tab" onclick="showAnalyticsTab('usageTab',this)">Usage & Costs</div>
+      <div class="tab active" onclick="showAnalyticsTab('budgetTab',this)">AI Budget</div>
+      <div class="tab" onclick="showAnalyticsTab('convTab',this)">Conversations</div>
+      <div class="tab" onclick="showAnalyticsTab('usageTab',this)">Detailed Usage</div>
     </div>
-    <div id="convTab">
+
+    <div id="budgetTab">
+      <div class="stats-grid" style="margin-bottom:24px">
+        <div class="stat-card" style="border-left:4px solid ${budgetColor}">
+          <div class="stat-icon" style="color:${budgetColor}"><i class="fas fa-rupee-sign"></i></div>
+          <div class="stat-value">\u20B9${totalCostMonth.toFixed(2)}</div>
+          <div class="stat-label">Monthly Spend</div>
+          <div style="margin-top:8px;background:#e5e7eb;border-radius:8px;height:8px;overflow:hidden">
+            <div style="width:${budgetPercent}%;height:100%;background:${budgetColor};border-radius:8px;transition:width 0.5s"></div>
+          </div>
+          <small style="color:#6b7280">${budgetPercent.toFixed(1)}% of \u20B9${monthlyBudget} budget</small>
+        </div>
+        <div class="stat-card" style="border-left:4px solid ${dailyColor}">
+          <div class="stat-icon" style="color:${dailyColor}"><i class="fas fa-bolt"></i></div>
+          <div class="stat-value">${todayCalls}</div>
+          <div class="stat-label">Today's AI Calls</div>
+          <div style="margin-top:8px;background:#e5e7eb;border-radius:8px;height:8px;overflow:hidden">
+            <div style="width:${dailyPercent}%;height:100%;background:${dailyColor};border-radius:8px;transition:width 0.5s"></div>
+          </div>
+          <small style="color:#6b7280">${dailyPercent.toFixed(0)}% of ${dailyLimitGlobal} daily limit</small>
+        </div>
+        <div class="stat-card" style="border-left:4px solid #6366f1">
+          <div class="stat-icon" style="color:#6366f1"><i class="fas fa-calculator"></i></div>
+          <div class="stat-value">\u20B9${todayCost.toFixed(4)}</div>
+          <div class="stat-label">Today's Cost</div>
+          <small style="color:#6b7280">Avg \u20B9${todayCalls > 0 ? (todayCost / todayCalls).toFixed(4) : '0.0000'} per call</small>
+        </div>
+        <div class="stat-card" style="border-left:4px solid #8b5cf6">
+          <div class="stat-icon" style="color:#8b5cf6"><i class="fas fa-chart-line"></i></div>
+          <div class="stat-value">${totalCallsMonth}</div>
+          <div class="stat-label">Monthly AI Calls</div>
+          <small style="color:#6b7280">\u20B9${totalCallsMonth > 0 ? (totalCostMonth / totalCallsMonth).toFixed(4) : '0.0000'} avg per call</small>
+        </div>
+      </div>
+
+      ${budgetPercent >= warningThreshold ? '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:16px;margin-bottom:24px;display:flex;align-items:center;gap:12px"><i class="fas fa-exclamation-triangle" style="color:#ef4444;font-size:24px"></i><div><strong style="color:#ef4444">Budget Warning!</strong><br><span style="color:#6b7280">Monthly spend has reached ' + budgetPercent.toFixed(1) + '% of your \u20B9' + monthlyBudget + ' budget. Adjust limits in Settings if needed.</span></div></div>' : ''}
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+        <div class="table-wrap">
+          <div class="table-header"><h3>Cost by AI Model</h3></div>
+          <table><tr><th>Feature</th><th>Calls</th><th>Cost (\u20B9)</th><th>% of Total</th></tr>
+          ${usage.by_feature.map(f => {
+            const pct = totalCostMonth > 0 ? ((parseFloat(f.total_cost) / totalCostMonth) * 100).toFixed(1) : '0.0';
+            return '<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + (f.feature === 'ai_chat' ? '#10b981' : f.feature === 'ai_image_analysis' ? '#6366f1' : f.feature === 'ai_voice' ? '#f59e0b' : '#8b5cf6') + ';margin-right:8px"></span>' + f.feature + '</td><td>' + f.count + '</td><td>\u20B9' + (+f.total_cost).toFixed(4) + '</td><td>' + pct + '%</td></tr>';
+          }).join('')}
+          ${usage.by_feature.length === 0 ? '<tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:20px">No usage data yet. Send WhatsApp messages to generate data.</td></tr>' : ''}
+          </table>
+        </div>
+        <div class="table-wrap">
+          <div class="table-header"><h3>Daily Cost Trend (Last 30 days)</h3></div>
+          <div style="padding:16px">
+            ${usage.costs.length > 0 ? usage.costs.map(c => {
+              const costVal = parseFloat(c.cost);
+              const maxCost = Math.max(...usage.costs.map(x => parseFloat(x.cost)), 0.001);
+              const barWidth = (costVal / maxCost) * 100;
+              const dateStr = new Date(c.date).toLocaleDateString('en-IN', {day:'numeric',month:'short'});
+              return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="min-width:60px;font-size:12px;color:#6b7280">' + dateStr + '</span><div style="flex:1;background:#e5e7eb;border-radius:4px;height:20px;overflow:hidden"><div style="width:' + barWidth + '%;height:100%;background:linear-gradient(90deg,#10b981,#6366f1);border-radius:4px"></div></div><span style="min-width:70px;text-align:right;font-size:12px;font-weight:600">\u20B9' + costVal.toFixed(4) + '</span></div>';
+            }).join('') : '<div style="text-align:center;color:#9ca3af;padding:40px">No cost data yet</div>'}
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:24px;background:#f8fafc;border-radius:12px;padding:20px">
+        <h4 style="margin-bottom:12px;color:#1e293b"><i class="fas fa-info-circle" style="color:#6366f1;margin-right:8px"></i>Cost Estimation Rates</h4>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+          <div style="background:#fff;padding:12px;border-radius:8px;text-align:center;border:1px solid #e5e7eb"><strong style="font-size:12px;color:#6b7280">Gemini 2.5 Flash Lite</strong><br><span style="font-size:18px;font-weight:700;color:#10b981">\u20B90.60</span><br><small style="color:#9ca3af">per 1M input tokens</small></div>
+          <div style="background:#fff;padding:12px;border-radius:8px;text-align:center;border:1px solid #e5e7eb"><strong style="font-size:12px;color:#6b7280">Gemini 2.0 Flash</strong><br><span style="font-size:18px;font-weight:700;color:#f59e0b">\u20B90.80</span><br><small style="color:#9ca3af">per 1M input tokens</small></div>
+          <div style="background:#fff;padding:12px;border-radius:8px;text-align:center;border:1px solid #e5e7eb"><strong style="font-size:12px;color:#6b7280">Gemini 2.5 Flash</strong><br><span style="font-size:18px;font-weight:700;color:#6366f1">\u20B91.20</span><br><small style="color:#9ca3af">per 1M input tokens</small></div>
+          <div style="background:#fff;padding:12px;border-radius:8px;text-align:center;border:1px solid #e5e7eb"><strong style="font-size:12px;color:#6b7280">Groq Llama 3.3 70B</strong><br><span style="font-size:18px;font-weight:700;color:#8b5cf6">\u20B90.50</span><br><small style="color:#9ca3af">per 1M input tokens</small></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="convTab" style="display:none">
       <div class="table-wrap">
         <div class="table-header"><h3>Daily Conversations (Last 30 days)</h3></div>
         <table><tr><th>Date</th><th>Conversations</th><th>Active Farmers</th></tr>
-        ${overview.daily.map(d => `<tr><td>${d.date}</td><td>${d.conversations}</td><td>${d.active_farmers}</td></tr>`).join('')}
+        ${(overview.daily || []).map(d => '<tr><td>' + d.date + '</td><td>' + d.conversations + '</td><td>' + d.active_farmers + '</td></tr>').join('')}
         </table>
       </div>
       <div class="form-row">
         <div class="table-wrap"><div class="table-header"><h3>Top Intents</h3></div>
-          <table><tr><th>Intent</th><th>Count</th></tr>${overview.by_intent.map(i => `<tr><td>${i.intent}</td><td>${i.count}</td></tr>`).join('')}</table></div>
+          <table><tr><th>Intent</th><th>Count</th></tr>${(overview.by_intent || []).map(i => '<tr><td>' + i.intent + '</td><td>' + i.count + '</td></tr>').join('')}</table></div>
         <div class="table-wrap"><div class="table-header"><h3>Farmer Growth</h3></div>
-          <table><tr><th>Date</th><th>New Farmers</th></tr>${overview.farmer_growth.map(g => `<tr><td>${g.date}</td><td>${g.new_farmers}</td></tr>`).join('')}</table></div>
+          <table><tr><th>Date</th><th>New Farmers</th></tr>${(overview.farmer_growth || []).map(g => '<tr><td>' + g.date + '</td><td>' + g.new_farmers + '</td></tr>').join('')}</table></div>
       </div>
     </div>
+
     <div id="usageTab" style="display:none">
       <div class="table-wrap">
         <div class="table-header"><h3>Usage by Feature</h3></div>
-        <table><tr><th>Feature</th><th>Count</th><th>Cost (â‚¹)</th></tr>
-        ${usage.by_feature.map(f => `<tr><td>${f.feature}</td><td>${f.count}</td><td>â‚¹${(+f.total_cost).toFixed(2)}</td></tr>`).join('')}
+        <table><tr><th>Feature</th><th>Count</th><th>Cost (\u20B9)</th></tr>
+        ${usage.by_feature.map(f => '<tr><td>' + f.feature + '</td><td>' + f.count + '</td><td>\u20B9' + (+f.total_cost).toFixed(4) + '</td></tr>').join('')}
         </table>
       </div>
       <div class="table-wrap">
         <div class="table-header"><h3>Daily Costs</h3></div>
-        <table><tr><th>Date</th><th>Cost (â‚¹)</th></tr>
-        ${usage.costs.map(c => `<tr><td>${c.date}</td><td>â‚¹${(+c.cost).toFixed(2)}</td></tr>`).join('')}
+        <table><tr><th>Date</th><th>Cost (\u20B9)</th></tr>
+        ${usage.costs.map(c => '<tr><td>' + c.date + '</td><td>\u20B9' + (+c.cost).toFixed(4) + '</td></tr>').join('')}
         </table>
       </div>
     </div>`;
-  } catch (e) { el.innerHTML = '<div class="empty"><p>Error loading analytics</p></div>'; }
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error loading analytics: ' + e.message + '</p></div>'; }
 }
+
+function showAnalyticsTab(tabId, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['budgetTab','convTab','usageTab'].forEach(id => {
+    const elem = document.getElementById(id);
+    if (elem) elem.style.display = id === tabId ? 'block' : 'none';
+  });
+}
+
 
 function showAnalyticsTab(tabId, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
