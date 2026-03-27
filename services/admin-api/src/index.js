@@ -2502,7 +2502,16 @@ app.post('/api/v1/knowledge/upload', auth, upload.single('file'), async (req, re
       extractedText = req.file.buffer.toString('utf-8');
     }
 
+    // Sanitize: remove null bytes and non-UTF8 characters that PostgreSQL rejects
+    extractedText = extractedText
+      .replace(/\x00/g, '')
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ' ')
+      .replace(/[^\x20-\x7E\n\r\t\u0080-\uFFFF]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
     if (!extractedText || extractedText.length < 10) {
+
       return res.status(400).json({ error: 'Could not extract text from file. Try pasting content manually.' });
     }
 
