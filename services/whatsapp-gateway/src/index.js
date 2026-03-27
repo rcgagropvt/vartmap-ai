@@ -632,6 +632,84 @@ async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, 
   return false; // Not in onboarding, continue normal flow
 }
 
+// --- MANDI PRICE LOOKUP ---
+async function getMandiPrices(crop, state) {
+  try {
+    const params = new URLSearchParams();
+    if (crop) params.append('commodity', crop);
+    if (state) params.append('state', state);
+    params.append('limit', '5');
+    const resp = await axios.get(ADMIN_API_URL + '/api/v1/public/mandi-prices?' + params.toString());
+    return resp.data.prices || [];
+  } catch (e) { console.log('Mandi fetch error:', e.message); return []; }
+}
+
+function formatMandiPrices(prices, crop) {
+  if (!prices.length) return 'Maaf kijiye, "' + (crop || '') + '" ke liye abhi mandi bhav uplabdh nahi hai.';
+  let msg = '*🌾 Mandi Bhav - ' + (crop || prices[0].commodity) + '*\n\n';
+  prices.forEach(p => {
+    msg += '📍 *' + (p.market_name || p.district) + '* (' + (p.state || '') + ')\n';
+    msg += '   Min: ₹' + p.min_price + ' | Max: ₹' + p.max_price + ' | Modal: ₹' + p.modal_price + '/' + (p.unit || 'quintal') + '\n';
+    if (p.price_date) msg += '   📅 ' + new Date(p.price_date).toLocaleDateString('hi-IN') + '\n';
+    msg += '\n';
+  });
+  msg += '_Mandi bhav samay ke saath badal sakte hain._';
+  return msg;
+}
+
+// --- GOVERNMENT SCHEMES LOOKUP ---
+async function getGovtSchemes(state) {
+  try {
+    const params = new URLSearchParams();
+    if (state) params.append('state', state);
+    params.append('limit', '10');
+    const resp = await axios.get(ADMIN_API_URL + '/api/v1/public/schemes?' + params.toString());
+    return resp.data.schemes || [];
+  } catch (e) { console.log('Schemes fetch error:', e.message); return []; }
+}
+
+function formatGovtSchemes(schemes, farmer) {
+  if (!schemes.length) return 'Maaf kijiye, abhi koi sarkari yojana ki jankari uplabdh nahi hai.';
+  let msg = '*🏛️ Sarkari Yojanayen*\n\n';
+  schemes.slice(0, 5).forEach((s, i) => {
+    msg += (i + 1) + '. *' + (s.name_hi || s.name) + '*\n';
+    if (s.description) msg += '   ' + s.description.substring(0, 100) + '\n';
+    if (s.benefits) msg += '   ✅ ' + s.benefits.substring(0, 80) + '\n';
+    if (s.helpline) msg += '   📞 ' + s.helpline + '\n';
+    if (s.apply_url) msg += '   🔗 ' + s.apply_url + '\n';
+    msg += '\n';
+  });
+  msg += '_Adhik jankari ke liye helpline par call karein._';
+  return msg;
+}
+
+// --- SOIL DATA LOOKUP ---
+async function getSoilData(state, district) {
+  try {
+    const params = new URLSearchParams();
+    if (state) params.append('state', state);
+    if (district) params.append('district', district);
+    const resp = await axios.get(ADMIN_API_URL + '/api/v1/public/soil-data?' + params.toString());
+    return resp.data.data || [];
+  } catch (e) { console.log('Soil fetch error:', e.message); return []; }
+}
+
+function formatSoilData(soilData, district) {
+  if (!soilData.length) return 'Maaf kijiye, "' + (district || 'aapke area') + '" ke liye mitti ki jankari uplabdh nahi hai.';
+  const s = soilData[0];
+  let msg = '*🌍 Mitti ki Jankari - ' + (s.district_name || district) + ', ' + (s.state_name || '') + '*\n\n';
+  msg += '📊 *Nitrogen (N):*\n   Low: ' + s.nitrogen_low_pct + '% | Medium: ' + s.nitrogen_medium_pct + '% | High: ' + s.nitrogen_high_pct + '%\n\n';
+  msg += '📊 *Phosphorus (P):*\n   Low: ' + s.phosphorus_low_pct + '% | Medium: ' + s.phosphorus_medium_pct + '% | High: ' + s.phosphorus_high_pct + '%\n\n';
+  msg += '📊 *Potassium (K):*\n   Low: ' + s.potassium_low_pct + '% | Medium: ' + s.potassium_medium_pct + '% | High: ' + s.potassium_high_pct + '%\n\n';
+  msg += '📊 *Organic Carbon:*\n   Low: ' + (s.oc_low_pct || '-') + '% | Medium: ' + (s.oc_medium_pct || '-') + '% | High: ' + (s.oc_high_pct || '-') + '%\n\n';
+  msg += '🧪 *pH:* ' + (s.avg_ph || '-') + '\n';
+  msg += '🏷️ *Soil Type:* ' + (s.soil_type || '-') + '\n';
+  msg += '📝 *Samples:* ' + (s.total_samples || '-') + '\n\n';
+  msg += '_Mitti test karwayen aur Vartmaan fertilizers se sahi poshak tatva dein._';
+  return msg;
+}
+
+
 // --- FLOW ENGINE ---
 async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botConfig) {
   const lang = farmerData.language || 'hi';
@@ -694,13 +772,116 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
     return true; // Flow handled the message
   }
 
-  // Menu item matched but no flow — just acknowledge and let AI handle the topic
-  const ack = lang === 'hi'
-    ? (matchedMenu.title_hi || matchedMenu.title_en || 'Option') + ' ke baare mein jaankari de raha hoon...'
-    : 'Let me help you with ' + (matchedMenu.title_en || matchedMenu.title_hi || 'that') + '...';
-  // Don't send ack, let AI give a proper response
+    // --- DATA-DRIVEN MENU HANDLERS ---
+  const menuKey = (matchedMenu.menu_key || '').toLowerCase();
+
+  // MANDI PRICES
+  if (menuKey === 'mandi_prices') {
+    const crops = Array.isArray(farmerData.crops) ? farmerData.crops : (farmerData.crops || '').split(',');
+    const primaryCrop = crops[0] || '';
+    if (primaryCrop) {
+      await sendWhatsAppMessage(from, lang === 'hi' ? '🌾 "' + primaryCrop + '" ka mandi bhav dhundh raha hoon...' : 'Looking up mandi prices for "' + primaryCrop + '"...');
+      const prices = await getMandiPrices(primaryCrop, '');
+      const reply = formatMandiPrices(prices, primaryCrop);
+      await sendWhatsAppMessage(from, reply);
+      if (crops.length > 1) {
+        const otherCrops = crops.slice(1).filter(c => c.trim()).map(c => c.trim()).join(', ');
+        await sendWhatsAppMessage(from, lang === 'hi'
+          ? 'Aapki anya fasal (' + otherCrops + ') ka bhav jaanne ke liye fasal ka naam type karein.'
+          : 'Type crop name to check prices for: ' + otherCrops);
+      }
+    } else {
+      await sendWhatsAppMessage(from, lang === 'hi'
+        ? '🌾 Kis fasal ka mandi bhav chahiye? Fasal ka naam type karein (jaise: Gehun, Chawal, Chana)'
+        : 'Which crop price do you need? Type the crop name (e.g., Wheat, Rice, Gram)');
+    }
+    return true;
+  }
+
+  // GOVERNMENT SCHEMES
+  if (menuKey === 'govt_schemes' || menuKey === 'government_schemes' || menuKey === 'sarkari_yojana') {
+    await sendWhatsAppMessage(from, lang === 'hi' ? '🏛️ Sarkari yojanayen dhundh raha hoon...' : 'Looking up government schemes...');
+    const schemes = await getGovtSchemes(farmerData.state_name || '');
+    const reply = formatGovtSchemes(schemes, farmerData);
+    await sendWhatsAppMessage(from, reply);
+    return true;
+  }
+
+  // SOIL INFO
+  if (menuKey === 'soil_info' || menuKey === 'mitti') {
+    const district = farmerData.district || farmerData.village || '';
+    if (district) {
+      await sendWhatsAppMessage(from, lang === 'hi' ? '🌍 "' + district + '" ki mitti ki jankari dhundh raha hoon...' : 'Looking up soil data for "' + district + '"...');
+      const soilData = await getSoilData('', district);
+      const reply = formatSoilData(soilData, district);
+      await sendWhatsAppMessage(from, reply);
+    } else {
+      await sendWhatsAppMessage(from, lang === 'hi'
+        ? '🌍 Aapke district ki mitti ki jankari ke liye apna district naam type karein (jaise: Karnal, Guntur, Indore)'
+        : 'Type your district name to get soil info (e.g., Karnal, Guntur, Indore)');
+    }
+    return true;
+  }
+
+  // WEATHER
+  if (menuKey === 'weather' || menuKey === 'mausam') {
+    const district = farmerData.district || farmerData.village || '';
+    if (district) {
+      // Let AI handle with context about the location
+      return false;
+    }
+    await sendWhatsAppMessage(from, lang === 'hi'
+      ? '🌤️ Mausam ki jankari ke liye apna shehar/district type karein (jaise: Karnal, Lucknow, Indore)'
+      : 'Type your city/district name for weather info');
+    return true;
+  }
+
+  // MY PROFILE
+  if (menuKey === 'my_profile' || menuKey === 'profile') {
+    const f = farmerData;
+    const crops = Array.isArray(f.crops) ? f.crops.join(', ') : (f.crops || 'Not set');
+    let profileMsg = '*👨‍🌾 Meri Profile*\n\n';
+    profileMsg += '📛 *Naam:* ' + (f.name || '-') + '\n';
+    profileMsg += '📱 *Phone:* ' + (f.phone || '-') + '\n';
+    profileMsg += '🌐 *Bhaasha:* ' + (f.language === 'hi' ? 'Hindi' : f.language === 'en' ? 'English' : (f.language || '-')) + '\n';
+    profileMsg += '🏘️ *Gaon:* ' + (f.village || '-') + '\n';
+    profileMsg += '🌾 *Fasalein:* ' + crops + '\n';
+    profileMsg += '🏞️ *Zameen:* ' + (f.land_holding_acres ? f.land_holding_acres + ' acre' : 'Not set') + '\n';
+    profileMsg += '🧪 *Mitti:* ' + (f.soil_type || 'Not set') + '\n';
+    profileMsg += '💧 *Sinchai:* ' + (f.irrigation_type || 'Not set') + '\n';
+    profileMsg += '🌿 *Kheti ka tarika:* ' + (f.farming_type || 'Not set') + '\n\n';
+    profileMsg += '_Profile update karne ke liye apni jankari bhejein._';
+    await sendWhatsAppMessage(from, profileMsg);
+    return true;
+  }
+
+  // FERTILIZER ADVICE - let AI handle with product catalog context
+  if (menuKey === 'fertilizer_advice') {
+    return false; // AI will handle with full product catalog
+  }
+
+  // CROP DOCTOR - let AI handle (already has a flow)
+  if (menuKey === 'crop_doctor') {
+    return false; // AI handles with image analysis capability
+  }
+
+  // MODERN FARMING - let AI handle with knowledge base
+  if (menuKey === 'modern_farming') {
+    return false; // AI handles with knowledge base docs
+  }
+
+  // TALK TO EXPERT - send acknowledgment
+  if (menuKey === 'talk_to_expert') {
+    await sendWhatsAppMessage(from, lang === 'hi'
+      ? '👨‍🔬 Aapka sandesh hamare visheshagya ko bhej diya gaya hai. Woh jaldi se aapko call karenge.\n\n📞 Seedha baat karne ke liye call karein: 1800-XXX-XXXX'
+      : 'Your message has been forwarded to our expert. They will call you soon.\n\n📞 Direct call: 1800-XXX-XXXX');
+    return true;
+  }
+
+  // Default: let AI handle
   return false;
 }
+
 
 // --- MEDIA URL ---
 async function getMediaUrl(mediaId) {

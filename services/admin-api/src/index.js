@@ -2674,6 +2674,50 @@ app.get('/api/v1/public/settings', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// PUBLIC: Mandi prices for WhatsApp bot
+app.get('/api/v1/public/mandi-prices', async (req, res) => {
+  try {
+    const { commodity, state, district, limit } = req.query;
+    let q = 'SELECT * FROM mandi_prices WHERE 1=1';
+    const p = [];
+    if (commodity) { p.push('%' + commodity + '%'); q += ` AND commodity ILIKE $${p.length}`; }
+    if (state) { p.push('%' + state + '%'); q += ` AND state ILIKE $${p.length}`; }
+    if (district) { p.push('%' + district + '%'); q += ` AND district ILIKE $${p.length}`; }
+    q += ' ORDER BY price_date DESC LIMIT ' + Math.min(parseInt(limit) || 10, 50);
+    const r = await pool.query(q, p);
+    res.json({ prices: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUBLIC: Government schemes for WhatsApp bot
+app.get('/api/v1/public/schemes', async (req, res) => {
+  try {
+    const { crop, state, level } = req.query;
+    let q = "SELECT * FROM government_schemes WHERE status='active'";
+    const p = [];
+    if (level) { p.push(level); q += ` AND level=$${p.length}`; }
+    if (state) { p.push('%' + state + '%'); q += ` AND (state_code ILIKE $${p.length} OR level='central')`; }
+    q += ' ORDER BY name LIMIT 20';
+    const r = await pool.query(q, p);
+    res.json({ schemes: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUBLIC: Soil data for WhatsApp bot
+app.get('/api/v1/public/soil-data', async (req, res) => {
+  try {
+    const { state, district } = req.query;
+    let q = 'SELECT * FROM soil_nutrient_data WHERE 1=1';
+    const p = [];
+    if (state) { p.push('%' + state + '%'); q += ` AND state_name ILIKE $${p.length}`; }
+    if (district) { p.push('%' + district + '%'); q += ` AND district_name ILIKE $${p.length}`; }
+    q += ' LIMIT 5';
+    const r = await pool.query(q, p);
+    res.json({ data: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+
 // --- PUBLIC BOT CONFIG (for whatsapp-gateway, no auth) ---
 app.get('/api/v1/public/bot/config', async (req, res) => {
   try { const r = await pool.query('SELECT * FROM bot_config'); res.json({ config: r.rows }); }
