@@ -1647,6 +1647,31 @@ app.get('/api/v1/analytics/overview', auth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// PUBLIC: Log AI usage from gateway (no auth needed - called by gateway)
+app.post('/api/v1/public/usage/log', async (req, res) => {
+  try {
+    const { farmer_id, feature, model, input_tokens, output_tokens, cost_inr, session_id } = req.body;
+    await pool.query(
+      `INSERT INTO usage_tracking (id, farmer_id, feature, model, input_tokens, output_tokens, cost_inr, session_id, created_at) 
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, NOW())`,
+      [farmer_id || null, feature || 'ai_chat', model || 'unknown', input_tokens || 0, output_tokens || 0, cost_inr || 0, session_id || null]
+    );
+    res.json({ logged: true });
+  } catch (e) {
+    // Table might not have all columns - try minimal insert
+    try {
+      await pool.query(
+        'INSERT INTO usage_tracking (feature, cost_inr, created_at) VALUES ($1, $2, NOW())',
+        [req.body.feature || 'ai_chat', req.body.cost_inr || 0]
+      );
+      res.json({ logged: true, minimal: true });
+    } catch (e2) {
+      res.status(500).json({ error: e2.message });
+    }
+  }
+});
+
+
 app.get('/api/v1/analytics/usage', auth, async (req, res) => {
   try {
     const [daily, byFeature, costs] = await Promise.all([

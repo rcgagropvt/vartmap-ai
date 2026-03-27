@@ -111,6 +111,17 @@ async function checkRateLimits(farmerId, farmerLanguage) {
     if (parseInt(globalDaily.rows[0].cnt) >= dailyLimitGlobal) {
       return { blocked: true, reason: 'global_daily', message: overLimitMsg };
     }
+    // Check monthly budget
+    const monthlyBudget = parseFloat(settings.ai_monthly_budget_inr || '2000');
+    try {
+      const monthlySpend = await pool.query(
+        "SELECT COALESCE(SUM(cost_inr), 0) as total FROM usage_tracking WHERE created_at > DATE_TRUNC('month', NOW())"
+      );
+      const spent = parseFloat(monthlySpend.rows[0].total || 0);
+      if (spent >= monthlyBudget) {
+        return { blocked: true, reason: 'monthly_budget', message: farmerLanguage === 'en' ? 'Our service is temporarily paused. Please try again next month.' : 'Hamari seva abhi ke liye band hai. Kripya agle mahine phir koshish karein.' };
+      }
+    } catch (e) { /* usage_tracking table might not exist yet, skip */ }
 
     return { blocked: false };
   } catch (e) {
@@ -366,8 +377,40 @@ async function getAIResponse(farmerId, sessionId, farmer, messageText, messageTy
 
     await saveChatHistory(farmerId, sessionId, 'user', messageText || '[media]', detectedLang, modelUsed);
     await saveChatHistory(farmerId, sessionId, 'assistant', response, detectedLang, modelUsed);
-    console.log('AI response via ' + modelUsed + ' (' + response.length + ' chars)');
+        console.log('AI response via ' + modelUsed + ' (' + response.length + ' chars)');
+
+    // Log AI usage cost
+    try {
+      const inputChars = (messageText || '').length + (systemPrompt ? systemPrompt.length : 0);
+      const outputChars = response.length;
+      // Estimated token counts (1 token ≈ 4 chars for English, 2 chars for Hindi)
+      const inputTokens = Math.ceil(inputChars / 3);
+      const outputTokens = Math.ceil(outputChars / 3);
+      // Cost estimation per model (INR per 1M tokens)
+      const costRates = {
+        'gemini-2.5-flash-lite': { input: 0.60, output: 2.40 },
+        'gemini-2.0-flash': { input: 0.80, output: 3.20 },
+        'gemini-2.5-flash': { input: 1.20, output: 4.80 },
+        'groq-llama-3.3-70b': { input: 0.50, output: 0.80 }
+      };
+      const rate = costRates[modelUsed] || { input: 1.0, output: 3.0 };
+      const costInr = ((inputTokens * rate.input) + (outputTokens * rate.output)) / 1000000;
+
+      axios.post(ADMIN_API_URL + '/api/v1/public/usage/log', {
+        farmer_id: farmerId,
+        feature: (messageType === 'image') ? 'ai_image_analysis' : (messageType === 'audio' ? 'ai_voice' : 'ai_chat'),
+        model: modelUsed,
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        cost_inr: parseFloat(costInr.toFixed(6)),
+        session_id: sessionId
+      }).catch(e => console.log('Usage log error:', e.message));
+    } catch (costErr) {
+      console.log('Cost calc error:', costErr.message);
+    }
+
     return response;
+
   } catch (e) {
     console.error('AI response error:', e.message);
     return 'Sorry, I could not process your request right now. Please try again or type "menu" for options.';
