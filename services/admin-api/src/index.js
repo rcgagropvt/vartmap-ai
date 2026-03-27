@@ -2574,7 +2574,7 @@ app.get('/api/v1/public/bot/flows', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.get('/api/v1/public/knowledge', async (req, res) => {
-  try { const r = await pool.query("SELECT * FROM knowledge_base WHERE status = 'active'"); res.json({ documents: r.rows }); }
+  try { const r = await pool.query("SELECT * FROM knowledge_base WHERE is_active = true"); res.json({ documents: r.rows }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 // --- PUBLIC BOT CONFIG (for whatsapp-gateway, no auth required) ---
@@ -2598,7 +2598,7 @@ app.get('/api/v1/public/bot/flows', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.get('/api/v1/public/knowledge', async (req, res) => {
-  try { const r = await pool.query("SELECT * FROM knowledge_base WHERE status = 'active'"); res.json({ documents: r.rows }); }
+  try { const r = await pool.query("SELECT * FROM knowledge_base WHERE is_active = true"); res.json({ documents: r.rows }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
