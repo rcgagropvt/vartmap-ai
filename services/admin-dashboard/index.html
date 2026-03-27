@@ -2777,26 +2777,88 @@ async function loadBotKnowledge() {
 function showAddKnowledge() {
   openModal('Add Knowledge Document',
     '<div style="display:grid;gap:12px">' +
+    '<div style="padding:16px;background:#f0fdf4;border:2px dashed #10b981;border-radius:10px;text-align:center">' +
+      '<i class="fas fa-cloud-upload-alt" style="font-size:32px;color:#10b981"></i>' +
+      '<p style="margin:8px 0 4px;font-weight:600">Upload PDF, Word, or Text File</p>' +
+      '<p style="margin:0;font-size:12px;color:#666">File content will be automatically extracted for AI</p>' +
+      '<input type="file" id="kbFile" accept=".pdf,.txt,.doc,.docx,.csv" onchange="handleKBFileSelect(this)" style="margin-top:8px">' +
+      '<div id="kbFileStatus" style="margin-top:8px;font-size:12px"></div>' +
+    '</div>' +
     '<div><label style="font-size:12px;font-weight:600">Title *</label><input id="kbTitle" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. Wheat Growing Guide"></div>' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
-      '<div><label style="font-size:12px;font-weight:600">Category</label><select id="kbCat" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"><option value="product_guide">Product Guide</option><option value="crop_guide">Crop Guide</option><option value="soil_data">Soil Data</option><option value="govt_scheme">Govt Scheme</option><option value="pest_disease">Pest & Disease</option><option value="weather">Weather</option><option value="general">General</option></select></div>' +
+      '<div><label style="font-size:12px;font-weight:600">Category</label><select id="kbCat" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"><option value="product_guide">Product Guide</option><option value="crop_guide">Crop Guide</option><option value="soil_data">Soil Data</option><option value="govt_scheme">Govt Scheme</option><option value="pest_disease">Pest & Disease</option><option value="weather">Weather</option><option value="general">General</option><option value="brand">Brand & Company</option></select></div>' +
       '<div><label style="font-size:12px;font-weight:600">Language</label><select id="kbLang" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"><option value="hi">Hindi</option><option value="en">English</option><option value="both">Both</option></select></div>' +
     '</div>' +
     '<div><label style="font-size:12px;font-weight:600">Tags (comma-separated)</label><input id="kbTags" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. wheat, rabi, zinc"></div>' +
-    '<div><label style="font-size:12px;font-weight:600">Content *</label><textarea id="kbContent" rows="10" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px" placeholder="Paste the full document content here. It will be automatically chunked for AI retrieval."></textarea></div>' +
-    '<button onclick="submitKnowledge()" style="padding:10px 20px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">Save Document</button></div>');
+    '<div><label style="font-size:12px;font-weight:600">Content (auto-filled from file, or paste manually) *</label><textarea id="kbContent" rows="10" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px" placeholder="Upload a file above OR paste content here. It will be automatically chunked for AI retrieval."></textarea></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+      '<button onclick="submitKnowledgeFile()" style="padding:10px 20px;background:#6366f1;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600"><i class="fas fa-upload"></i> Upload File</button>' +
+      '<button onclick="submitKnowledge()" style="padding:10px 20px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600"><i class="fas fa-save"></i> Save Text</button>' +
+    '</div></div>');
+}
+
+function handleKBFileSelect(input) {
+  var file = input.files[0];
+  var status = document.getElementById('kbFileStatus');
+  if (!file) { status.innerHTML = ''; return; }
+  var sizeMB = (file.size / 1024 / 1024).toFixed(2);
+  status.innerHTML = '<i class="fas fa-file" style="color:#10b981"></i> <strong>' + file.name + '</strong> (' + sizeMB + ' MB)';
+  if (!document.getElementById('kbTitle').value) {
+    document.getElementById('kbTitle').value = file.name.replace(/\.[^.]+$/, '');
+  }
+  if (file.name.endsWith('.txt') || file.name.endsWith('.csv')) {
+    var reader = new FileReader();
+    reader.onload = function(e) { document.getElementById('kbContent').value = e.target.result; };
+    reader.readAsText(file);
+  }
+}
+
+async function submitKnowledgeFile() {
+  var fileInput = document.getElementById('kbFile');
+  if (!fileInput.files[0]) { alert('Please select a file first'); return; }
+  var title = document.getElementById('kbTitle').value;
+  if (!title) { alert('Title is required'); return; }
+  var formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+  formData.append('title', title);
+  formData.append('category', document.getElementById('kbCat').value);
+  formData.append('language', document.getElementById('kbLang').value);
+  formData.append('tags', document.getElementById('kbTags').value);
+  try {
+    var resp = await fetch(API_BASE + '/api/v1/knowledge/upload', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + localStorage.getItem('vartmap_token') },
+      body: formData
+    });
+    var d = await resp.json();
+    if (resp.ok) {
+      alert('Document uploaded! Extracted ' + d.extracted_chars + ' characters in ' + d.chunks + ' chunks.');
+      closeModal(); _botTab = 'knowledge'; loadBotBuilder();
+    } else {
+      alert('Upload error: ' + (d.error || 'Unknown error'));
+    }
+  } catch(e) { alert('Upload failed: ' + e.message); }
 }
 
 async function submitKnowledge() {
+  var title = document.getElementById('kbTitle').value;
+  var content = document.getElementById('kbContent').value;
+  if (!title || !content) { alert('Title and Content are required'); return; }
   try {
-    var tags = document.getElementById('kbTags').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
-    await api('/api/v1/knowledge', {method:'POST', body:JSON.stringify({
-      title:document.getElementById('kbTitle').value, category:document.getElementById('kbCat').value,
-      language:document.getElementById('kbLang').value, tags:tags, content_text:document.getElementById('kbContent').value
-    })});
-    closeModal(); _botTab='knowledge'; loadBotBuilder();
-  } catch(e){alert('Error: '+e.message);}
+    await api('/api/v1/knowledge', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: title,
+        category: document.getElementById('kbCat').value,
+        content_text: content,
+        language: document.getElementById('kbLang').value,
+        tags: document.getElementById('kbTags').value
+      })
+    });
+    closeModal(); _botTab = 'knowledge'; loadBotBuilder();
+  } catch(e) { alert('Error: ' + e.message); }
 }
+
 
 async function viewKnowledge(id) {
   try {

@@ -9,6 +9,8 @@ const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -2476,6 +2478,48 @@ app.get('/api/v1/knowledge/:id', auth, async (req, res) => {
     res.json({ document: r.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+// --- KNOWLEDGE FILE UPLOAD ---
+app.post('/api/v1/knowledge/upload', auth, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const { title, category, tags, language } = req.body;
+    let extractedText = '';
+    const mimeType = req.file.mimetype;
+    const fileName = req.file.originalname;
+
+    if (mimeType === 'application/pdf') {
+      const pdfParse = require('pdf-parse');
+      const data = await pdfParse(req.file.buffer);
+      extractedText = data.text;
+    } else if (mimeType === 'text/plain' || mimeType === 'text/csv') {
+      extractedText = req.file.buffer.toString('utf-8');
+    } else if (mimeType.startsWith('image/')) {
+      extractedText = '[Image: ' + fileName + '] - Image uploaded. Add description manually or use AI to analyze.';
+    } else if (mimeType.includes('word') || mimeType.includes('document')) {
+      extractedText = req.file.buffer.toString('utf-8').replace(/[^\x20-\x7E\n\r\t\u0900-\u097F]/g, ' ').replace(/\s+/g, ' ').trim();
+    } else {
+      extractedText = req.file.buffer.toString('utf-8');
+    }
+
+    if (!extractedText || extractedText.length < 10) {
+      return res.status(400).json({ error: 'Could not extract text from file. Try pasting content manually.' });
+    }
+
+    const chunks = [];
+    const words = extractedText.split(/\s+/);
+    for (let i = 0; i < words.length; i += 200) {
+      chunks.push(words.slice(i, i + 200).join(' '));
+    }
+
+    const r = await pool.query(
+      'INSERT INTO knowledge_base (title, category, content_text, content_chunks, tags, language, file_url, file_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
+      [title || fileName, category || 'general', extractedText, JSON.stringify(chunks), tags || '{}', language || 'hi', fileName, mimeType]
+    );
+    res.json({ document: r.rows[0], extracted_chars: extractedText.length, chunks: chunks.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 
 app.post('/api/v1/knowledge', auth, async (req, res) => {
   try {

@@ -674,6 +674,17 @@ app.post('/webhook', async (req, res) => {
           const from = msg.from;
           const profileName = contact.profile?.name || 'Unknown';
           const waMessageId = msg.id;
+          // Deduplicate - skip if we already processed this message
+          if (waMessageId) {
+            try {
+              const dup = await pool.query('SELECT id FROM wa_messages WHERE wa_message_id = $1', [waMessageId]);
+              if (dup.rows.length > 0) {
+                console.log('Duplicate message skipped:', waMessageId);
+                continue;
+              }
+            } catch (e) { /* ignore dedup errors, proceed */ }
+          }
+
           const msgType = msg.type || 'text';
 
           // Handle interactive replies (button clicks, list selections)
