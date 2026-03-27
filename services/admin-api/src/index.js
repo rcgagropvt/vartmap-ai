@@ -2523,7 +2523,7 @@ app.post('/api/v1/knowledge/upload', auth, upload.single('file'), async (req, re
 
     const r = await pool.query(
       'INSERT INTO knowledge_base (title, category, content_text, content_chunks, tags, language, file_url, file_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
-      [title || fileName, category || 'general', extractedText, JSON.stringify(chunks), tags || '{}', language || 'hi', fileName, mimeType]
+      [title || fileName, category || 'general', extractedText, JSON.stringify(chunks), tags ? '{' + tags.split(',').map(t => t.trim()).filter(t => t).join(',') + '}' : '{}', language || 'hi', fileName, mimeType]
     );
     res.json({ document: r.rows[0], extracted_chars: extractedText.length, chunks: chunks.length });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -2541,7 +2541,7 @@ app.post('/api/v1/knowledge', auth, async (req, res) => {
     }
     const r = await pool.query(
       'INSERT INTO knowledge_base (title, category, content_text, content_chunks, tags, language, file_url, file_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
-      [title, category || 'general', content_text, JSON.stringify(chunks), tags || '{}', language || 'hi', file_url, file_type]
+      [title, category || 'general', content_text, JSON.stringify(chunks), tags ? '{' + tags.split(',').map(t => t.trim()).filter(t => t).join(',') + '}' : '{}', language || 'hi', file_url, file_type]
     );
     res.json({ document: r.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
