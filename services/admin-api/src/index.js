@@ -2640,30 +2640,6 @@ app.get('/api/v1/public/knowledge', async (req, res) => {
   try { const r = await pool.query("SELECT * FROM knowledge_base WHERE is_active = true"); res.json({ documents: r.rows }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
-// --- PUBLIC BOT CONFIG (for whatsapp-gateway, no auth required) ---
-app.get('/api/v1/public/bot/config', async (req, res) => {
-  try { const r = await pool.query('SELECT * FROM bot_config'); res.json({ config: r.rows }); }
-  catch (e) { res.status(500).json({ error: e.message }); }
-});
-app.get('/api/v1/public/bot/menu', async (req, res) => {
-  try { const r = await pool.query('SELECT * FROM bot_menu_items WHERE is_active = true ORDER BY sort_order'); res.json({ items: r.rows }); }
-  catch (e) { res.status(500).json({ error: e.message }); }
-});
-app.get('/api/v1/public/bot/flows', async (req, res) => {
-  try {
-    const f = await pool.query('SELECT * FROM bot_flows WHERE is_active = true');
-    const flows = [];
-    for (const flow of f.rows) {
-      const s = await pool.query('SELECT * FROM bot_flow_steps WHERE flow_id = $1 ORDER BY step_order', [flow.id]);
-      flows.push({ ...flow, steps: s.rows });
-    }
-    res.json({ flows: flows });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-app.get('/api/v1/public/knowledge', async (req, res) => {
-  try { const r = await pool.query("SELECT * FROM knowledge_base WHERE is_active = true"); res.json({ documents: r.rows }); }
-  catch (e) { res.status(500).json({ error: e.message }); }
-});
 
 // ─── START SERVER ───
 app.listen(PORT, () => console.log(`VartMap Admin API running on port ${PORT}`));
