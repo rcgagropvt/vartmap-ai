@@ -1671,7 +1671,7 @@ app.post('/api/v1/public/usage/log', async (req, res) => {
   }
 });
 // TEMPORARY: Migrate usage_tracking table (remove after running once)
-app.post('/api/v1/public/migrate-usage', async (req, res) => {
+/*app.post('/api/v1/public/migrate-usage', async (req, res) => {
   try {
     await pool.query(`
       ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid();
@@ -1698,7 +1698,7 @@ app.post('/api/v1/public/migrate-usage', async (req, res) => {
     }
     res.json({ results });
   }
-});
+});*/
 
 
 app.get('/api/v1/analytics/usage', auth, async (req, res) => {
