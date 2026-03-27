@@ -70,9 +70,7 @@ async function checkRateLimits(farmerId, farmerLanguage) {
       const resp = await axios.get(ADMIN_API_URL + '/api/v1/public/bot/config');
       // Also fetch settings - use a simple cache
       if (!global._settingsCache || Date.now() - global._settingsCacheTime > 300000) {
-        const sResp = await axios.get(ADMIN_API_URL + '/api/v1/settings', {
-          headers: { 'Authorization': 'Bearer ' + (process.env.INTERNAL_API_KEY || '') }
-        }).catch(() => null);
+        const sResp = await axios.get(ADMIN_API_URL + '/api/v1/public/settings').catch(() => null);
         if (sResp && sResp.data) {
           global._settingsCache = sResp.data.settings || {};
           global._settingsCacheTime = Date.now();

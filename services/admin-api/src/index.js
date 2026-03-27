@@ -2606,6 +2606,16 @@ app.get('/api/v1/bot/knowledge-context', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// PUBLIC SETTINGS (for gateway rate limits - only exposes ai_ settings)
+app.get('/api/v1/public/settings', async (req, res) => {
+  try {
+    const r = await pool.query("SELECT * FROM app_settings WHERE key LIKE 'ai_%'");
+    const settings = {};
+    r.rows.forEach(s => { settings[s.key] = s.value; });
+    res.json({ settings });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- PUBLIC BOT CONFIG (for whatsapp-gateway, no auth) ---
 app.get('/api/v1/public/bot/config', async (req, res) => {
   try { const r = await pool.query('SELECT * FROM bot_config'); res.json({ config: r.rows }); }
