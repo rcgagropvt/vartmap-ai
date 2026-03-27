@@ -1670,6 +1670,35 @@ app.post('/api/v1/public/usage/log', async (req, res) => {
     }
   }
 });
+// TEMPORARY: Migrate usage_tracking table (remove after running once)
+app.post('/api/v1/public/migrate-usage', async (req, res) => {
+  try {
+    await pool.query(`
+      ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid();
+      ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS farmer_id UUID;
+      ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS model VARCHAR(100);
+      ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS input_tokens INTEGER DEFAULT 0;
+      ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS output_tokens INTEGER DEFAULT 0;
+      ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS session_id UUID;
+    `);
+    res.json({ migrated: true });
+  } catch (e) {
+    // Try one by one if batch fails
+    const cols = [
+      "ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS id UUID DEFAULT gen_random_uuid()",
+      "ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS farmer_id UUID",
+      "ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS model VARCHAR(100)",
+      "ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS input_tokens INTEGER DEFAULT 0",
+      "ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS output_tokens INTEGER DEFAULT 0",
+      "ALTER TABLE usage_tracking ADD COLUMN IF NOT EXISTS session_id UUID"
+    ];
+    const results = [];
+    for (const sql of cols) {
+      try { await pool.query(sql); results.push('OK'); } catch (e2) { results.push(e2.message); }
+    }
+    res.json({ results });
+  }
+});
 
 
 app.get('/api/v1/analytics/usage', auth, async (req, res) => {
