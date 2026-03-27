@@ -45,6 +45,29 @@ let botConfigCache = null;
 let botConfigCacheTime = 0;
 const CACHE_TTL = 5 * 60 * 1000;
 
+// --- AI CHAT MODE TRACKER ---
+// Tracks which farmers are in AI chat mode { farmerId: { active: true, startedAt: timestamp } }
+const aiChatModes = {};
+const AI_CHAT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+
+function isAiChatActive(farmerId) {
+  const mode = aiChatModes[farmerId];
+  if (!mode || !mode.active) return false;
+  if (Date.now() - mode.startedAt > AI_CHAT_TIMEOUT_MS) {
+    delete aiChatModes[farmerId];
+    return false;
+  }
+  return true;
+}
+
+function activateAiChat(farmerId) {
+  aiChatModes[farmerId] = { active: true, startedAt: Date.now() };
+}
+
+function deactivateAiChat(farmerId) {
+  delete aiChatModes[farmerId];
+}
+
 const ADMIN_API_URL = process.env.ADMIN_API_URL || 'https://vartmap-admin-api.onrender.com';
 
 // --- FETCH PRODUCT CATALOG ---
@@ -795,8 +818,10 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
         ? '🌾 Kis fasal ka mandi bhav chahiye? Fasal ka naam type karein (jaise: Gehun, Chawal, Chana)'
         : 'Which crop price do you need? Type the crop name (e.g., Wheat, Rice, Gram)');
     }
+    await sendMenuMessage(from, botConfig, lang);
     return true;
   }
+
 
   // GOVERNMENT SCHEMES
   if (menuKey === 'govt_schemes' || menuKey === 'government_schemes' || menuKey === 'sarkari_yojana') {
@@ -804,8 +829,10 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
     const schemes = await getGovtSchemes(farmerData.state_name || '');
     const reply = formatGovtSchemes(schemes, farmerData);
     await sendWhatsAppMessage(from, reply);
+    await sendMenuMessage(from, botConfig, lang);
     return true;
   }
+
 
   // SOIL INFO
   if (menuKey === 'soil_info' || menuKey === 'mitti') {
@@ -820,8 +847,10 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
         ? '🌍 Aapke district ki mitti ki jankari ke liye apna district naam type karein (jaise: Karnal, Guntur, Indore)'
         : 'Type your district name to get soil info (e.g., Karnal, Guntur, Indore)');
     }
+    await sendMenuMessage(from, botConfig, lang);
     return true;
   }
+
 
   // WEATHER
   if (menuKey === 'weather' || menuKey === 'mausam') {
@@ -852,8 +881,10 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
     profileMsg += '🌿 *Kheti ka tarika:* ' + (f.farming_type || 'Not set') + '\n\n';
     profileMsg += '_Profile update karne ke liye apni jankari bhejein._';
     await sendWhatsAppMessage(from, profileMsg);
+    await sendMenuMessage(from, botConfig, lang);
     return true;
   }
+
 
   // FERTILIZER ADVICE - let AI handle with product catalog context
   if (menuKey === 'fertilizer_advice') {
@@ -870,13 +901,24 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
     return false; // AI handles with knowledge base docs
   }
 
+    // AI CHAT MODE
+  if (menuKey === 'ai_chat' || menuKey === 'ai_se_baat') {
+    activateAiChat(farmerId);
+    await sendWhatsAppMessage(from, lang === 'hi'
+      ? '🤖 *AI Chat Mode ON*\n\nAap ab AI se seedha baat kar sakte hain. Apna sawaal poochhein!\n\n⏱️ 10 minute baad menu wapas aa jayega.\n📋 Menu dekhne ke liye "menu" type karein.'
+      : '🤖 *AI Chat Mode ON*\n\nYou can now chat directly with AI. Ask your question!\n\n⏱️ Session expires in 10 minutes.\n📋 Type "menu" to go back.');
+    return true;
+  }
+
   // TALK TO EXPERT - send acknowledgment
   if (menuKey === 'talk_to_expert') {
     await sendWhatsAppMessage(from, lang === 'hi'
       ? '👨‍🔬 Aapka sandesh hamare visheshagya ko bhej diya gaya hai. Woh jaldi se aapko call karenge.\n\n📞 Seedha baat karne ke liye call karein: 1800-XXX-XXXX'
       : 'Your message has been forwarded to our expert. They will call you soon.\n\n📞 Direct call: 1800-XXX-XXXX');
+    await sendMenuMessage(from, botConfig, lang);
     return true;
   }
+
 
   // Default: let AI handle
   return false;
@@ -1079,8 +1121,23 @@ app.post('/webhook', async (req, res) => {
             }
           }
 
-                    // 8.5 RATE LIMIT CHECK (before AI call)
+                    // 8.5 CHECK AI CHAT MODE
+          if (!isAiChatActive(farmerId)) {
+            // Not in AI mode — show menu instead of calling AI
+            await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi'
+              ? '🙏 Kripya neeche diye menu mein se chunein, ya "AI se baat karein" select karein:'
+              : 'Please select from the menu below, or choose "Chat with AI":');
+            await sendMenuMessage(from, botConfig, farmerData.language || 'hi');
+            await pool.query(
+              "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
+              [sessionId, farmerId, '[menu shown - AI mode inactive]']
+            );
+            continue;
+          }
+
+          // 8.6 RATE LIMIT CHECK (before AI call)
           const rateLimitResult = await checkRateLimits(farmerId, farmerData.language || 'hi');
+
           if (rateLimitResult.blocked) {
             console.log('Rate limited:', farmerId, rateLimitResult.reason);
             await sendWhatsAppMessage(from, rateLimitResult.message);
