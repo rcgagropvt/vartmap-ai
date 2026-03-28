@@ -51,14 +51,13 @@ const aiChatModes = {};
 const AI_CHAT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
 // --- PENDING ACTION TRACKER ---
+// --- PENDING ACTION TRACKER ---
 const pendingActions = {};
-// { farmerId: { action: 'mandi_crop' | 'soil_district', timestamp: Date.now() } }
-const PENDING_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const PENDING_TIMEOUT_MS = 5 * 60 * 1000;
 
 function setPendingAction(farmerId, action) {
   pendingActions[farmerId] = { action, timestamp: Date.now() };
 }
-
 function getPendingAction(farmerId) {
   const pending = pendingActions[farmerId];
   if (!pending) return null;
@@ -68,33 +67,71 @@ function getPendingAction(farmerId) {
   }
   return pending.action;
 }
-
 function clearPendingAction(farmerId) {
   delete pendingActions[farmerId];
 }
 
 // --- HINDI TO ENGLISH CROP MAPPING ---
 const cropMapping = {
-  'gehun': 'Wheat', 'gehu': 'Wheat', 'gandum': 'Wheat',
-  'chawal': 'Rice', 'dhan': 'Paddy', 'dhaan': 'Paddy',
-  'chana': 'Gram', 'gram': 'Gram',
-  'sarson': 'Mustard', 'sarso': 'Mustard',
-  'ganna': 'Sugarcane', 'ikh': 'Sugarcane',
-  'makka': 'Maize', 'makai': 'Maize',
-  'bajra': 'Bajra', 'bajri': 'Bajra',
-  'jowar': 'Jowar', 'jwar': 'Jowar',
-  'arhar': 'Arhar', 'tur': 'Tur',
-  'moong': 'Moong', 'mung': 'Moong',
-  'urad': 'Urad', 'masoor': 'Masoor', 'lentil': 'Masoor',
-  'soyabean': 'Soyabean', 'soybean': 'Soyabean',
-  'aloo': 'Potato', 'potato': 'Potato',
+  'gehun': 'Wheat', 'gehu': 'Wheat', 'gandum': 'Wheat', 'wheat': 'Wheat',
+  'chawal': 'Paddy(Common)', 'dhan': 'Paddy(Common)', 'dhaan': 'Paddy(Common)', 'rice': 'Paddy(Common)', 'paddy': 'Paddy(Common)',
+  'makka': 'Maize', 'makai': 'Maize', 'maize': 'Maize', 'corn': 'Maize',
+  'urad': 'Black Gram(Urd Beans)(Whole)', 'urd': 'Black Gram(Urd Beans)(Whole)',
+  'matar': 'Green Peas', 'peas': 'Green Peas', 'hari matar': 'Green Peas',
+  'guar': 'Guar', 'cluster beans': 'Cluster beans',
+  'sarson': 'Mustard', 'sarso': 'Mustard', 'mustard': 'Mustard', 'rai': 'Mustard',
+  'kapas': 'Cotton', 'cotton': 'Cotton', 'rui': 'Cotton',
   'tamatar': 'Tomato', 'tomato': 'Tomato',
-  'pyaaz': 'Onion', 'pyaj': 'Onion', 'onion': 'Onion',
-  'kapas': 'Cotton', 'cotton': 'Cotton',
-  'til': 'Sesamum', 'tilli': 'Sesamum',
-  'mungfali': 'Groundnut', 'moongfali': 'Groundnut',
-  'lahsun': 'Garlic', 'garlic': 'Garlic',
-  'adrak': 'Ginger', 'ginger': 'Ginger'
+  'baingan': 'Brinjal', 'brinjal': 'Brinjal',
+  'patta gobhi': 'Cabbage', 'cabbage': 'Cabbage', 'band gobhi': 'Cabbage',
+  'phool gobhi': 'Cauliflower', 'cauliflower': 'Cauliflower', 'gobhi': 'Cauliflower',
+  'lauki': 'Bottle gourd', 'bottle gourd': 'Bottle gourd', 'ghiya': 'Bottle gourd',
+  'parwal': 'Pointed gourd(Parval)', 'parval': 'Pointed gourd(Parval)',
+  'tori': 'Ridgeguard(Tori)', 'torai': 'Ridgeguard(Tori)',
+  'hari mirch': 'Green Chilli', 'mirchi': 'Green Chilli', 'green chilli': 'Green Chilli',
+  'methi': 'Methi(Leaves)', 'fenugreek': 'Methi(Leaves)',
+  'nimbu': 'Lemon', 'lemon': 'Lemon', 'neembu': 'Lemon',
+  'chukandar': 'Beetroot', 'beetroot': 'Beetroot',
+  'papita': 'Papaya', 'papaya': 'Papaya',
+  'mosambi': 'Mousambi(Sweet Lime)', 'mousambi': 'Mousambi(Sweet Lime)', 'sweet lime': 'Mousambi(Sweet Lime)',
+  'seb': 'Apple', 'apple': 'Apple',
+  'chana': 'Gram', 'gram': 'Gram',
+};
+function translateCrop(input) {
+  const lower = (input || '').toLowerCase().trim();
+  return cropMapping[lower] || input;
+}
+
+// --- QUICK SELECT OPTIONS ---
+const popularCrops = [
+  { id: 'crop_wheat', title: 'Gehun (Wheat)' },
+  { id: 'crop_paddy', title: 'Dhan (Paddy)' },
+  { id: 'crop_mustard', title: 'Sarson (Mustard)' },
+  { id: 'crop_maize', title: 'Makka (Maize)' },
+  { id: 'crop_tomato', title: 'Tamatar (Tomato)' },
+  { id: 'crop_cotton', title: 'Kapas (Cotton)' },
+  { id: 'crop_cauliflower', title: 'Gobhi (Cauliflower)' },
+  { id: 'crop_greenpeas', title: 'Matar (Green Peas)' },
+  { id: 'crop_brinjal', title: 'Baingan (Brinjal)' },
+  { id: 'crop_greenchilli', title: 'Hari Mirch (Chilli)' }
+];
+const cropIdMapping = {
+  'crop_wheat': 'Wheat', 'crop_paddy': 'Paddy(Common)', 'crop_mustard': 'Mustard',
+  'crop_maize': 'Maize', 'crop_tomato': 'Tomato', 'crop_cotton': 'Cotton',
+  'crop_cauliflower': 'Cauliflower', 'crop_greenpeas': 'Green Peas',
+  'crop_brinjal': 'Brinjal', 'crop_greenchilli': 'Green Chilli'
+};
+
+const popularDistricts = [
+  { id: 'dist_agra', title: 'Agra' },
+  { id: 'dist_indore', title: 'Indore' },
+  { id: 'dist_lucknow', title: 'Lucknow' },
+  { id: 'dist_prayagraj', title: 'Prayagraj' },
+  { id: 'dist_varanasi', title: 'Varanasi' }
+];
+const districtIdMapping = {
+  'dist_agra': 'Agra', 'dist_indore': 'Indore', 'dist_lucknow': 'Lucknow',
+  'dist_prayagraj': 'Prayagraj', 'dist_varanasi': 'Varanasi'
 };
 
 function translateCrop(input) {
@@ -861,18 +898,17 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
       if (!prices.length) prices = await getMandiPrices(crops[0].trim(), '');
       const reply = formatMandiPrices(prices, primaryCrop);
       await sendWhatsAppMessage(from, reply);
-      setPendingAction(farmerId, 'mandi_crop');
-      await sendWhatsAppMessage(from, lang === 'hi'
-        ? 'Kisi aur fasal ka bhav jaanne ke liye naam likhen, ya "menu" type karein.'
-        : 'Type another crop name for prices, or type "menu".');
-    } else {
-      setPendingAction(farmerId, 'mandi_crop');
-      await sendWhatsAppMessage(from, lang === 'hi'
-        ? '🌾 Kis fasal ka mandi bhav chahiye? Fasal ka naam type karein (jaise: Gehun, Chawal, Chana)'
-        : 'Which crop price do you need? Type the crop name (e.g., Wheat, Rice, Gram)');
     }
+    // Show crop selection list for next lookup
+    setPendingAction(farmerId, 'mandi_crop');
+    await sendWhatsAppList(from,
+      lang === 'hi' ? '🌾 Kis fasal ka bhav dekhna hai? Neeche se chunein ya naam type karein:' : 'Select a crop or type its name:',
+      'Fasal Chunein',
+      [{ title: 'Pramukh Fasalein', rows: popularCrops }]
+    );
     return true;
   }
+
 
 
 
@@ -895,18 +931,24 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
       const soilData = await getSoilData('', district);
       const reply = formatSoilData(soilData, district);
       await sendWhatsAppMessage(from, reply);
-      await sendWhatsAppMessage(from, lang === 'hi'
-        ? 'Kisi aur district ki jankari ke liye naam likhen, ya "menu" type karein.'
-        : 'Type another district name, or type "menu".');
-      setPendingAction(farmerId, 'soil_district');
+    }
+    // Show district selection
+    setPendingAction(farmerId, 'soil_district');
+    if (popularDistricts.length <= 3) {
+      await sendWhatsAppButtons(from,
+        lang === 'hi' ? '🌍 Kis district ki mitti ki jankari chahiye? Chunein ya naam type karein:' : 'Select district or type name:',
+        popularDistricts.map(d => ({ id: d.id, title: d.title }))
+      );
     } else {
-      setPendingAction(farmerId, 'soil_district');
-      await sendWhatsAppMessage(from, lang === 'hi'
-        ? '🌍 Apna district naam type karein (jaise: Karnal, Guntur, Indore)'
-        : 'Type your district name (e.g., Karnal, Guntur, Indore)');
+      await sendWhatsAppList(from,
+        lang === 'hi' ? '🌍 Kis district ki mitti ki jankari chahiye? Chunein ya naam type karein:' : 'Select district or type name:',
+        'District Chunein',
+        [{ title: 'Districts', rows: popularDistricts }]
+      );
     }
     return true;
   }
+
 
 
 
@@ -937,27 +979,48 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
     profileMsg += '🧪 *Mitti:* ' + (f.soil_type || 'Not set') + '\n';
     profileMsg += '💧 *Sinchai:* ' + (f.irrigation_type || 'Not set') + '\n';
     profileMsg += '🌿 *Kheti ka tarika:* ' + (f.farming_type || 'Not set') + '\n\n';
-    profileMsg += '_Profile update karne ke liye apni jankari bhejein._';
+    profileMsg += '_"menu" type karein aur options dekhein._';
     await sendWhatsAppMessage(from, profileMsg);
-    await sendMenuMessage(from, botConfig, lang);
     return true;
   }
 
 
-  // FERTILIZER ADVICE - let AI handle with product catalog context
+
+  // FERTILIZER ADVICE
   if (menuKey === 'fertilizer_advice') {
-    return false; // AI will handle with full product catalog
+    setPendingAction(farmerId, 'fertilizer_crop');
+    await sendWhatsAppList(from,
+      lang === 'hi'
+        ? '🧪 *Khad Salah*\n\nKis fasal ke liye khad ki salah chahiye? Neeche se chunein ya fasal ka naam type karein:'
+        : 'Which crop do you need fertilizer advice for?',
+      'Fasal Chunein',
+      [{ title: 'Pramukh Fasalein', rows: popularCrops }]
+    );
+    activateAiChat(farmerId);
+    return true;
   }
 
-  // CROP DOCTOR - let AI handle (already has a flow)
+
+  // CROP DOCTOR
   if (menuKey === 'crop_doctor') {
-    return false; // AI handles with image analysis capability
+    setPendingAction(farmerId, 'crop_doctor_photo');
+    await sendWhatsAppMessage(from, lang === 'hi'
+      ? '🔬 *Fasal Doctor*\n\nApni beemaar fasal ki photo bhejein, hum AI se bimari pahchaanenge!\n\n📸 *Photo kaise lein:*\n• Paas se lein (close-up)\n• Rog wali patti ya hissa dikhayein\n• Acchi roshni mein lein\n\nPhoto bhejein ya samasya likhen:'
+      : '🔬 *Crop Doctor*\n\nSend a photo of the affected crop for AI diagnosis!\n\n📸 *Photo tips:*\n• Take a close-up\n• Show the affected leaf/part\n• Good lighting\n\nSend photo or describe the problem:');
+    activateAiChat(farmerId);
+    return true;
   }
 
-  // MODERN FARMING - let AI handle with knowledge base
+
+  // MODERN FARMING
   if (menuKey === 'modern_farming') {
-    return false; // AI handles with knowledge base docs
+    await sendWhatsAppMessage(from, lang === 'hi'
+      ? '🌱 *Adhunik Kheti*\n\nAap kisi bhi kheti se judi jaankari poochh sakte hain:\n• Nayi techniques\n• Beej aur ugaane ka tarika\n• Keetnashak aur dawaiyan\n• Organic kheti\n\nApna sawaal poochhein:'
+      : '🌱 *Modern Farming*\n\nAsk about any farming topic:\n• New techniques\n• Seeds & cultivation\n• Pest management\n• Organic farming\n\nAsk your question:');
+    activateAiChat(farmerId);
+    return true;
   }
+
 
     // AI CHAT MODE
   if (menuKey === 'ai_chat' || menuKey === 'ai_se_baat') {
@@ -968,14 +1031,14 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
     return true;
   }
 
-  // TALK TO EXPERT - send acknowledgment
+  // TALK TO EXPERT
   if (menuKey === 'talk_to_expert') {
     await sendWhatsAppMessage(from, lang === 'hi'
-      ? '👨‍🔬 Aapka sandesh hamare visheshagya ko bhej diya gaya hai. Woh jaldi se aapko call karenge.\n\n📞 Seedha baat karne ke liye call karein: 1800-XXX-XXXX'
-      : 'Your message has been forwarded to our expert. They will call you soon.\n\n📞 Direct call: 1800-XXX-XXXX');
-    await sendMenuMessage(from, botConfig, lang);
+      ? '👨‍🔬 Aapka sandesh hamare visheshagya ko bhej diya gaya hai. Woh jaldi se aapko call karenge.\n\n📞 Seedha baat karne ke liye call karein: 1800-XXX-XXXX\n\n_"menu" type karein aur options dekhein._'
+      : 'Your message has been forwarded to our expert. They will call you soon.\n\n📞 Direct call: 1800-XXX-XXXX\n\nType "menu" for options.');
     return true;
   }
+
 
 
   // Default: let AI handle
@@ -1145,44 +1208,6 @@ app.post('/webhook', async (req, res) => {
             );
             continue;
           }
-          // 6.5 HANDLE PENDING ACTIONS (follow-up inputs for mandi, soil, etc.)
-          const pendingAction = getPendingAction(farmerId);
-          if (pendingAction && msgBody.trim()) {
-            clearPendingAction(farmerId);
-            const lang = farmerData.language || 'hi';
-            
-            if (pendingAction === 'mandi_crop') {
-              const crop = translateCrop(msgBody.trim());
-              await sendWhatsAppMessage(from, lang === 'hi' 
-                ? '🌾 "' + crop + '" ka mandi bhav dhundh raha hoon...' 
-                : 'Looking up prices for "' + crop + '"...');
-              const prices = await getMandiPrices(crop, '');
-              // If no results with translated name, try original input
-              const finalPrices = prices.length > 0 ? prices : await getMandiPrices(msgBody.trim(), '');
-              const reply = formatMandiPrices(finalPrices.length > 0 ? finalPrices : prices, crop);
-              await sendWhatsAppMessage(from, reply);
-              await pool.query(
-                "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
-                [sessionId, farmerId, reply]
-              );
-              continue;
-            }
-            
-            if (pendingAction === 'soil_district') {
-              const district = msgBody.trim();
-              await sendWhatsAppMessage(from, lang === 'hi' 
-                ? '🌍 "' + district + '" ki mitti ki jankari dhundh raha hoon...' 
-                : 'Looking up soil data for "' + district + '"...');
-              const soilData = await getSoilData('', district);
-              const reply = formatSoilData(soilData, district);
-              await sendWhatsAppMessage(from, reply);
-              await pool.query(
-                "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
-                [sessionId, farmerId, reply]
-              );
-              continue;
-            }
-          }
 
           // 7. FLOW ENGINE (check if message matches a menu item / flow)
           const flowHandled = await handleFlow(farmerId, farmerData, from, msgBody, sessionId, botConfig);
@@ -1193,6 +1218,87 @@ app.post('/webhook', async (req, res) => {
             );
             continue;
           }
+
+                    // 6.5 HANDLE PENDING ACTIONS (follow-up inputs for mandi, soil, etc.)
+          const pendingAction = getPendingAction(farmerId);
+          if (pendingAction && msgBody.trim()) {
+            clearPendingAction(farmerId);
+            const lang = farmerData.language || 'hi';
+
+            if (pendingAction === 'mandi_crop') {
+              // Check if it's a list selection (crop_wheat, crop_paddy, etc.)
+              let crop = cropIdMapping[msgBody.trim()] || translateCrop(msgBody.trim());
+              await sendWhatsAppMessage(from, lang === 'hi'
+                ? '🌾 "' + crop + '" ka mandi bhav dhundh raha hoon...'
+                : 'Looking up prices for "' + crop + '"...');
+              let prices = await getMandiPrices(crop, '');
+              if (!prices.length) prices = await getMandiPrices(msgBody.trim(), '');
+              const reply = formatMandiPrices(prices, crop);
+              await sendWhatsAppMessage(from, reply);
+              // Offer to check another crop
+              setPendingAction(farmerId, 'mandi_crop');
+              await sendWhatsAppList(from,
+                lang === 'hi' ? 'Kisi aur fasal ka bhav dekhein ya "menu" type karein:' : 'Check another crop or type "menu":',
+                'Fasal Chunein',
+                [{ title: 'Pramukh Fasalein', rows: popularCrops }]
+              );
+              await pool.query(
+                "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
+                [sessionId, farmerId, reply]
+              );
+              continue;
+            }
+
+            if (pendingAction === 'soil_district') {
+              let district = districtIdMapping[msgBody.trim()] || msgBody.trim();
+              await sendWhatsAppMessage(from, lang === 'hi'
+                ? '🌍 "' + district + '" ki mitti ki jankari dhundh raha hoon...'
+                : 'Looking up soil data for "' + district + '"...');
+              const soilData = await getSoilData('', district);
+              const reply = formatSoilData(soilData, district);
+              await sendWhatsAppMessage(from, reply);
+              await pool.query(
+                "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
+                [sessionId, farmerId, reply]
+              );
+              continue;
+            }
+
+            if (pendingAction === 'mandi_state') {
+              let crop = pendingActions[farmerId]?.crop || '';
+              // farmer typed a state/district for filtering
+              await sendWhatsAppMessage(from, lang === 'hi'
+                ? '🌾 "' + crop + '" ka bhav "' + msgBody.trim() + '" mein dhundh raha hoon...'
+                : 'Looking up "' + crop + '" prices in "' + msgBody.trim() + '"...');
+              const prices = await getMandiPrices(crop, msgBody.trim());
+              const reply = formatMandiPrices(prices, crop + ' (' + msgBody.trim() + ')');
+              await sendWhatsAppMessage(from, reply);
+              await pool.query(
+                "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
+                [sessionId, farmerId, reply]
+              );
+              continue;
+            }
+
+            if (pendingAction === 'crop_doctor_photo') {
+              // Farmer sent text instead of photo
+              await sendWhatsAppMessage(from, lang === 'hi'
+                ? '📸 Kripya fasal ki photo bhejein taaki hum bimari pahchaan sakein.\n\nPhoto lene ke tips:\n• Paas se lein\n• Rog wali patti ya hissa dikhayein\n• Dhoop mein lein'
+                : 'Please send a photo of the affected crop so we can diagnose the issue.');
+              setPendingAction(farmerId, 'crop_doctor_photo');
+              continue;
+            }
+
+            if (pendingAction === 'fertilizer_crop') {
+              let crop = cropIdMapping[msgBody.trim()] || translateCrop(msgBody.trim());
+              // Activate AI with specific context
+              activateAiChat(farmerId);
+              // Let AI handle with fertilizer context
+              continue; // Will fall through to AI with the crop context
+            }
+          }
+
+          
 
           // 8. Coupon code detection (text messages only)
           if ((msgType === 'text' || msgType === 'interactive') && msgBody.trim()) {
