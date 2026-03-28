@@ -24,8 +24,8 @@ app.use(express.json({ limit: '10mb' }));
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
-  max: 5,
-  idleTimeoutMillis: 30000,
+  max: 3,
+  idleTimeoutMillis: 10000,
   connectionTimeoutMillis: 10000,
   allowExitOnIdle: false
 });
@@ -36,10 +36,10 @@ pool.on('error', (err) => {
 
 pool.query('SELECT NOW()').then(() => console.log('Database connected')).catch(e => console.error('DB error:', e.message));
 
-// Keep pool alive
-setInterval(() => {
-  pool.query('SELECT 1').catch(e => console.error('DB keepalive failed:', e.message));
-}, 60 * 1000);
+setInterval(async () => {
+  try { await pool.query('SELECT 1'); } catch (e) { console.error('DB keepalive failed:', e.message); }
+}, 20 * 1000);
+
 
 
 

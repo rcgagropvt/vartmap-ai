@@ -19,31 +19,21 @@ app.use(express.json({ limit: '10mb' }));
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
-  max: 5,
-  idleTimeoutMillis: 30000,
+  max: 3,
+  idleTimeoutMillis: 10000,
   connectionTimeoutMillis: 10000,
   allowExitOnIdle: false
 });
 
-// Auto-reconnect: test connection every 60s, replace dead connections
 pool.on('error', (err) => {
   console.error('Pool background error:', err.message);
 });
 
-async function ensureDbConnection() {
-  try {
-    await pool.query('SELECT 1');
-  } catch (e) {
-    console.error('DB reconnect check failed:', e.message, '- pool will create new connection on next query');
-  }
-}
-
-// Initial connection test
 pool.query('SELECT NOW()').then(() => console.log('Database connected')).catch(e => console.error('DB error:', e.message));
 
-// Keep pool alive - prevents Supabase from closing idle connections
-setInterval(ensureDbConnection, 60 * 1000);
-
+setInterval(async () => {
+  try { await pool.query('SELECT 1'); } catch (e) { console.error('DB keepalive failed:', e.message); }
+}, 20 * 1000);
 
 // --- REDIS (optional) ---
 let redis = null;
