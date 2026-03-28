@@ -492,7 +492,7 @@ async function getAIResponse(farmerId, sessionId, farmer, messageText, messageTy
         const mimeType = mediaResp.headers['content-type'] || (messageType === 'image' ? 'image/jpeg' : 'audio/ogg');
         userParts.push({ inlineData: { data: base64, mimeType: mimeType } });
         if (messageType === 'image') {
-          userParts.push({ text: messageText || 'Please analyze this crop/plant image. Identify any disease, pest damage, or nutrient deficiency. Recommend treatment using Vartmaan Fertilizers products if applicable.' });
+          userParts.push({ text: (messageText ? messageText + '\n\n' : '') + 'IMPORTANT: First identify the plant/crop species visible in the image based ONLY on what you see (leaf shape, color, texture, stem structure). Do NOT assume it is the farmer\'s registered crop. Then analyze for any disease, pest damage, or nutrient deficiency. Describe what you observe in the image, give your diagnosis, and recommend treatment using Vartmaan Fertilizers products if applicable. If you cannot confidently identify the plant, say so and ask the farmer to confirm the crop name.' });
         } else {
           userParts.push({ text: 'The farmer sent a voice message. Listen to it, understand their question (may be in Hindi or another Indian language), and respond helpfully in the same language.' });
         }
