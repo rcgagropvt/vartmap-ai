@@ -222,10 +222,11 @@ async function checkRateLimits(farmerId, farmerLanguage) {
     }
 
     // Per-minute rate limit (all inbound messages to prevent spam)
-    const farmerRate = await pool.query(
-      "SELECT COUNT(*) as cnt FROM wa_messages WHERE farmer_id=$1 AND direction='inbound' AND created_at > NOW() - INTERVAL '1 minute'",
+        const farmerRate = await pool.query(
+      "SELECT COUNT(*) as cnt FROM usage_tracking WHERE farmer_id=$1 AND created_at > NOW() - INTERVAL '1 minute'",
       [farmerId]
     );
+
     if (parseInt(farmerRate.rows[0].cnt) >= ratePerMinute) {
       return { blocked: true, reason: 'rate_limit', message: farmerLanguage === 'en' ? 'Please wait a moment before sending more messages.' : 'Kripya thodi der baad message karein.' };
     }
