@@ -67,9 +67,25 @@ function getPendingAction(farmerId) {
   }
   return pending.action;
 }
+function setPendingAction(farmerId, action, extra) {
+  pendingActions[farmerId] = { action, timestamp: Date.now(), ...(extra || {}) };
+}
+function getPendingAction(farmerId) {
+  const pending = pendingActions[farmerId];
+  if (!pending) return null;
+  if (Date.now() - pending.timestamp > PENDING_TIMEOUT_MS) {
+    delete pendingActions[farmerId];
+    return null;
+  }
+  return pending.action;
+}
+function getPendingData(farmerId) {
+  return pendingActions[farmerId] || {};
+}
 function clearPendingAction(farmerId) {
   delete pendingActions[farmerId];
 }
+
 
 // --- HINDI TO ENGLISH CROP MAPPING ---
 const cropMapping = {
@@ -177,11 +193,8 @@ async function getProductCatalog() {
 // --- BUDGET & RATE LIMIT CHECK ---
 async function checkRateLimits(farmerId, farmerLanguage) {
   try {
-    // Fetch settings from admin API
     let settings = {};
     try {
-      const resp = await axios.get(ADMIN_API_URL + '/api/v1/public/bot/config');
-      // Also fetch settings - use a simple cache
       if (!global._settingsCache || Date.now() - global._settingsCacheTime > 300000) {
         const sResp = await axios.get(ADMIN_API_URL + '/api/v1/public/settings').catch(() => null);
         if (sResp && sResp.data) {
@@ -192,23 +205,23 @@ async function checkRateLimits(farmerId, farmerLanguage) {
       settings = global._settingsCache || {};
     } catch (e) { /* use defaults */ }
 
-    const dailyLimitPerFarmer = parseInt(settings.ai_daily_limit_per_farmer || '20');
-    const dailyLimitGlobal = parseInt(settings.ai_daily_limit_global || '500');
+    const dailyLimitPerFarmer = parseInt(settings.ai_daily_limit_per_farmer || '100');
+    const dailyLimitGlobal = parseInt(settings.ai_daily_limit_global || '2000');
     const ratePerMinute = parseInt(settings.ai_rate_limit_per_minute || '5');
     const overLimitMsg = (farmerLanguage === 'en')
       ? (settings.ai_over_limit_message_en || 'You have reached your daily message limit. Let us chat again tomorrow!')
       : (settings.ai_over_limit_message_hi || 'Aaj ke liye aapki message limit poori ho gayi hai. Kal phir baat karte hain!');
 
-    // Check per-farmer daily count
+    // Count only AI calls (usage_tracking), not all messages
     const farmerDaily = await pool.query(
-      "SELECT COUNT(*) as cnt FROM wa_messages WHERE farmer_id=$1 AND direction='inbound' AND created_at > NOW() - INTERVAL '24 hours'",
+      "SELECT COUNT(*) as cnt FROM usage_tracking WHERE farmer_id=$1 AND created_at > NOW() - INTERVAL '24 hours'",
       [farmerId]
     );
     if (parseInt(farmerDaily.rows[0].cnt) >= dailyLimitPerFarmer) {
       return { blocked: true, reason: 'farmer_daily', message: overLimitMsg };
     }
 
-    // Check per-farmer rate (messages per minute)
+    // Per-minute rate limit (all inbound messages to prevent spam)
     const farmerRate = await pool.query(
       "SELECT COUNT(*) as cnt FROM wa_messages WHERE farmer_id=$1 AND direction='inbound' AND created_at > NOW() - INTERVAL '1 minute'",
       [farmerId]
@@ -217,14 +230,15 @@ async function checkRateLimits(farmerId, farmerLanguage) {
       return { blocked: true, reason: 'rate_limit', message: farmerLanguage === 'en' ? 'Please wait a moment before sending more messages.' : 'Kripya thodi der baad message karein.' };
     }
 
-    // Check global daily count
+    // Global daily AI calls
     const globalDaily = await pool.query(
-      "SELECT COUNT(*) as cnt FROM wa_messages WHERE direction='outbound' AND sender_type='system' AND created_at > NOW() - INTERVAL '24 hours'"
+      "SELECT COUNT(*) as cnt FROM usage_tracking WHERE created_at > NOW() - INTERVAL '24 hours'"
     );
     if (parseInt(globalDaily.rows[0].cnt) >= dailyLimitGlobal) {
       return { blocked: true, reason: 'global_daily', message: overLimitMsg };
     }
-    // Check monthly budget
+
+    // Monthly budget
     const monthlyBudget = parseFloat(settings.ai_monthly_budget_inr || '2000');
     try {
       const monthlySpend = await pool.query(
@@ -234,14 +248,15 @@ async function checkRateLimits(farmerId, farmerLanguage) {
       if (spent >= monthlyBudget) {
         return { blocked: true, reason: 'monthly_budget', message: farmerLanguage === 'en' ? 'Our service is temporarily paused. Please try again next month.' : 'Hamari seva abhi ke liye band hai. Kripya agle mahine phir koshish karein.' };
       }
-    } catch (e) { /* usage_tracking table might not exist yet, skip */ }
+    } catch (e) { /* skip */ }
 
     return { blocked: false };
   } catch (e) {
     console.error('Rate limit check error:', e.message);
-    return { blocked: false }; // fail open — don't block if check fails
+    return { blocked: false };
   }
 }
+
 
 
 // --- FETCH BOT CONFIG (welcome, menu, flows, knowledge) ---
@@ -746,16 +761,18 @@ async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, 
 }
 
 // --- MANDI PRICE LOOKUP ---
-async function getMandiPrices(crop, state) {
+async function getMandiPrices(crop, state, district) {
   try {
     const params = new URLSearchParams();
     if (crop) params.append('commodity', crop);
     if (state) params.append('state', state);
-    params.append('limit', '5');
+    if (district) params.append('district', district);
+    params.append('limit', '10');
     const resp = await axios.get(ADMIN_API_URL + '/api/v1/public/mandi-prices?' + params.toString());
     return resp.data.prices || [];
   } catch (e) { console.log('Mandi fetch error:', e.message); return []; }
 }
+
 
 function formatMandiPrices(prices, crop) {
   if (!prices.length) return 'Maaf kijiye, "' + (crop || '') + '" ke liye abhi mandi bhav uplabdh nahi hai.';
@@ -1219,14 +1236,13 @@ app.post('/webhook', async (req, res) => {
             continue;
           }
 
-                    // 6.5 HANDLE PENDING ACTIONS (follow-up inputs for mandi, soil, etc.)
+          // 6.5 HANDLE PENDING ACTIONS
           const pendingAction = getPendingAction(farmerId);
           if (pendingAction && msgBody.trim()) {
-            clearPendingAction(farmerId);
             const lang = farmerData.language || 'hi';
 
             if (pendingAction === 'mandi_crop') {
-              // Check if it's a list selection (crop_wheat, crop_paddy, etc.)
+              clearPendingAction(farmerId);
               let crop = cropIdMapping[msgBody.trim()] || translateCrop(msgBody.trim());
               await sendWhatsAppMessage(from, lang === 'hi'
                 ? '🌾 "' + crop + '" ka mandi bhav dhundh raha hoon...'
@@ -1235,28 +1251,24 @@ app.post('/webhook', async (req, res) => {
               if (!prices.length) prices = await getMandiPrices(msgBody.trim(), '');
               const reply = formatMandiPrices(prices, crop);
               await sendWhatsAppMessage(from, reply);
-              // Offer to check another crop
-              setPendingAction(farmerId, 'mandi_crop');
-              await sendWhatsAppList(from,
-                lang === 'hi' ? 'Kisi aur fasal ka bhav dekhein ya "menu" type karein:' : 'Check another crop or type "menu":',
-                'Fasal Chunein',
-                [{ title: 'Pramukh Fasalein', rows: popularCrops }]
-              );
-              await pool.query(
-                "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
-                [sessionId, farmerId, reply]
-              );
-              continue;
-            }
-
-            if (pendingAction === 'soil_district') {
-              let district = districtIdMapping[msgBody.trim()] || msgBody.trim();
-              await sendWhatsAppMessage(from, lang === 'hi'
-                ? '🌍 "' + district + '" ki mitti ki jankari dhundh raha hoon...'
-                : 'Looking up soil data for "' + district + '"...');
-              const soilData = await getSoilData('', district);
-              const reply = formatSoilData(soilData, district);
-              await sendWhatsAppMessage(from, reply);
+              // Get available states for this crop
+              const states = [...new Set(prices.map(p => p.state).filter(Boolean))];
+              if (states.length > 0) {
+                const stateRows = states.slice(0, 10).map(s => ({ id: 'state_' + s.replace(/\s/g, '_'), title: s.substring(0, 24) }));
+                pendingActions[farmerId] = { action: 'mandi_state', timestamp: Date.now(), crop: crop };
+                await sendWhatsAppList(from,
+                  lang === 'hi' ? '📍 Kisi khaas state ka bhav dekhein, ya "menu" type karein:' : 'Filter by state, or type "menu":',
+                  'State Chunein',
+                  [{ title: 'States', rows: stateRows }]
+                );
+              } else {
+                setPendingAction(farmerId, 'mandi_crop');
+                await sendWhatsAppList(from,
+                  lang === 'hi' ? 'Kisi aur fasal ka bhav dekhein ya "menu" type karein:' : 'Check another crop or type "menu":',
+                  'Fasal Chunein',
+                  [{ title: 'Pramukh Fasalein', rows: popularCrops }]
+                );
+              }
               await pool.query(
                 "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
                 [sessionId, farmerId, reply]
@@ -1265,14 +1277,79 @@ app.post('/webhook', async (req, res) => {
             }
 
             if (pendingAction === 'mandi_state') {
-              let crop = pendingActions[farmerId]?.crop || '';
-              // farmer typed a state/district for filtering
+              const pendingData = getPendingData(farmerId);
+              clearPendingAction(farmerId);
+              const crop = pendingData.crop || '';
+              let state = msgBody.trim().replace('state_', '').replace(/_/g, ' ');
+              // Handle list selection IDs
+              if (msgBody.trim().startsWith('state_')) {
+                state = msgBody.trim().replace('state_', '').replace(/_/g, ' ');
+              }
               await sendWhatsAppMessage(from, lang === 'hi'
-                ? '🌾 "' + crop + '" ka bhav "' + msgBody.trim() + '" mein dhundh raha hoon...'
-                : 'Looking up "' + crop + '" prices in "' + msgBody.trim() + '"...');
-              const prices = await getMandiPrices(crop, msgBody.trim());
-              const reply = formatMandiPrices(prices, crop + ' (' + msgBody.trim() + ')');
+                ? '🌾 "' + crop + '" ka bhav "' + state + '" mein dhundh raha hoon...'
+                : 'Looking up "' + crop + '" prices in "' + state + '"...');
+              const prices = await getMandiPrices(crop, state);
+              const reply = formatMandiPrices(prices, crop + ' (' + state + ')');
               await sendWhatsAppMessage(from, reply);
+              // Get districts within this state
+              const districts = [...new Set(prices.map(p => p.district).filter(Boolean))];
+              if (districts.length > 1) {
+                const distRows = districts.slice(0, 10).map(d => ({ id: 'mdist_' + d.replace(/\s/g, '_'), title: d.substring(0, 24) }));
+                pendingActions[farmerId] = { action: 'mandi_district', timestamp: Date.now(), crop: crop, state: state };
+                await sendWhatsAppList(from,
+                  lang === 'hi' ? '📍 Kisi khaas district ka bhav dekhein, ya "menu" type karein:' : 'Filter by district, or type "menu":',
+                  'District Chunein',
+                  [{ title: 'Districts', rows: distRows }]
+                );
+              } else {
+                await sendWhatsAppMessage(from, lang === 'hi'
+                  ? '_"menu" type karein aur options dekhein._'
+                  : '_Type "menu" for options._');
+              }
+              await pool.query(
+                "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
+                [sessionId, farmerId, reply]
+              );
+              continue;
+            }
+
+            if (pendingAction === 'mandi_district') {
+              const pendingData = getPendingData(farmerId);
+clearPendingAction(farmerId);
+const crop = pendingData.crop || '';
+const state = pendingData.state || '';
+              let district = msgBody.trim();
+              if (district.startsWith('mdist_')) {
+                district = district.replace('mdist_', '').replace(/_/g, ' ');
+              }
+              await sendWhatsAppMessage(from, lang === 'hi'
+                ? '🌾 "' + crop + '" ka bhav "' + district + '" mein dhundh raha hoon...'
+                : 'Looking up "' + crop + '" prices in "' + district + '"...');
+              const prices = await getMandiPrices(crop, state, district);
+              const reply = formatMandiPrices(prices, crop + ' (' + district + ')');
+              await sendWhatsAppMessage(from, reply);
+              await sendWhatsAppMessage(from, lang === 'hi'
+                ? '_"menu" type karein aur options dekhein._'
+                : '_Type "menu" for options._');
+              await pool.query(
+                "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
+                [sessionId, farmerId, reply]
+              );
+              continue;
+            }
+
+            if (pendingAction === 'soil_district') {
+              clearPendingAction(farmerId);
+              let district = districtIdMapping[msgBody.trim()] || msgBody.trim();
+              await sendWhatsAppMessage(from, lang === 'hi'
+                ? '🌍 "' + district + '" ki mitti ki jankari dhundh raha hoon...'
+                : 'Looking up soil data for "' + district + '"...');
+              const soilData = await getSoilData('', district);
+              const reply = formatSoilData(soilData, district);
+              await sendWhatsAppMessage(from, reply);
+              await sendWhatsAppMessage(from, lang === 'hi'
+                ? '_"menu" type karein aur options dekhein._'
+                : '_Type "menu" for options._');
               await pool.query(
                 "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
                 [sessionId, farmerId, reply]
@@ -1281,23 +1358,16 @@ app.post('/webhook', async (req, res) => {
             }
 
             if (pendingAction === 'crop_doctor_photo') {
-              // Farmer sent text instead of photo
-              await sendWhatsAppMessage(from, lang === 'hi'
-                ? '📸 Kripya fasal ki photo bhejein taaki hum bimari pahchaan sakein.\n\nPhoto lene ke tips:\n• Paas se lein\n• Rog wali patti ya hissa dikhayein\n• Dhoop mein lein'
-                : 'Please send a photo of the affected crop so we can diagnose the issue.');
-              setPendingAction(farmerId, 'crop_doctor_photo');
-              continue;
+              // Text instead of photo - still let AI handle it
+              clearPendingAction(farmerId);
+              // Don't block - fall through to AI
             }
 
             if (pendingAction === 'fertilizer_crop') {
-              let crop = cropIdMapping[msgBody.trim()] || translateCrop(msgBody.trim());
-              // Activate AI with specific context
-              activateAiChat(farmerId);
-              // Let AI handle with fertilizer context
-              continue; // Will fall through to AI with the crop context
+              clearPendingAction(farmerId);
+              // Fall through to AI with crop context
             }
           }
-
           
 
           // 8. Coupon code detection (text messages only)
