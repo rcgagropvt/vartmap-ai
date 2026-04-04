@@ -792,34 +792,23 @@ async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, 
 async function getWeather(city) {
   try {
     const apiKey = process.env.OPENWEATHER_API_KEY;
-    if (!apiKey) return null;
+    if (!apiKey) { console.log('No OPENWEATHER_API_KEY'); return null; }
     const resp = await axios.get('https://api.openweathermap.org/data/2.5/weather', {
       params: { q: city + ',IN', appid: apiKey, units: 'metric', lang: 'hi' }
     });
     const d = resp.data;
-    const forecast = await axios.get('https://api.openweathermap.org/data/2.5/forecast', {
-      params: { q: city + ',IN', appid: apiKey, units: 'metric', lang: 'hi', cnt: 8 }
-    });
     let msg = '*🌤️ ' + d.name + ' ka Mausam*\n\n';
     msg += '🌡️ *Taapman:* ' + Math.round(d.main.temp) + '°C (Min: ' + Math.round(d.main.temp_min) + '°C, Max: ' + Math.round(d.main.temp_max) + '°C)\n';
     msg += '💧 *Nami (Humidity):* ' + d.main.humidity + '%\n';
     msg += '🌬️ *Hawa:* ' + Math.round(d.wind.speed * 3.6) + ' km/h\n';
     msg += '☁️ *Haalat:* ' + d.weather[0].description + '\n';
     msg += '👁️ *Dikhai:* ' + (d.visibility / 1000).toFixed(1) + ' km\n\n';
-    if (forecast.data && forecast.data.list) {
-      msg += '*📅 Agle 24 ghante:*\n';
-      for (let i = 0; i < Math.min(4, forecast.data.list.length); i++) {
-        const f = forecast.data.list[i];
-        const time = new Date(f.dt * 1000).toLocaleTimeString('hi-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
-        msg += time + ' → ' + Math.round(f.main.temp) + '°C, ' + f.weather[0].description + '\n';
-      }
-    }
-    msg += '\n🌾 *Kheti Salah:* ';
+    msg += '🌾 *Kheti Salah:* ';
     if (d.main.temp > 40) msg += 'Bahut garmi hai — subah/shaam sinchai karein, fasal ko dhoop se bachaayein.';
     else if (d.main.temp > 35) msg += 'Garmi zyada hai — sinchai ka dhyan rakhein aur mulching karein.';
     else if (d.main.humidity > 80) msg += 'Nami zyada hai — fungal rog ka dhyan rakhein, davai ka chhidkaav karein.';
     else if (d.wind.speed > 10) msg += 'Tez hawa — chhidkaav se bachein, fasal ko support dein.';
-    else msg += 'Mausam anukoool hai — kheti ka kaam jari rakhein.';
+    else msg += 'Mausam anukool hai — kheti ka kaam jari rakhein.';
     msg += '\n\n_VartMap - Aapki Kheti Ka Digital Map 🌾_';
     return msg;
   } catch (e) {
