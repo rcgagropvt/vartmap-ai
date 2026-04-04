@@ -788,6 +788,45 @@ async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, 
 
   return false; // Not in onboarding, continue normal flow
 }
+// --- WEATHER API ---
+async function getWeather(city) {
+  try {
+    const apiKey = process.env.OPENWEATHER_API_KEY;
+    if (!apiKey) return null;
+    const resp = await axios.get('https://api.openweathermap.org/data/2.5/weather', {
+      params: { q: city + ',IN', appid: apiKey, units: 'metric', lang: 'hi' }
+    });
+    const d = resp.data;
+    const forecast = await axios.get('https://api.openweathermap.org/data/2.5/forecast', {
+      params: { q: city + ',IN', appid: apiKey, units: 'metric', lang: 'hi', cnt: 8 }
+    });
+    let msg = '*🌤️ ' + d.name + ' ka Mausam*\n\n';
+    msg += '🌡️ *Taapman:* ' + Math.round(d.main.temp) + '°C (Min: ' + Math.round(d.main.temp_min) + '°C, Max: ' + Math.round(d.main.temp_max) + '°C)\n';
+    msg += '💧 *Nami (Humidity):* ' + d.main.humidity + '%\n';
+    msg += '🌬️ *Hawa:* ' + Math.round(d.wind.speed * 3.6) + ' km/h\n';
+    msg += '☁️ *Haalat:* ' + d.weather[0].description + '\n';
+    msg += '👁️ *Dikhai:* ' + (d.visibility / 1000).toFixed(1) + ' km\n\n';
+    if (forecast.data && forecast.data.list) {
+      msg += '*📅 Agle 24 ghante:*\n';
+      for (let i = 0; i < Math.min(4, forecast.data.list.length); i++) {
+        const f = forecast.data.list[i];
+        const time = new Date(f.dt * 1000).toLocaleTimeString('hi-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
+        msg += time + ' → ' + Math.round(f.main.temp) + '°C, ' + f.weather[0].description + '\n';
+      }
+    }
+    msg += '\n🌾 *Kheti Salah:* ';
+    if (d.main.temp > 40) msg += 'Bahut garmi hai — subah/shaam sinchai karein, fasal ko dhoop se bachaayein.';
+    else if (d.main.temp > 35) msg += 'Garmi zyada hai — sinchai ka dhyan rakhein aur mulching karein.';
+    else if (d.main.humidity > 80) msg += 'Nami zyada hai — fungal rog ka dhyan rakhein, davai ka chhidkaav karein.';
+    else if (d.wind.speed > 10) msg += 'Tez hawa — chhidkaav se bachein, fasal ko support dein.';
+    else msg += 'Mausam anukoool hai — kheti ka kaam jari rakhein.';
+    msg += '\n\n_VartMap - Aapki Kheti Ka Digital Map 🌾_';
+    return msg;
+  } catch (e) {
+    console.error('Weather API error:', e.message);
+    return null;
+  }
+}
 
 // --- MANDI PRICE LOOKUP ---
 async function getMandiPrices(crop, state, district) {
@@ -1002,14 +1041,25 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
   if (menuKey === 'weather' || menuKey === 'mausam') {
     const district = farmerData.district || farmerData.village || '';
     if (district) {
-      // Let AI handle with context about the location
-      return false;
+      await sendWhatsAppMessage(from, lang === 'hi' ? '🌤️ "' + district + '" ka mausam dhundh raha hoon...' : 'Looking up weather for "' + district + '"...');
+      const weatherMsg = await getWeather(district);
+      if (weatherMsg) {
+        await sendWhatsAppMessage(from, weatherMsg);
+        setPendingAction(farmerId, 'weather_city');
+        await sendWhatsAppMessage(from, lang === 'hi' ? 'Kisi aur shehar ka mausam jaanne ke liye naam likhen, ya "menu" type karein.' : 'Type another city name, or type "menu".');
+      } else {
+        await sendWhatsAppMessage(from, lang === 'hi' ? '❌ "' + district + '" ka mausam nahi mil paya. Kripya sahi shehar/district naam likhen.' : 'Could not find weather for "' + district + '". Please type correct city name.');
+        setPendingAction(farmerId, 'weather_city');
+      }
+    } else {
+      setPendingAction(farmerId, 'weather_city');
+      await sendWhatsAppMessage(from, lang === 'hi'
+        ? '🌤️ Mausam ki jankari ke liye apna shehar/district type karein (jaise: Karnal, Lucknow, Indore)'
+        : 'Type your city/district name for weather info');
     }
-    await sendWhatsAppMessage(from, lang === 'hi'
-      ? '🌤️ Mausam ki jankari ke liye apna shehar/district type karein (jaise: Karnal, Lucknow, Indore)'
-      : 'Type your city/district name for weather info');
     return true;
   }
+
 
   // MY PROFILE
   if (menuKey === 'my_profile' || menuKey === 'profile') {
@@ -1396,6 +1446,27 @@ const state = pendingData.state || '';
               clearPendingAction(farmerId);
               // Fall through to AI with crop context
             }
+
+            if (pendingAction === 'weather_city') {
+              clearPendingAction(farmerId);
+              const city = msgBody.trim();
+              await sendWhatsAppMessage(from, lang === 'hi' ? '🌤️ "' + city + '" ka mausam dhundh raha hoon...' : 'Looking up weather for "' + city + '"...');
+              const weatherMsg = await getWeather(city);
+              if (weatherMsg) {
+                await sendWhatsAppMessage(from, weatherMsg);
+                setPendingAction(farmerId, 'weather_city');
+                await sendWhatsAppMessage(from, lang === 'hi' ? 'Kisi aur shehar ka mausam jaanne ke liye naam likhen, ya "menu" type karein.' : 'Type another city name, or type "menu".');
+              } else {
+                await sendWhatsAppMessage(from, lang === 'hi' ? '❌ "' + city + '" ka mausam nahi mil paya. Kripya sahi shehar naam likhen.' : 'Could not find weather for "' + city + '".');
+                setPendingAction(farmerId, 'weather_city');
+              }
+              await pool.query(
+                "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
+                [sessionId, farmerId, '[weather: ' + city + ']']
+              );
+              continue;
+            }
+
           }
           
 
