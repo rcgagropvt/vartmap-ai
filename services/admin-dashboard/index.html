@@ -1212,30 +1212,126 @@ async function viewCampaignDetails(id) {
     var msgs = d.messages || [];
     var stats = {};
     (d.stats||[]).forEach(function(s) { stats[s.status] = +s.count; });
+    var total = (stats.sent||0) + (stats.delivered||0) + (stats.read||0) + (stats.failed||0);
+    var deliveryRate = total > 0 ? (((stats.delivered||0) + (stats.read||0)) / total * 100).toFixed(1) : 0;
+    var readRate = total > 0 ? ((stats.read||0) / total * 100).toFixed(1) : 0;
+    var failRate = total > 0 ? ((stats.failed||0) / total * 100).toFixed(1) : 0;
     var criteria = typeof c.target_criteria === 'string' ? JSON.parse(c.target_criteria || '{}') : (c.target_criteria || {});
-    var filters = Object.keys(criteria).filter(function(k){return criteria[k];}).map(function(k){return '<strong>'+k+':</strong> '+criteria[k];}).join(' | ');
+    var filters = Object.keys(criteria).filter(function(k){return criteria[k];}).map(function(k){return '<strong>'+k+':</strong> '+criteria[k];}).join(' &nbsp;|&nbsp; ');
+    var sentAt = c.sent_at ? new Date(c.sent_at).toLocaleString('en-IN') : '-';
 
-    openModal('Campaign: ' + c.name, `
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:16px">
-        <div style="text-align:center;padding:12px;background:#e8f5e9;border-radius:8px"><div style="font-size:24px;font-weight:700">${stats.sent||0}</div><div style="font-size:12px;color:#666">Sent</div></div>
-        <div style="text-align:center;padding:12px;background:#e3f2fd;border-radius:8px"><div style="font-size:24px;font-weight:700">${stats.delivered||0}</div><div style="font-size:12px;color:#666">Delivered</div></div>
-        <div style="text-align:center;padding:12px;background:#fff3e0;border-radius:8px"><div style="font-size:24px;font-weight:700">${stats.read||0}</div><div style="font-size:12px;color:#666">Read</div></div>
-        <div style="text-align:center;padding:12px;background:#fce4ec;border-radius:8px"><div style="font-size:24px;font-weight:700">${stats.failed||0}</div><div style="font-size:12px;color:#666">Failed</div></div>
+    // Build funnel bar widths
+    var sentW = 100;
+    var delW = total > 0 ? Math.max(5, ((stats.delivered||0)+(stats.read||0)) / total * 100) : 0;
+    var readW = total > 0 ? Math.max(5, (stats.read||0) / total * 100) : 0;
+
+    openModal('Campaign Analytics: ' + c.name, `
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:10px;margin-bottom:20px">
+        <div style="text-align:center;padding:14px 8px;background:#e8f5e9;border-radius:10px">
+          <div style="font-size:28px;font-weight:700;color:#2e7d32">${total}</div>
+          <div style="font-size:11px;color:#666;margin-top:2px">Total Sent</div>
+        </div>
+        <div style="text-align:center;padding:14px 8px;background:#e3f2fd;border-radius:10px">
+          <div style="font-size:28px;font-weight:700;color:#1565c0">${(stats.delivered||0)+(stats.read||0)}</div>
+          <div style="font-size:11px;color:#666;margin-top:2px">Delivered</div>
+        </div>
+        <div style="text-align:center;padding:14px 8px;background:#fff8e1;border-radius:10px">
+          <div style="font-size:28px;font-weight:700;color:#f57f17">${stats.read||0}</div>
+          <div style="font-size:11px;color:#666;margin-top:2px">Read</div>
+        </div>
+        <div style="text-align:center;padding:14px 8px;background:#fce4ec;border-radius:10px">
+          <div style="font-size:28px;font-weight:700;color:#c62828">${stats.failed||0}</div>
+          <div style="font-size:11px;color:#666;margin-top:2px">Failed</div>
+        </div>
+        <div style="text-align:center;padding:14px 8px;background:#f3e5f5;border-radius:10px">
+          <div style="font-size:28px;font-weight:700;color:#6a1b9a">${c.target_count||0}</div>
+          <div style="font-size:11px;color:#666;margin-top:2px">Audience</div>
+        </div>
       </div>
-      <div style="margin-bottom:12px;font-size:13px"><strong>Filters:</strong> ${filters || 'All farmers'}</div>
-      <div style="margin-bottom:12px;font-size:13px"><strong>Template:</strong> ${c.wa_template_name || c.template_name || '-'}</div>
-      <div style="margin-bottom:12px;font-size:13px"><strong>Template Text:</strong> ${(c.template_text||'').substring(0,200)}</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">
+        <div style="text-align:center;padding:12px;background:#f5f5f5;border-radius:8px">
+          <div style="font-size:22px;font-weight:700;color:#1565c0">${deliveryRate}%</div>
+          <div style="font-size:11px;color:#888">Delivery Rate</div>
+        </div>
+        <div style="text-align:center;padding:12px;background:#f5f5f5;border-radius:8px">
+          <div style="font-size:22px;font-weight:700;color:#f57f17">${readRate}%</div>
+          <div style="font-size:11px;color:#888">Read Rate</div>
+        </div>
+        <div style="text-align:center;padding:12px;background:#f5f5f5;border-radius:8px">
+          <div style="font-size:22px;font-weight:700;color:#c62828">${failRate}%</div>
+          <div style="font-size:11px;color:#888">Fail Rate</div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:20px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px">Delivery Funnel</div>
+        <div style="margin-bottom:4px"><div style="background:#4caf50;height:24px;border-radius:4px;width:${sentW}%;display:flex;align-items:center;padding-left:8px;color:#fff;font-size:11px">Sent: ${total}</div></div>
+        <div style="margin-bottom:4px"><div style="background:#2196f3;height:24px;border-radius:4px;width:${delW}%;display:flex;align-items:center;padding-left:8px;color:#fff;font-size:11px">Delivered: ${(stats.delivered||0)+(stats.read||0)}</div></div>
+        <div><div style="background:#ff9800;height:24px;border-radius:4px;width:${readW}%;display:flex;align-items:center;padding-left:8px;color:#fff;font-size:11px">Read: ${stats.read||0}</div></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;font-size:13px">
+        <div><strong>Template:</strong> ${c.wa_template_name || c.template_name || '-'}</div>
+        <div><strong>Sent At:</strong> ${sentAt}</div>
+        <div style="grid-column:span 2"><strong>Filters:</strong> ${filters || 'All farmers'}</div>
+        <div style="grid-column:span 2"><strong>Template Text:</strong> <span style="color:#555">${(c.template_text||'').substring(0,250)}</span></div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-outline" onclick="refreshCampaignDetails('${id}')"><i class="fas fa-sync"></i> Refresh</button>
+        <button class="btn btn-sm btn-outline" onclick="exportCampaignCSV('${id}')"><i class="fas fa-download"></i> Export CSV</button>
+        <button class="btn btn-sm btn-outline" onclick="duplicateCampaign('${id}')"><i class="fas fa-copy"></i> Duplicate</button>
+        <button class="btn btn-sm btn-primary" onclick="retargetCampaign('${id}','read')"><i class="fas fa-bullseye"></i> Retarget: Read</button>
+        <button class="btn btn-sm btn-primary" onclick="retargetCampaign('${id}','not_read')"><i class="fas fa-eye-slash"></i> Retarget: Not Read</button>
+        <button class="btn btn-sm btn-danger" onclick="retargetCampaign('${id}','failed')"><i class="fas fa-redo"></i> Retry Failed</button>
+      </div>
+
       <h4 style="margin:12px 0 8px">Message Log (${msgs.length})</h4>
-      <div style="max-height:300px;overflow-y:auto">
-        <table style="font-size:12px"><tr><th>Farmer</th><th>Phone</th><th>Status</th><th>Error</th></tr>
+      <div style="max-height:280px;overflow-y:auto">
+        <table style="font-size:12px"><tr><th>Farmer</th><th>Phone</th><th>Village</th><th>Status</th><th>Delivered</th><th>Read</th><th>Error</th></tr>
         ${msgs.map(function(m) {
-          var sc = {sent:'#27ae60',delivered:'#3498db',read:'#2ecc71',failed:'#e74c3c'};
-          return '<tr><td>'+(m.farmer_name||'-')+'</td><td>'+m.phone+'</td><td><span style="color:'+(sc[m.status]||'#999')+';font-weight:600">'+m.status+'</span></td><td style="color:#e74c3c;font-size:11px">'+(m.error_message||'')+'</td></tr>';
+          var sc = {sent:'#4caf50',delivered:'#2196f3',read:'#ff9800',failed:'#f44336'};
+          var delTime = m.delivered_at ? new Date(m.delivered_at).toLocaleTimeString('en-IN') : '-';
+          var readTime = m.read_at ? new Date(m.read_at).toLocaleTimeString('en-IN') : '-';
+          return '<tr><td>'+(m.farmer_name||'-')+'</td><td style="font-size:11px">'+m.phone+'</td><td>'+(m.village||'-')+'</td><td><span style="color:'+(sc[m.status]||'#999')+';font-weight:600">'+m.status.toUpperCase()+'</span></td><td style="font-size:11px">'+delTime+'</td><td style="font-size:11px">'+readTime+'</td><td style="color:#f44336;font-size:10px;max-width:120px;overflow:hidden;text-overflow:ellipsis">'+(m.error_message||'')+'</td></tr>';
         }).join('')}
         </table>
       </div>
     `, '<button class="btn btn-outline" onclick="closeModal()">Close</button>');
   } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function refreshCampaignDetails(id) { closeModal(); viewCampaignDetails(id); }
+
+function exportCampaignCSV(id) {
+  window.open('https://vartmap-admin-api.onrender.com/api/v1/campaigns/' + id + '/export?token=' + localStorage.getItem('vartmap_token'));
+}
+
+async function duplicateCampaign(id) {
+  if (!confirm('Duplicate this campaign as a new draft?')) return;
+  try {
+    var d = await api('/api/v1/campaigns/' + id);
+    var c = d.campaign;
+    var criteria = typeof c.target_criteria === 'string' ? JSON.parse(c.target_criteria || '{}') : (c.target_criteria || {});
+    await api('/api/v1/campaigns', { method: 'POST', body: JSON.stringify({
+      name: c.name + ' (Copy)',
+      template_id: c.template_id,
+      target_criteria: criteria
+    })});
+    alert('Campaign duplicated as draft!');
+    closeModal(); loadCampaigns();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function retargetCampaign(campaignId, type) {
+  var labels = {read:'who READ the message', not_read:'who DID NOT read', failed:'where delivery FAILED'};
+  if (!confirm('Create a retargeting campaign for farmers ' + labels[type] + '?')) return;
+  try {
+    var result = await api('/api/v1/campaigns/' + campaignId + '/retarget', { method: 'POST', body: JSON.stringify({ type: type }) });
+    alert('Retarget campaign created! ' + (result.campaign ? result.campaign.target_count : 0) + ' farmers targeted. Go to Campaigns to review and launch.');
+    closeModal(); loadCampaigns();
+  } catch(e) { alert('Error: ' + (e.message || JSON.stringify(e))); }
 }
 
 async function deleteCampaign(id) {

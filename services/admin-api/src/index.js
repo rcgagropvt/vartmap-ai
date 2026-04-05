@@ -699,19 +699,31 @@ app.post('/api/v1/campaigns/:id/launch', auth, async (req, res) => {
 
     // Get target farmers
     const criteria = typeof c.target_criteria === 'string' ? JSON.parse(c.target_criteria) : (c.target_criteria || {});
-    let fq = "SELECT f.id, f.phone, f.name, f.crops, f.village FROM farmers f LEFT JOIN districts_master d ON f.district_id=d.id WHERE f.status='active' AND f.phone IS NOT NULL";
-    const fp = [];
-    if (criteria.state) { fp.push('%' + criteria.state + '%'); fq += ` AND d.state_name ILIKE $${fp.length}`; }
-    if (criteria.district) { fp.push('%' + criteria.district + '%'); fq += ` AND d.district_name ILIKE $${fp.length}`; }
-    if (criteria.crop) { fp.push('%' + criteria.crop + '%'); fq += ` AND f.crops::text ILIKE $${fp.length}`; }
-    if (criteria.language) { fp.push(criteria.language); fq += ` AND f.language=$${fp.length}`; }
-    if (criteria.soil_type) { fp.push('%' + criteria.soil_type + '%'); fq += ` AND f.soil_type ILIKE $${fp.length}`; }
-    if (criteria.irrigation_type) { fp.push('%' + criteria.irrigation_type + '%'); fq += ` AND f.irrigation_type ILIKE $${fp.length}`; }
-    if (criteria.farming_type) { fp.push('%' + criteria.farming_type + '%'); fq += ` AND f.farming_type ILIKE $${fp.length}`; }
-    if (criteria.min_land) { fp.push(criteria.min_land); fq += ` AND f.land_holding_acres >= $${fp.length}`; }
-    if (criteria.max_land) { fp.push(criteria.max_land); fq += ` AND f.land_holding_acres <= $${fp.length}`; }
-    if (criteria.active_days) { fp.push(criteria.active_days); fq += ` AND f.updated_at > NOW() - INTERVAL '1 day' * $${fp.length}`; }
-    const farmers = await pool.query(fq, fp);
+    let farmers;
+    if (criteria.farmer_ids && Array.isArray(criteria.farmer_ids)) {
+      // Retarget campaign — use specific farmer IDs
+      const idPlaceholders = criteria.farmer_ids.map((_, i) => '$' + (i + 1)).join(',');
+      farmers = await pool.query(
+        `SELECT f.id, f.phone, f.name, f.crops, f.village FROM farmers f WHERE f.id IN (${idPlaceholders}) AND f.status='active' AND f.phone IS NOT NULL`,
+        criteria.farmer_ids
+      );
+    } else {
+      // Normal campaign — use filters
+      let fq = "SELECT f.id, f.phone, f.name, f.crops, f.village FROM farmers f LEFT JOIN districts_master d ON f.district_id=d.id WHERE f.status='active' AND f.phone IS NOT NULL";
+      const fp = [];
+      if (criteria.state) { fp.push('%' + criteria.state + '%'); fq += ` AND d.state_name ILIKE $${fp.length}`; }
+      if (criteria.district) { fp.push('%' + criteria.district + '%'); fq += ` AND d.district_name ILIKE $${fp.length}`; }
+      if (criteria.crop) { fp.push('%' + criteria.crop + '%'); fq += ` AND f.crops::text ILIKE $${fp.length}`; }
+      if (criteria.language) { fp.push(criteria.language); fq += ` AND f.language=$${fp.length}`; }
+      if (criteria.soil_type) { fp.push('%' + criteria.soil_type + '%'); fq += ` AND f.soil_type ILIKE $${fp.length}`; }
+      if (criteria.irrigation_type) { fp.push('%' + criteria.irrigation_type + '%'); fq += ` AND f.irrigation_type ILIKE $${fp.length}`; }
+      if (criteria.farming_type) { fp.push('%' + criteria.farming_type + '%'); fq += ` AND f.farming_type ILIKE $${fp.length}`; }
+      if (criteria.min_land) { fp.push(criteria.min_land); fq += ` AND f.land_holding_acres >= $${fp.length}`; }
+      if (criteria.max_land) { fp.push(criteria.max_land); fq += ` AND f.land_holding_acres <= $${fp.length}`; }
+      if (criteria.active_days) { fp.push(criteria.active_days); fq += ` AND f.updated_at > NOW() - INTERVAL '1 day' * $${fp.length}`; }
+      farmers = await pool.query(fq, fp);
+    }
+
 
     if (!farmers.rows.length) return res.status(400).json({ error: 'No farmers match the target criteria' });
 
@@ -805,6 +817,69 @@ app.get('/api/v1/campaigns/:id', auth, async (req, res) => {
       [req.params.id]
     );
     res.json({ campaign: camp.rows[0], messages: messages.rows, stats: stats.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// Export campaign messages as CSV
+app.get('/api/v1/campaigns/:id/export', async (req, res) => {
+  try {
+    const token = req.query.token;
+    if (!token) return res.status(401).json({ error: 'Token required' });
+    try { require('jsonwebtoken').verify(token, process.env.JWT_SECRET); } catch(e) { return res.status(401).json({ error: 'Invalid token' }); }
+
+    const camp = await pool.query('SELECT name FROM campaigns WHERE id=$1', [req.params.id]);
+    const msgs = await pool.query(
+      `SELECT f.name as farmer_name, cm.phone, f.village, f.crops::text as crops, cm.status, cm.error_message, cm.sent_at, cm.delivered_at, cm.read_at
+       FROM campaign_messages cm LEFT JOIN farmers f ON cm.farmer_id=f.id WHERE cm.campaign_id=$1 ORDER BY cm.sent_at`,
+      [req.params.id]
+    );
+    const campName = camp.rows.length ? camp.rows[0].name.replace(/[^a-zA-Z0-9]/g, '_') : 'campaign';
+    let csv = 'Farmer Name,Phone,Village,Crops,Status,Error,Sent At,Delivered At,Read At\n';
+    msgs.rows.forEach(function(m) {
+      csv += '"' + (m.farmer_name||'') + '","' + (m.phone||'') + '","' + (m.village||'') + '","' + (m.crops||'') + '","' + (m.status||'') + '","' + (m.error_message||'').replace(/"/g,'""') + '","' + (m.sent_at||'') + '","' + (m.delivered_at||'') + '","' + (m.read_at||'') + '"\n';
+    });
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=campaign_' + campName + '.csv');
+    res.send(csv);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Retarget campaign - create new campaign targeting read/not_read/failed farmers
+app.post('/api/v1/campaigns/:id/retarget', auth, async (req, res) => {
+  try {
+    const { type } = req.body; // 'read', 'not_read', 'failed'
+    const camp = await pool.query('SELECT * FROM campaigns WHERE id=$1', [req.params.id]);
+    if (!camp.rows.length) return res.status(404).json({ error: 'Campaign not found' });
+    const c = camp.rows[0];
+
+    let statusFilter;
+    let label;
+    if (type === 'read') { statusFilter = "status='read'"; label = 'Retarget: Read'; }
+    else if (type === 'not_read') { statusFilter = "status IN ('sent','delivered')"; label = 'Retarget: Not Read'; }
+    else if (type === 'failed') { statusFilter = "status='failed'"; label = 'Retarget: Failed'; }
+    else return res.status(400).json({ error: 'Invalid retarget type. Use: read, not_read, failed' });
+
+    const farmers = await pool.query(
+      `SELECT DISTINCT farmer_id FROM campaign_messages WHERE campaign_id=$1 AND ${statusFilter}`,
+      [req.params.id]
+    );
+
+    if (!farmers.rows.length) return res.status(400).json({ error: 'No farmers match the retarget criteria' });
+
+    // Create new campaign with farmer IDs stored in target_criteria
+    const farmerIds = farmers.rows.map(function(r) { return r.farmer_id; });
+    const newCamp = await pool.query(
+      `INSERT INTO campaigns (name, template_id, target_criteria, target_count, created_by, status)
+       VALUES ($1, $2, $3, $4, $5, 'draft') RETURNING *`,
+      [
+        c.name + ' - ' + label,
+        c.template_id,
+        JSON.stringify({ retarget_from: req.params.id, retarget_type: type, farmer_ids: farmerIds }),
+        farmerIds.length,
+        req.user.id
+      ]
+    );
+
+    res.json({ campaign: newCamp.rows[0], farmer_count: farmerIds.length });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

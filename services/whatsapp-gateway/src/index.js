@@ -1198,6 +1198,44 @@ app.post('/webhook', async (req, res) => {
         const value = change.value;
         const messages = value.messages || [];
         const contacts = value.contacts || [];
+                // Handle delivery status updates (sent/delivered/read/failed)
+        const statuses = value.statuses || [];
+        for (const status of statuses) {
+          try {
+            const waId = status.id;
+            const statusVal = status.status;
+            const timestamp = status.timestamp ? new Date(status.timestamp * 1000) : new Date();
+            if (statusVal === 'delivered') {
+              await pool.query('UPDATE campaign_messages SET status=$1, delivered_at=$2 WHERE wa_message_id=$3', ['delivered', timestamp, waId]);
+            } else if (statusVal === 'read') {
+              await pool.query('UPDATE campaign_messages SET status=$1, read_at=$2 WHERE wa_message_id=$3', ['read', timestamp, waId]);
+            } else if (statusVal === 'failed') {
+              const errMsg = status.errors && status.errors[0] ? status.errors[0].title : 'Unknown error';
+              await pool.query('UPDATE campaign_messages SET status=$1, error_message=$2 WHERE wa_message_id=$3', ['failed', errMsg, waId]);
+            }
+            await pool.query('UPDATE wa_messages SET wa_status=$1 WHERE wa_message_id=$2', [statusVal, waId]);
+          } catch (se) { console.error('Status update error:', se.message); }
+        }
+
+        // Handle delivery status updates (sent/delivered/read/failed)
+        for (const status of statuses) {
+          try {
+            const waId = status.id;
+            const statusVal = status.status; // sent, delivered, read, failed
+            const timestamp = status.timestamp ? new Date(status.timestamp * 1000) : new Date();
+            // Update campaign_messages
+            if (statusVal === 'delivered') {
+              await pool.query('UPDATE campaign_messages SET status=$1, delivered_at=$2 WHERE wa_message_id=$3', ['delivered', timestamp, waId]);
+            } else if (statusVal === 'read') {
+              await pool.query('UPDATE campaign_messages SET status=$1, read_at=$2 WHERE wa_message_id=$3', ['read', timestamp, waId]);
+            } else if (statusVal === 'failed') {
+              const errMsg = status.errors && status.errors[0] ? status.errors[0].title : 'Unknown error';
+              await pool.query('UPDATE campaign_messages SET status=$1, error_message=$2 WHERE wa_message_id=$3', ['failed', errMsg, waId]);
+            }
+            // Also update wa_messages status
+            await pool.query('UPDATE wa_messages SET wa_status=$1 WHERE wa_message_id=$2', [statusVal, waId]);
+          } catch (se) { console.error('Status update error:', se.message); }
+        }
 
         for (let i = 0; i < messages.length; i++) {
           const msg = messages[i];
