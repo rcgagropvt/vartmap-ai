@@ -429,6 +429,117 @@ app.delete('/api/v1/templates/:id', auth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── META TEMPLATE MANAGEMENT API ───
+// Submit template to Meta for approval
+app.post('/api/v1/templates/:id/submit-to-meta', auth, async (req, res) => {
+  try {
+    const template = await pool.query('SELECT * FROM message_templates WHERE id=$1', [req.params.id]);
+    if (!template.rows.length) return res.status(404).json({ error: 'Template not found' });
+    const t = template.rows[0];
+    const wabaId = process.env.WABA_ID;
+    const token = process.env.WA_ACCESS_TOKEN;
+    if (!wabaId || !token) return res.status(400).json({ error: 'WABA_ID or WA_ACCESS_TOKEN not configured' });
+
+    // Build Meta template components
+    const components = [{ type: 'BODY', text: t.template_text }];
+    if (req.body.header_text) components.unshift({ type: 'HEADER', format: 'TEXT', text: req.body.header_text });
+    if (req.body.footer_text) components.push({ type: 'FOOTER', text: req.body.footer_text });
+    if (req.body.buttons) components.push({ type: 'BUTTONS', buttons: req.body.buttons });
+
+    const langMap = { hi: 'hi', en: 'en_US', mr: 'mr', gu: 'gu', pa: 'pa', bn: 'bn', ta: 'ta', te: 'te', kn: 'kn' };
+    const metaResp = await axios.post(
+      'https://graph.facebook.com/v21.0/' + wabaId + '/message_templates',
+      {
+        name: t.wa_template_name || t.name.toLowerCase().replace(/\s+/g, '_'),
+        language: langMap[t.language] || 'hi',
+        category: (t.category || 'marketing').toUpperCase(),
+        components: components
+      },
+      { headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } }
+    );
+
+    // Update local template with Meta ID and status
+    await pool.query(
+      'UPDATE message_templates SET meta_template_id=$1, status=$2, wa_template_name=COALESCE(wa_template_name,$3) WHERE id=$4',
+      [metaResp.data.id, 'pending', t.wa_template_name || t.name.toLowerCase().replace(/\s+/g, '_'), req.params.id]
+    );
+
+    res.json({ success: true, meta_id: metaResp.data.id, status: metaResp.data.status });
+  } catch (e) {
+    const metaError = e.response ? e.response.data : { message: e.message };
+    console.error('Meta template submit error:', metaError);
+    res.status(500).json({ error: 'Meta API error', details: metaError });
+  }
+});
+
+// Sync template status from Meta
+app.post('/api/v1/templates/:id/sync-meta', auth, async (req, res) => {
+  try {
+    const template = await pool.query('SELECT * FROM message_templates WHERE id=$1', [req.params.id]);
+    if (!template.rows.length) return res.status(404).json({ error: 'Template not found' });
+    const t = template.rows[0];
+    const wabaId = process.env.WABA_ID;
+    const token = process.env.WA_ACCESS_TOKEN;
+
+    const metaResp = await axios.get(
+      'https://graph.facebook.com/v21.0/' + wabaId + '/message_templates?name=' + (t.wa_template_name || ''),
+      { headers: { 'Authorization': 'Bearer ' + token } }
+    );
+
+    if (metaResp.data.data && metaResp.data.data.length) {
+      const mt = metaResp.data.data[0];
+      await pool.query(
+        'UPDATE message_templates SET meta_template_id=$1, status=$2 WHERE id=$3',
+        [mt.id, mt.status.toLowerCase(), req.params.id]
+      );
+      res.json({ success: true, meta_status: mt.status, meta_id: mt.id });
+    } else {
+      res.json({ success: false, message: 'Template not found on Meta' });
+    }
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Fetch all templates from Meta (sync all)
+app.get('/api/v1/templates/meta/all', auth, async (req, res) => {
+  try {
+    const wabaId = process.env.WABA_ID;
+    const token = process.env.WA_ACCESS_TOKEN;
+    if (!wabaId || !token) return res.status(400).json({ error: 'WABA_ID or WA_ACCESS_TOKEN not configured' });
+
+    const metaResp = await axios.get(
+      'https://graph.facebook.com/v21.0/' + wabaId + '/message_templates?limit=100',
+      { headers: { 'Authorization': 'Bearer ' + token } }
+    );
+
+    res.json({ templates: metaResp.data.data || [] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Delete template from Meta
+app.delete('/api/v1/templates/:id/meta', auth, async (req, res) => {
+  try {
+    const template = await pool.query('SELECT * FROM message_templates WHERE id=$1', [req.params.id]);
+    if (!template.rows.length) return res.status(404).json({ error: 'Template not found' });
+    const t = template.rows[0];
+    const wabaId = process.env.WABA_ID;
+    const token = process.env.WA_ACCESS_TOKEN;
+
+    await axios.delete(
+      'https://graph.facebook.com/v21.0/' + wabaId + '/message_templates?name=' + (t.wa_template_name || ''),
+      { headers: { 'Authorization': 'Bearer ' + token } }
+    );
+
+    await pool.query('UPDATE message_templates SET status=$1 WHERE id=$2', ['deleted', req.params.id]);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── CAMPAIGNS ───
 app.get('/api/v1/campaigns', auth, async (req, res) => {
   try {
