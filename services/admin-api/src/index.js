@@ -555,47 +555,259 @@ app.delete('/api/v1/templates/:id/meta', auth, async (req, res) => {
   }
 });
 
-// ─── CAMPAIGNS ───
+// ─── CAMPAIGNS (BROADCAST) ───
+
+// Get audience count based on filters (preview before sending)
+app.post('/api/v1/campaigns/audience-count', auth, async (req, res) => {
+  try {
+    const { district, state, crop, language, soil_type, irrigation_type, farming_type, min_land, max_land, active_days } = req.body;
+    let q = 'SELECT COUNT(*) FROM farmers f LEFT JOIN districts_master d ON f.district_id=d.id WHERE f.status=\'active\' AND f.phone IS NOT NULL';
+    const p = [];
+    if (state) { p.push('%' + state + '%'); q += ` AND d.state_name ILIKE $${p.length}`; }
+    if (district) { p.push('%' + district + '%'); q += ` AND d.district_name ILIKE $${p.length}`; }
+    if (crop) { p.push('%' + crop + '%'); q += ` AND f.crops::text ILIKE $${p.length}`; }
+    if (language) { p.push(language); q += ` AND f.language=$${p.length}`; }
+    if (soil_type) { p.push('%' + soil_type + '%'); q += ` AND f.soil_type ILIKE $${p.length}`; }
+    if (irrigation_type) { p.push('%' + irrigation_type + '%'); q += ` AND f.irrigation_type ILIKE $${p.length}`; }
+    if (farming_type) { p.push('%' + farming_type + '%'); q += ` AND f.farming_type ILIKE $${p.length}`; }
+    if (min_land) { p.push(min_land); q += ` AND f.land_holding_acres >= $${p.length}`; }
+    if (max_land) { p.push(max_land); q += ` AND f.land_holding_acres <= $${p.length}`; }
+    if (active_days) { p.push(active_days); q += ` AND f.updated_at > NOW() - INTERVAL '1 day' * $${p.length}`; }
+    const r = await pool.query(q, p);
+    res.json({ count: +r.rows[0].count });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Get filter options (distinct values for dropdowns)
+app.get('/api/v1/campaigns/filter-options', auth, async (req, res) => {
+  try {
+    const [states, crops, soilTypes, irrigationTypes, farmingTypes, languages] = await Promise.all([
+      pool.query('SELECT DISTINCT d.state_name FROM farmers f JOIN districts_master d ON f.district_id=d.id WHERE d.state_name IS NOT NULL ORDER BY d.state_name'),
+      pool.query("SELECT DISTINCT unnest(crops) as crop FROM farmers WHERE crops IS NOT NULL ORDER BY crop"),
+      pool.query('SELECT DISTINCT soil_type FROM farmers WHERE soil_type IS NOT NULL AND soil_type != \'\' ORDER BY soil_type'),
+      pool.query('SELECT DISTINCT irrigation_type FROM farmers WHERE irrigation_type IS NOT NULL AND irrigation_type != \'\' ORDER BY irrigation_type'),
+      pool.query('SELECT DISTINCT farming_type FROM farmers WHERE farming_type IS NOT NULL AND farming_type != \'\' ORDER BY farming_type'),
+      pool.query('SELECT DISTINCT language FROM farmers WHERE language IS NOT NULL ORDER BY language')
+    ]);
+    res.json({
+      states: states.rows.map(r => r.state_name),
+      crops: crops.rows.map(r => r.crop),
+      soil_types: soilTypes.rows.map(r => r.soil_type),
+      irrigation_types: irrigationTypes.rows.map(r => r.irrigation_type),
+      farming_types: farmingTypes.rows.map(r => r.farming_type),
+      languages: languages.rows.map(r => r.language)
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Get districts for a state
+app.get('/api/v1/campaigns/districts', auth, async (req, res) => {
+  try {
+    const { state } = req.query;
+    let q = 'SELECT DISTINCT d.district_name FROM farmers f JOIN districts_master d ON f.district_id=d.id WHERE d.district_name IS NOT NULL';
+    const p = [];
+    if (state) { p.push('%' + state + '%'); q += ` AND d.state_name ILIKE $${p.length}`; }
+    q += ' ORDER BY d.district_name';
+    const r = await pool.query(q, p);
+    res.json({ districts: r.rows.map(r => r.district_name) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// List all campaigns
 app.get('/api/v1/campaigns', auth, async (req, res) => {
   try {
-    const r = await pool.query('SELECT c.*, t.name as template_name FROM campaigns c LEFT JOIN message_templates t ON c.template_id=t.id ORDER BY c.created_at DESC');
+    const r = await pool.query(`SELECT c.*, t.name as template_name, t.wa_template_name, t.template_text, t.status as template_status,
+      (SELECT COUNT(*) FROM campaign_messages WHERE campaign_id=c.id) as total_messages,
+      (SELECT COUNT(*) FROM campaign_messages WHERE campaign_id=c.id AND status='sent') as sent_count,
+      (SELECT COUNT(*) FROM campaign_messages WHERE campaign_id=c.id AND status='delivered') as delivered_count,
+      (SELECT COUNT(*) FROM campaign_messages WHERE campaign_id=c.id AND status='read') as read_count,
+      (SELECT COUNT(*) FROM campaign_messages WHERE campaign_id=c.id AND status='failed') as failed_count
+      FROM campaigns c LEFT JOIN message_templates t ON c.template_id=t.id ORDER BY c.created_at DESC`);
     res.json({ campaigns: r.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Create campaign
 app.post('/api/v1/campaigns', auth, async (req, res) => {
   try {
     const { name, template_id, target_criteria, scheduled_at } = req.body;
+    if (!name) return res.status(400).json({ error: 'Campaign name is required' });
+
+    // Count target audience
     let targetCount = 0;
     if (target_criteria) {
-      let cq = 'SELECT COUNT(*) FROM farmers WHERE status=\'active\'';
-      if (target_criteria.district) cq += ` AND district_id IN (SELECT id FROM districts_master WHERE district_name ILIKE '%${target_criteria.district}%')`;
-      if (target_criteria.crop) cq += ` AND crops::text ILIKE '%${target_criteria.crop}%'`;
-      if (target_criteria.language) cq += ` AND language='${target_criteria.language}'`;
-      const tc = await pool.query(cq);
+      let cq = "SELECT COUNT(*) FROM farmers f LEFT JOIN districts_master d ON f.district_id=d.id WHERE f.status='active' AND f.phone IS NOT NULL";
+      const p = [];
+      if (target_criteria.state) { p.push('%' + target_criteria.state + '%'); cq += ` AND d.state_name ILIKE $${p.length}`; }
+      if (target_criteria.district) { p.push('%' + target_criteria.district + '%'); cq += ` AND d.district_name ILIKE $${p.length}`; }
+      if (target_criteria.crop) { p.push('%' + target_criteria.crop + '%'); cq += ` AND f.crops::text ILIKE $${p.length}`; }
+      if (target_criteria.language) { p.push(target_criteria.language); cq += ` AND f.language=$${p.length}`; }
+      if (target_criteria.soil_type) { p.push('%' + target_criteria.soil_type + '%'); cq += ` AND f.soil_type ILIKE $${p.length}`; }
+      if (target_criteria.irrigation_type) { p.push('%' + target_criteria.irrigation_type + '%'); cq += ` AND f.irrigation_type ILIKE $${p.length}`; }
+      if (target_criteria.farming_type) { p.push('%' + target_criteria.farming_type + '%'); cq += ` AND f.farming_type ILIKE $${p.length}`; }
+      if (target_criteria.min_land) { p.push(target_criteria.min_land); cq += ` AND f.land_holding_acres >= $${p.length}`; }
+      if (target_criteria.max_land) { p.push(target_criteria.max_land); cq += ` AND f.land_holding_acres <= $${p.length}`; }
+      if (target_criteria.active_days) { p.push(target_criteria.active_days); cq += ` AND f.updated_at > NOW() - INTERVAL '1 day' * $${p.length}`; }
+      const tc = await pool.query(cq, p);
       targetCount = +tc.rows[0].count;
     }
+
     const r = await pool.query(
       `INSERT INTO campaigns (name, template_id, target_criteria, target_count, scheduled_at, created_by, status)
        VALUES ($1,$2,$3,$4,$5,$6,'draft') RETURNING *`,
-      [name, template_id, JSON.stringify(target_criteria || {}), targetCount, scheduled_at, req.user.id]
+      [name, template_id || null, JSON.stringify(target_criteria || {}), targetCount, scheduled_at || null, req.user.id]
     );
     res.json({ campaign: r.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Update campaign
 app.put('/api/v1/campaigns/:id', auth, async (req, res) => {
   try {
     const { name, template_id, target_criteria, status, scheduled_at } = req.body;
     const r = await pool.query(
       `UPDATE campaigns SET name=COALESCE($1,name), template_id=COALESCE($2,template_id),
        target_criteria=COALESCE($3,target_criteria), status=COALESCE($4,status),
-       scheduled_at=COALESCE($5,scheduled_at) WHERE id=$6 RETURNING *`,
+       scheduled_at=COALESCE($5,scheduled_at), updated_at=NOW() WHERE id=$6 RETURNING *`,
       [name, template_id, target_criteria ? JSON.stringify(target_criteria) : null, status, scheduled_at, req.params.id]
     );
     res.json({ campaign: r.rows[0] });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+// Delete campaign
+app.delete('/api/v1/campaigns/:id', auth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM campaign_messages WHERE campaign_id=$1', [req.params.id]);
+    await pool.query('DELETE FROM campaigns WHERE id=$1', [req.params.id]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// LAUNCH campaign - send messages to all matching farmers
+app.post('/api/v1/campaigns/:id/launch', auth, async (req, res) => {
+  try {
+    const camp = await pool.query('SELECT c.*, t.wa_template_name, t.template_text, t.language, t.status as template_status FROM campaigns c LEFT JOIN message_templates t ON c.template_id=t.id WHERE c.id=$1', [req.params.id]);
+    if (!camp.rows.length) return res.status(404).json({ error: 'Campaign not found' });
+    const c = camp.rows[0];
+    if (!c.template_id) return res.status(400).json({ error: 'No template assigned to this campaign' });
+    if (c.template_status !== 'approved') return res.status(400).json({ error: 'Template must be approved by Meta before launching' });
+
+    const token = process.env.WA_ACCESS_TOKEN;
+    const phoneNumberId = process.env.WA_PHONE_NUMBER_ID;
+    if (!token || !phoneNumberId) return res.status(400).json({ error: 'WA_ACCESS_TOKEN or WA_PHONE_NUMBER_ID not configured' });
+
+    // Get target farmers
+    const criteria = typeof c.target_criteria === 'string' ? JSON.parse(c.target_criteria) : (c.target_criteria || {});
+    let fq = "SELECT f.id, f.phone, f.name, f.crops, f.village FROM farmers f LEFT JOIN districts_master d ON f.district_id=d.id WHERE f.status='active' AND f.phone IS NOT NULL";
+    const fp = [];
+    if (criteria.state) { fp.push('%' + criteria.state + '%'); fq += ` AND d.state_name ILIKE $${fp.length}`; }
+    if (criteria.district) { fp.push('%' + criteria.district + '%'); fq += ` AND d.district_name ILIKE $${fp.length}`; }
+    if (criteria.crop) { fp.push('%' + criteria.crop + '%'); fq += ` AND f.crops::text ILIKE $${fp.length}`; }
+    if (criteria.language) { fp.push(criteria.language); fq += ` AND f.language=$${fp.length}`; }
+    if (criteria.soil_type) { fp.push('%' + criteria.soil_type + '%'); fq += ` AND f.soil_type ILIKE $${fp.length}`; }
+    if (criteria.irrigation_type) { fp.push('%' + criteria.irrigation_type + '%'); fq += ` AND f.irrigation_type ILIKE $${fp.length}`; }
+    if (criteria.farming_type) { fp.push('%' + criteria.farming_type + '%'); fq += ` AND f.farming_type ILIKE $${fp.length}`; }
+    if (criteria.min_land) { fp.push(criteria.min_land); fq += ` AND f.land_holding_acres >= $${fp.length}`; }
+    if (criteria.max_land) { fp.push(criteria.max_land); fq += ` AND f.land_holding_acres <= $${fp.length}`; }
+    if (criteria.active_days) { fp.push(criteria.active_days); fq += ` AND f.updated_at > NOW() - INTERVAL '1 day' * $${fp.length}`; }
+    const farmers = await pool.query(fq, fp);
+
+    if (!farmers.rows.length) return res.status(400).json({ error: 'No farmers match the target criteria' });
+
+    // Update campaign status
+    await pool.query("UPDATE campaigns SET status='sending', sent_at=NOW(), target_count=$1 WHERE id=$2", [farmers.rows.length, req.params.id]);
+
+    // Language map
+    const langMap = { hi: 'hi', en: 'en_US', mr: 'mr', gu: 'gu', pa: 'pa', bn: 'bn', ta: 'ta', te: 'te', kn: 'kn' };
+    const templateLang = langMap[c.language] || 'hi';
+
+    // Send messages asynchronously
+    let sentCount = 0, failedCount = 0;
+    const results = [];
+
+    for (const farmer of farmers.rows) {
+      try {
+        const phone = farmer.phone.startsWith('91') ? farmer.phone : '91' + farmer.phone;
+
+        // Build template parameters from farmer data
+        const params = [];
+        const varMatches = (c.template_text || '').match(/\{\{(\d+)\}\}/g) || [];
+        for (let i = 0; i < varMatches.length; i++) {
+          if (i === 0) params.push({ type: 'text', text: farmer.name || 'Kisan' });
+          else if (i === 1) params.push({ type: 'text', text: (Array.isArray(farmer.crops) ? farmer.crops[0] : (farmer.crops || 'fasal')) });
+          else if (i === 2) params.push({ type: 'text', text: farmer.village || 'aapka area' });
+          else params.push({ type: 'text', text: 'info' });
+        }
+
+        const msgBody = {
+          messaging_product: 'whatsapp',
+          to: phone,
+          type: 'template',
+          template: {
+            name: c.wa_template_name,
+            language: { code: templateLang },
+            components: params.length ? [{ type: 'body', parameters: params }] : []
+          }
+        };
+
+        const resp = await axios.post(
+          'https://graph.facebook.com/v21.0/' + phoneNumberId + '/messages',
+          msgBody,
+          { headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } }
+        );
+
+        const waMessageId = resp.data.messages && resp.data.messages[0] ? resp.data.messages[0].id : null;
+        await pool.query(
+          'INSERT INTO campaign_messages (campaign_id, farmer_id, phone, wa_message_id, status, sent_at) VALUES ($1,$2,$3,$4,$5,NOW())',
+          [req.params.id, farmer.id, phone, waMessageId, 'sent']
+        );
+        sentCount++;
+        results.push({ farmer_id: farmer.id, status: 'sent' });
+
+        // Rate limit: 80 messages per second max, we do 20/sec to be safe
+        if (sentCount % 20 === 0) await new Promise(r => setTimeout(r, 1000));
+      } catch (err) {
+        failedCount++;
+        const errMsg = err.response ? JSON.stringify(err.response.data) : err.message;
+        await pool.query(
+          'INSERT INTO campaign_messages (campaign_id, farmer_id, phone, status, error_message, sent_at) VALUES ($1,$2,$3,$4,$5,NOW())',
+          [req.params.id, farmer.id, farmer.phone, 'failed', errMsg.substring(0, 500)]
+        );
+        results.push({ farmer_id: farmer.id, status: 'failed', error: errMsg.substring(0, 100) });
+      }
+    }
+
+    // Update campaign final status
+    await pool.query(
+      "UPDATE campaigns SET status='completed', sent_count=$1, delivered_count=$1, target_count=$2 WHERE id=$3",
+      [sentCount, farmers.rows.length, req.params.id]
+    );
+
+    res.json({ success: true, total: farmers.rows.length, sent: sentCount, failed: failedCount });
+  } catch (e) {
+    console.error('Campaign launch error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Get campaign details with message stats
+app.get('/api/v1/campaigns/:id', auth, async (req, res) => {
+  try {
+    const camp = await pool.query('SELECT c.*, t.name as template_name, t.wa_template_name, t.template_text FROM campaigns c LEFT JOIN message_templates t ON c.template_id=t.id WHERE c.id=$1', [req.params.id]);
+    if (!camp.rows.length) return res.status(404).json({ error: 'Campaign not found' });
+    const messages = await pool.query(
+      `SELECT cm.*, f.name as farmer_name, f.village FROM campaign_messages cm LEFT JOIN farmers f ON cm.farmer_id=f.id WHERE cm.campaign_id=$1 ORDER BY cm.sent_at DESC LIMIT 200`,
+      [req.params.id]
+    );
+    const stats = await pool.query(
+      `SELECT status, COUNT(*) as count FROM campaign_messages WHERE campaign_id=$1 GROUP BY status`,
+      [req.params.id]
+    );
+    res.json({ campaign: camp.rows[0], messages: messages.rows, stats: stats.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 
 // ==================== LOYALTY PROGRAM ====================
 

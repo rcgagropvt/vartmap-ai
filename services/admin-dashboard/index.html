@@ -1025,52 +1025,227 @@ async function deleteTemplate(id) { if (confirm('Delete this template?')) { awai
 // ------
 async function loadCampaigns() {
   const el = document.getElementById('pageContent');
+  el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading campaigns...</p></div>';
   try {
     const d = await api('/api/v1/campaigns');
+    const camps = d.campaigns || [];
+    var totalSent = camps.reduce(function(s,c){return s + (+c.sent_count||0);}, 0);
+    var totalDelivered = camps.reduce(function(s,c){return s + (+c.delivered_count||0);}, 0);
+    var totalRead = camps.reduce(function(s,c){return s + (+c.read_count||0);}, 0);
+
     el.innerHTML = `
+    <div class="stats-grid" style="margin-bottom:20px">
+      <div class="stat-card"><div class="stat-icon"><i class="fas fa-bullhorn"></i></div><div class="stat-info"><div class="stat-number">${camps.length}</div><div class="stat-label">Total Campaigns</div></div></div>
+      <div class="stat-card"><div class="stat-icon"><i class="fas fa-paper-plane"></i></div><div class="stat-info"><div class="stat-number">${totalSent}</div><div class="stat-label">Messages Sent</div></div></div>
+      <div class="stat-card"><div class="stat-icon"><i class="fas fa-check-double"></i></div><div class="stat-info"><div class="stat-number">${totalDelivered}</div><div class="stat-label">Delivered</div></div></div>
+      <div class="stat-card"><div class="stat-icon"><i class="fas fa-eye"></i></div><div class="stat-info"><div class="stat-number">${totalRead}</div><div class="stat-label">Read</div></div></div>
+    </div>
     <div class="table-wrap">
-      <div class="table-header">
-        <h3>Campaigns (${d.campaigns.length})</h3>
-        <button class="btn btn-primary btn-sm" onclick="newCampaignModal()"><i class="fas fa-plus"></i> New Campaign</button>
+      <div class="table-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <h3>Broadcast Campaigns (${camps.length})</h3>
+        <button class="btn btn-primary btn-sm" onclick="newCampaignModal()"><i class="fas fa-plus"></i> New Broadcast Campaign</button>
       </div>
-      <table><tr><th>Name</th><th>Template</th><th>Target</th><th>Sent</th><th>Delivered</th><th>Status</th><th>Scheduled</th><th>Actions</th></tr>
-      ${d.campaigns.map(c => `<tr>
-        <td><strong>${c.name}</strong></td><td>${c.template_name || '-'}</td><td>${c.target_count || 0}</td><td>${c.sent_count || 0}</td><td>${c.delivered_count || 0}</td>
-        <td><span class="status ${c.status}">${c.status}</span></td><td>${fmtDate(c.scheduled_at)}</td>
-        <td>
-          ${c.status === 'draft' ? `<button class="btn btn-sm btn-primary" onclick="updateCampaignStatus('${c.id}','active')"><i class="fas fa-play"></i></button>` : ''}
-          ${c.status === 'active' ? `<button class="btn btn-sm btn-danger" onclick="updateCampaignStatus('${c.id}','paused')"><i class="fas fa-pause"></i></button>` : ''}
-        </td>
-      </tr>`).join('')}
+      <table><tr><th>Campaign</th><th>Template</th><th>Audience</th><th>Sent</th><th>Delivered</th><th>Read</th><th>Status</th><th>Actions</th></tr>
+      ${camps.map(function(c) {
+        var statusColors = {draft:'#f39c12',sending:'#3498db',completed:'#27ae60',paused:'#e74c3c',active:'#27ae60'};
+        var statusLabel = (c.status||'draft').toUpperCase();
+        var criteria = typeof c.target_criteria === 'string' ? JSON.parse(c.target_criteria || '{}') : (c.target_criteria || {});
+        var filters = Object.keys(criteria).filter(function(k){return criteria[k];}).map(function(k){return k+':'+criteria[k];}).join(', ');
+        return '<tr>' +
+          '<td><strong>' + c.name + '</strong><br><span style="font-size:11px;color:#999">' + (filters || 'All farmers') + '</span></td>' +
+          '<td style="font-size:12px">' + (c.wa_template_name || c.template_name || '-') + '</td>' +
+          '<td>' + (c.target_count || 0) + '</td>' +
+          '<td>' + (c.sent_count || 0) + '</td>' +
+          '<td>' + (c.delivered_count || 0) + '</td>' +
+          '<td>' + (c.read_count || 0) + '</td>' +
+          '<td><span style="background:' + (statusColors[c.status]||'#95a5a6') + ';color:#fff;padding:2px 10px;border-radius:12px;font-size:12px">' + statusLabel + '</span></td>' +
+          '<td style="white-space:nowrap">' +
+            (c.status === 'draft' ? '<button class="btn btn-sm btn-primary" onclick="launchCampaign(\'' + c.id + '\',\'' + (c.name||'').replace(/'/g,'') + '\',' + (c.target_count||0) + ')" title="Launch"><i class="fas fa-rocket"></i></button> ' : '') +
+            '<button class="btn btn-sm btn-outline" onclick="viewCampaignDetails(\'' + c.id + '\')" title="Details"><i class="fas fa-chart-bar"></i></button> ' +
+            (c.status === 'draft' ? '<button class="btn btn-sm btn-danger" onclick="deleteCampaign(\'' + c.id + '\')" title="Delete"><i class="fas fa-trash"></i></button>' : '') +
+          '</td>' +
+        '</tr>';
+      }).join('')}
       </table>
     </div>`;
-  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error loading campaigns: ' + e.message + '</p></div>'; }
 }
 
-function newCampaignModal() {
-  openModal('New Campaign', `
-    <div class="form-group"><label>Campaign Name</label><input id="cName"></div>
+async function newCampaignModal() {
+  var optionsData = {states:[],crops:[],soil_types:[],irrigation_types:[],farming_types:[],languages:[]};
+  try { optionsData = await api('/api/v1/campaigns/filter-options'); } catch(e) {}
+  var templates = [];
+  try { var td = await api('/api/v1/templates'); templates = (td.templates||[]).filter(function(t){return t.status==='approved';}); } catch(e) {}
+
+  var stateOpts = '<option value="">All States</option>' + (optionsData.states||[]).map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('');
+  var cropOpts = '<option value="">All Crops</option>' + (optionsData.crops||[]).map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('');
+  var soilOpts = '<option value="">All Soil Types</option>' + (optionsData.soil_types||[]).map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('');
+  var irrOpts = '<option value="">All Irrigation</option>' + (optionsData.irrigation_types||[]).map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('');
+  var farmOpts = '<option value="">All Farming Types</option>' + (optionsData.farming_types||[]).map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join('');
+  var langOpts = '<option value="">All Languages</option>' + (optionsData.languages||[]).map(function(s){return '<option value="'+s+'">'+s.toUpperCase()+'</option>';}).join('');
+  var tmplOpts = '<option value="">-- Select Template --</option>' + templates.map(function(t){return '<option value="'+t.id+'" data-text="'+(t.template_text||'').substring(0,80)+'">'+t.name+' ('+t.wa_template_name+')</option>';}).join('');
+
+  openModal('New Broadcast Campaign', `
+    <div style="background:#e8f5e9;padding:12px;border-radius:8px;margin-bottom:16px;font-size:13px">
+      <i class="fas fa-satellite-dish"></i> Create a targeted broadcast — select audience filters, choose an approved template, and launch. Messages are sent via WhatsApp Business API.
+    </div>
+    <div class="form-group"><label>Campaign Name</label><input id="cName" placeholder="e.g. Kharif Season Mandi Alert"></div>
+    <div class="form-group"><label>Template (must be Meta-approved)</label><select id="cTemplate">${tmplOpts}</select><div id="cTemplatePreview" style="font-size:12px;color:#666;margin-top:4px"></div></div>
+
+    <h4 style="margin:16px 0 8px;color:#333"><i class="fas fa-filter"></i> Audience Filters</h4>
     <div class="form-row">
-      <div class="form-group"><label>Target District</label><input id="cDistrict" placeholder="e.g. Varanasi"></div>
-      <div class="form-group"><label>Target Crop</label><input id="cCrop" placeholder="e.g. wheat"></div>
+      <div class="form-group"><label>State</label><select id="cState" onchange="loadCampaignDistricts()">${stateOpts}</select></div>
+      <div class="form-group"><label>District</label><select id="cDistrict"><option value="">All Districts</option></select></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Target Language</label><select id="cLang"><option value="">All</option><option value="hi">Hindi</option><option value="en">English</option></select></div>
-      <div class="form-group"><label>Schedule Date</label><input id="cDate" type="datetime-local"></div>
+      <div class="form-group"><label>Crop</label><select id="cCrop">${cropOpts}</select></div>
+      <div class="form-group"><label>Language</label><select id="cLang">${langOpts}</select></div>
     </div>
-  `, `<button class="btn btn-primary" onclick="createCampaign()"><i class="fas fa-rocket"></i> Create</button>`);
+    <div class="form-row">
+      <div class="form-group"><label>Soil Type</label><select id="cSoil">${soilOpts}</select></div>
+      <div class="form-group"><label>Irrigation</label><select id="cIrrigation">${irrOpts}</select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Farming Type</label><select id="cFarming">${farmOpts}</select></div>
+      <div class="form-group"><label>Active in last N days</label><input id="cActiveDays" type="number" placeholder="e.g. 30 (blank = all)"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Min Land (acres)</label><input id="cMinLand" type="number" placeholder="e.g. 1"></div>
+      <div class="form-group"><label>Max Land (acres)</label><input id="cMaxLand" type="number" placeholder="e.g. 50"></div>
+    </div>
+    <div class="form-group"><label>Schedule (optional)</label><input id="cDate" type="datetime-local"></div>
+
+    <div style="background:#f0f7ff;padding:16px;border-radius:8px;margin-top:12px;text-align:center">
+      <button class="btn btn-outline btn-sm" onclick="previewAudience()" style="margin-bottom:8px"><i class="fas fa-users"></i> Preview Audience Count</button>
+      <div id="cAudienceCount" style="font-size:24px;font-weight:700;color:#2563eb">—</div>
+      <div style="font-size:12px;color:#666">farmers matching your filters</div>
+    </div>
+  `, `<button class="btn btn-outline" onclick="createCampaign(false)"><i class="fas fa-save"></i> Save Draft</button> <button class="btn btn-primary" onclick="createCampaign(true)"><i class="fas fa-rocket"></i> Save & Launch Now</button>`);
+
+  document.getElementById('cTemplate').addEventListener('change', function() {
+    var sel = this.options[this.selectedIndex];
+    document.getElementById('cTemplatePreview').textContent = sel.dataset.text || '';
+  });
 }
 
-async function createCampaign() {
-  await api('/api/v1/campaigns', { method: 'POST', body: JSON.stringify({
-    name: document.getElementById('cName').value,
-    target_criteria: { district: document.getElementById('cDistrict').value, crop: document.getElementById('cCrop').value, language: document.getElementById('cLang').value },
-    scheduled_at: document.getElementById('cDate').value || null
-  })});
-  closeModal(); loadCampaigns();
+async function loadCampaignDistricts() {
+  var state = document.getElementById('cState').value;
+  var distSelect = document.getElementById('cDistrict');
+  distSelect.innerHTML = '<option value="">All Districts</option>';
+  if (state) {
+    try {
+      var d = await api('/api/v1/campaigns/districts?state=' + encodeURIComponent(state));
+      (d.districts||[]).forEach(function(dist) {
+        distSelect.innerHTML += '<option value="' + dist + '">' + dist + '</option>';
+      });
+    } catch(e) {}
+  }
 }
 
-async function updateCampaignStatus(id, status) { await api('/api/v1/campaigns/' + id, { method: 'PUT', body: JSON.stringify({ status }) }); loadCampaigns(); }
+async function previewAudience() {
+  try {
+    var criteria = getCampaignCriteria();
+    var d = await api('/api/v1/campaigns/audience-count', { method: 'POST', body: JSON.stringify(criteria) });
+    document.getElementById('cAudienceCount').textContent = d.count;
+  } catch(e) { document.getElementById('cAudienceCount').textContent = 'Error'; }
+}
+
+function getCampaignCriteria() {
+  return {
+    state: document.getElementById('cState') ? document.getElementById('cState').value : '',
+    district: document.getElementById('cDistrict') ? document.getElementById('cDistrict').value : '',
+    crop: document.getElementById('cCrop') ? document.getElementById('cCrop').value : '',
+    language: document.getElementById('cLang') ? document.getElementById('cLang').value : '',
+    soil_type: document.getElementById('cSoil') ? document.getElementById('cSoil').value : '',
+    irrigation_type: document.getElementById('cIrrigation') ? document.getElementById('cIrrigation').value : '',
+    farming_type: document.getElementById('cFarming') ? document.getElementById('cFarming').value : '',
+    min_land: document.getElementById('cMinLand') ? document.getElementById('cMinLand').value : '',
+    max_land: document.getElementById('cMaxLand') ? document.getElementById('cMaxLand').value : '',
+    active_days: document.getElementById('cActiveDays') ? document.getElementById('cActiveDays').value : ''
+  };
+}
+
+async function createCampaign(launchNow) {
+  var name = document.getElementById('cName').value;
+  if (!name) { alert('Campaign name is required'); return; }
+  var templateId = document.getElementById('cTemplate').value;
+  if (!templateId) { alert('Please select an approved template'); return; }
+  var criteria = getCampaignCriteria();
+  // Remove empty values
+  Object.keys(criteria).forEach(function(k) { if (!criteria[k]) delete criteria[k]; });
+
+  try {
+    var saved = await api('/api/v1/campaigns', { method: 'POST', body: JSON.stringify({
+      name: name,
+      template_id: templateId,
+      target_criteria: criteria,
+      scheduled_at: document.getElementById('cDate').value || null
+    })});
+    if (launchNow && saved.campaign) {
+      if (!confirm('Launch campaign "' + name + '" to ' + (saved.campaign.target_count || 0) + ' farmers NOW?')) {
+        closeModal(); loadCampaigns(); return;
+      }
+      try {
+        var result = await api('/api/v1/campaigns/' + saved.campaign.id + '/launch', { method: 'POST' });
+        alert('Campaign launched!\nSent: ' + result.sent + '\nFailed: ' + result.failed + '\nTotal: ' + result.total);
+      } catch(le) {
+        alert('Campaign saved but launch failed: ' + (le.message || 'Unknown error'));
+      }
+    }
+    closeModal(); loadCampaigns();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function launchCampaign(id, name, count) {
+  if (!confirm('Launch campaign "' + name + '" to ' + count + ' farmers? This will send WhatsApp messages immediately.')) return;
+  try {
+    var result = await api('/api/v1/campaigns/' + id + '/launch', { method: 'POST' });
+    alert('Campaign launched!\nSent: ' + result.sent + '\nFailed: ' + result.failed + '\nTotal: ' + result.total);
+    loadCampaigns();
+  } catch(e) { alert('Launch failed: ' + (e.message || JSON.stringify(e))); }
+}
+
+async function viewCampaignDetails(id) {
+  try {
+    var d = await api('/api/v1/campaigns/' + id);
+    var c = d.campaign;
+    var msgs = d.messages || [];
+    var stats = {};
+    (d.stats||[]).forEach(function(s) { stats[s.status] = +s.count; });
+    var criteria = typeof c.target_criteria === 'string' ? JSON.parse(c.target_criteria || '{}') : (c.target_criteria || {});
+    var filters = Object.keys(criteria).filter(function(k){return criteria[k];}).map(function(k){return '<strong>'+k+':</strong> '+criteria[k];}).join(' | ');
+
+    openModal('Campaign: ' + c.name, `
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+        <div style="text-align:center;padding:12px;background:#e8f5e9;border-radius:8px"><div style="font-size:24px;font-weight:700">${stats.sent||0}</div><div style="font-size:12px;color:#666">Sent</div></div>
+        <div style="text-align:center;padding:12px;background:#e3f2fd;border-radius:8px"><div style="font-size:24px;font-weight:700">${stats.delivered||0}</div><div style="font-size:12px;color:#666">Delivered</div></div>
+        <div style="text-align:center;padding:12px;background:#fff3e0;border-radius:8px"><div style="font-size:24px;font-weight:700">${stats.read||0}</div><div style="font-size:12px;color:#666">Read</div></div>
+        <div style="text-align:center;padding:12px;background:#fce4ec;border-radius:8px"><div style="font-size:24px;font-weight:700">${stats.failed||0}</div><div style="font-size:12px;color:#666">Failed</div></div>
+      </div>
+      <div style="margin-bottom:12px;font-size:13px"><strong>Filters:</strong> ${filters || 'All farmers'}</div>
+      <div style="margin-bottom:12px;font-size:13px"><strong>Template:</strong> ${c.wa_template_name || c.template_name || '-'}</div>
+      <div style="margin-bottom:12px;font-size:13px"><strong>Template Text:</strong> ${(c.template_text||'').substring(0,200)}</div>
+      <h4 style="margin:12px 0 8px">Message Log (${msgs.length})</h4>
+      <div style="max-height:300px;overflow-y:auto">
+        <table style="font-size:12px"><tr><th>Farmer</th><th>Phone</th><th>Status</th><th>Error</th></tr>
+        ${msgs.map(function(m) {
+          var sc = {sent:'#27ae60',delivered:'#3498db',read:'#2ecc71',failed:'#e74c3c'};
+          return '<tr><td>'+(m.farmer_name||'-')+'</td><td>'+m.phone+'</td><td><span style="color:'+(sc[m.status]||'#999')+';font-weight:600">'+m.status+'</span></td><td style="color:#e74c3c;font-size:11px">'+(m.error_message||'')+'</td></tr>';
+        }).join('')}
+        </table>
+      </div>
+    `, '<button class="btn btn-outline" onclick="closeModal()">Close</button>');
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function deleteCampaign(id) {
+  if (!confirm('Delete this campaign and all its message logs?')) return;
+  try { await api('/api/v1/campaigns/' + id, { method: 'DELETE' }); loadCampaigns(); }
+  catch(e) { alert('Error: ' + e.message); }
+}
+
+async function updateCampaignStatus(id, status) { await api('/api/v1/campaigns/' + id, { method: 'PUT', body: JSON.stringify({ status: status }) }); loadCampaigns(); }
+
 // ------
 // ------
 async function loadSpinWheels() {
