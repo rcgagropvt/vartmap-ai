@@ -440,17 +440,31 @@ app.post('/api/v1/templates/:id/submit-to-meta', auth, async (req, res) => {
     const token = process.env.WA_ACCESS_TOKEN;
     if (!wabaId || !token) return res.status(400).json({ error: 'WABA_ID or WA_ACCESS_TOKEN not configured' });
 
+    // Extract variables from template text ({{1}}, {{2}}, etc.)
+    const varMatches = (t.template_text || '').match(/\{\{(\d+)\}\}/g) || [];
+    const varCount = varMatches.length;
+    const exampleValues = req.body.example_values || [];
+    // Fill missing examples with placeholder
+    while (exampleValues.length < varCount) exampleValues.push('example_' + (exampleValues.length + 1));
+
     // Build Meta template components
-    const components = [{ type: 'BODY', text: t.template_text }];
+    const bodyComponent = { type: 'BODY', text: t.template_text };
+    if (varCount > 0) {
+      bodyComponent.example = { body_text: [exampleValues.slice(0, varCount)] };
+    }
+
+    const components = [bodyComponent];
     if (req.body.header_text) components.unshift({ type: 'HEADER', format: 'TEXT', text: req.body.header_text });
     if (req.body.footer_text) components.push({ type: 'FOOTER', text: req.body.footer_text });
     if (req.body.buttons) components.push({ type: 'BUTTONS', buttons: req.body.buttons });
 
     const langMap = { hi: 'hi', en: 'en_US', mr: 'mr', gu: 'gu', pa: 'pa', bn: 'bn', ta: 'ta', te: 'te', kn: 'kn' };
+    const templateName = t.wa_template_name || t.name.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+
     const metaResp = await axios.post(
       'https://graph.facebook.com/v21.0/' + wabaId + '/message_templates',
       {
-        name: t.wa_template_name || t.name.toLowerCase().replace(/\s+/g, '_'),
+        name: templateName,
         language: langMap[t.language] || 'hi',
         category: (t.category || 'marketing').toUpperCase(),
         components: components
@@ -461,16 +475,17 @@ app.post('/api/v1/templates/:id/submit-to-meta', auth, async (req, res) => {
     // Update local template with Meta ID and status
     await pool.query(
       'UPDATE message_templates SET meta_template_id=$1, status=$2, wa_template_name=COALESCE(wa_template_name,$3) WHERE id=$4',
-      [metaResp.data.id, 'pending', t.wa_template_name || t.name.toLowerCase().replace(/\s+/g, '_'), req.params.id]
+      [metaResp.data.id, 'pending', templateName, req.params.id]
     );
 
-    res.json({ success: true, meta_id: metaResp.data.id, status: metaResp.data.status });
+    res.json({ success: true, meta_id: metaResp.data.id, status: metaResp.data.status || 'PENDING' });
   } catch (e) {
     const metaError = e.response ? e.response.data : { message: e.message };
     console.error('Meta template submit error:', metaError);
     res.status(500).json({ error: 'Meta API error', details: metaError });
   }
 });
+
 
 // Sync template status from Meta
 app.post('/api/v1/templates/:id/sync-meta', auth, async (req, res) => {

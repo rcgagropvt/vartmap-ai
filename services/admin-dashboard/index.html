@@ -782,48 +782,221 @@ async function loadTemplates() {
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
   try {
     const d = await api('/api/v1/templates');
+    // Also fetch Meta templates for sync
+    let metaTemplates = [];
+    try { const m = await api('/api/v1/templates/meta/all'); metaTemplates = m.templates || []; } catch(e) {}
+
+    const statusBadge = (s) => {
+      const colors = { approved:'#27ae60', active:'#27ae60', pending:'#f39c12', rejected:'#e74c3c', 'in_review':'#3498db', deleted:'#95a5a6' };
+      const label = (s||'draft').toUpperCase();
+      return `<span style="background:${colors[s]||'#95a5a6'};color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600">${label}</span>`;
+    };
+
     el.innerHTML = `
     <div class="table-wrap">
-      <div class="table-header">
+      <div class="table-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
         <h3>Message Templates (${d.templates.length})</h3>
-        <button class="btn btn-primary btn-sm" onclick="newTemplateModal()"><i class="fas fa-plus"></i> New Template</button>
+        <div style="display:flex;gap:8px"><button class="btn btn-sm btn-outline" onclick="syncAllMetaTemplates()"><i class="fas fa-sync"></i> Sync from Meta</button><button class="btn btn-primary btn-sm" onclick="newTemplateModal()"><i class="fas fa-plus"></i> Create & Submit Template</button></div>
       </div>
-      <table><tr><th>Name</th><th>Language</th><th>Category</th><th>WA Name</th><th>Status</th><th>Actions</th></tr>
+      <table><tr><th>Name</th><th>WA Name</th><th>Language</th><th>Category</th><th>Status</th><th>Actions</th></tr>
       ${d.templates.map(t => `<tr>
-        <td><strong>${t.name}</strong></td><td>${t.language}</td><td>${t.category || '-'}</td><td>${t.wa_template_name || '-'}</td>
-        <td><span class="status ${t.status}">${t.status}</span></td>
-        <td>
+        <td><strong>${t.name}</strong></td>
+        <td style="font-family:monospace;font-size:12px">${t.wa_template_name || '-'}</td>
+        <td>${t.language}</td>
+        <td>${(t.category || '-').toUpperCase()}</td>
+        <td><span class="status ${t.status}">${(t.status||'draft').toUpperCase()}</span></td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-sm btn-primary" onclick="submitToMeta('${t.id}')" title="Submit to Meta"><i class="fas fa-paper-plane"></i></button>
+          <button class="btn btn-sm btn-outline" onclick="syncMetaStatus('${t.id}')" title="Sync Status"><i class="fas fa-sync"></i></button>
           <button class="btn btn-sm btn-outline" onclick="editTemplate('${t.id}','${encodeURIComponent(JSON.stringify(t))}')"><i class="fas fa-edit"></i></button>
           <button class="btn btn-sm btn-danger" onclick="deleteTemplate('${t.id}')"><i class="fas fa-trash"></i></button>
         </td>
       </tr>`).join('')}
       </table>
+      ${metaTemplates.length ? `
+      <div style="margin-top:24px;padding:16px;background:#f0f7ff;border-radius:8px">
+        <h4 style="margin-bottom:8px"><i class="fas fa-cloud"></i> Meta Cloud Templates (${metaTemplates.length})</h4>
+        <table><tr><th>WA Name</th><th>Language</th><th>Category</th><th>Status</th></tr>
+        ${metaTemplates.map(m => `<tr>
+          <td style="font-family:monospace">${m.name}</td><td>${m.language}</td><td>${m.category}</td><td>${statusBadge(m.status.toLowerCase())}</td>
+        </tr>`).join('')}
+        </table>
+      </div>` : ''}
     </div>`;
-  } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
+  } catch (e) { el.innerHTML = '<div class="empty"><p>Error loading templates</p></div>'; }
 }
 
 function newTemplateModal() {
-  openModal('New Template', `
-    <div class="form-group"><label>Name</label><input id="tName"></div>
-    <div class="form-row">
-      <div class="form-group"><label>Language</label><select id="tLang"><option value="hi">Hindi</option><option value="en">English</option><option value="te">Telugu</option><option value="mr">Marathi</option></select></div>
-      <div class="form-group"><label>Category</label><select id="tCat"><option value="marketing">Marketing</option><option value="utility">Utility</option><option value="authentication">Auth</option><option value="alert">Alert</option></select></div>
+  openModal('Create & Submit Template to Meta', `
+    <div style="background:#fff3cd;padding:12px;border-radius:8px;margin-bottom:16px;font-size:13px">
+      <i class="fas fa-info-circle"></i> Fill in details and click <strong>Save & Submit to Meta</strong> for approval without opening Meta.
     </div>
-    <div class="form-group"><label>Template Text</label><textarea id="tText" rows="4" placeholder="Use {{1}}, {{2}} for variables"></textarea></div>
-    <div class="form-group"><label>WA Template Name (for approval)</label><input id="tWAName" placeholder="e.g. crop_alert_v1"></div>
-  `, `<button class="btn btn-primary" onclick="saveNewTemplate()"><i class="fas fa-save"></i> Save</button>`);
+    <div class="form-group"><label>Display Name</label><input id="tName" placeholder="e.g. Mandi Price Alert"></div>
+    <div class="form-group"><label>WA Template Name <span style="color:#999;font-size:12px">(lowercase, underscores only)</span></label><input id="tWAName" placeholder="e.g. mandi_price_alert" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_]/g,'')"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Language</label><select id="tLang"><option value="hi">Hindi</option><option value="en">English</option><option value="mr">Marathi</option><option value="gu">Gujarati</option><option value="pa">Punjabi</option><option value="te">Telugu</option></select></div>
+      <div class="form-group"><label>Category</label><select id="tCat"><option value="marketing">Marketing</option><option value="utility">Utility</option></select></div>
+    </div>
+    <div class="form-group"><label>Header <span style="color:#999;font-size:12px">(optional)</span></label><input id="tHeader" placeholder="e.g. VartMap Alert"></div>
+    <div class="form-group"><label>Body Text <span style="color:#999;font-size:12px">(use {{1}}, {{2}} for variables)</span></label><textarea id="tText" rows="5" placeholder="Use {{1}}, {{2}} for variables"></textarea></div>
+    <div class="form-group"><label>Footer <span style="color:#999;font-size:12px">(optional)</span></label><input id="tFooter" placeholder="e.g. VartMap - Aapki Kheti Ka Digital Map"></div>
+    <div class="form-group"><label>Variable Examples <span style="color:#999;font-size:12px">(comma-separated, one per variable)</span></label><input id="tExamples" placeholder="e.g. Ramesh, Gehun, 2450"></div>
+  `, `<button class="btn btn-outline" onclick="saveTemplateDraft()"><i class="fas fa-save"></i> Save Draft</button> <button class="btn btn-primary" onclick="saveTemplateAndSubmit()"><i class="fas fa-paper-plane"></i> Save & Submit to Meta</button>`);
 }
 
-async function saveNewTemplate() {
-  await api('/api/v1/templates', { method: 'POST', body: JSON.stringify({
-    name: document.getElementById('tName').value,
-    language: document.getElementById('tLang').value,
-    category: document.getElementById('tCat').value,
-    template_text: document.getElementById('tText').value,
-    wa_template_name: document.getElementById('tWAName').value
-  })});
-  closeModal(); loadTemplates();
+async function saveTemplateDraft() {
+  var n = document.getElementById('tName').value;
+  var w = document.getElementById('tWAName').value;
+  var tx = document.getElementById('tText').value;
+  if (!n || !w || !tx) { alert('Name, WA Name, and Body Text are required'); return; }
+  try {
+    await api('/api/v1/templates', { method: 'POST', body: JSON.stringify({
+      name: n, language: document.getElementById('tLang').value,
+      category: document.getElementById('tCat').value,
+      template_text: tx, wa_template_name: w, variables: '{}'
+    })});
+    closeModal(); loadTemplates();
+  } catch (e) { alert('Error: ' + e.message); }
 }
+
+async function saveTemplateAndSubmit() {
+  var n = document.getElementById('tName').value;
+  var w = document.getElementById('tWAName').value;
+  var tx = document.getElementById('tText').value;
+  if (!n || !w || !tx) { alert('Name, WA Name, and Body Text are required'); return; }
+  try {
+    var saved = await api('/api/v1/templates', { method: 'POST', body: JSON.stringify({
+      name: n, language: document.getElementById('tLang').value,
+      category: document.getElementById('tCat').value,
+      template_text: tx, wa_template_name: w, variables: '{}'
+    })});
+    if (saved && saved.template) {
+      var hdr = document.getElementById('tHeader').value;
+      var ftr = document.getElementById('tFooter').value;
+      var exArr = (document.getElementById('tExamples').value || '').split(',').map(function(s){return s.trim();}).filter(Boolean);
+      try {
+        var metaResult = await api('/api/v1/templates/' + saved.template.id + '/submit-to-meta', {
+          method: 'POST', body: JSON.stringify({ header_text: hdr || undefined, footer_text: ftr || undefined, example_values: exArr.length ? exArr : undefined })
+        });
+        alert('Template submitted to Meta! Approval takes a few minutes to 24 hours.');
+      } catch (me) {
+        alert('Saved locally but Meta submission failed: ' + (me.message || 'Unknown error') + '. You can retry later.');
+      }
+    }
+    closeModal(); loadTemplates();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+
+async function saveNewTemplate(submitToMeta) {
+  const name = document.getElementById('tName').value;
+  const waName = document.getElementById('tWAName').value;
+  const text = document.getElementById('tText').value;
+  if (!name || !waName || !text) return alert('Name, WA Template Name, and Body Text are required');
+  try {
+    const saved = await api('/api/v1/templates', { method: 'POST', body: JSON.stringify({
+      name: name,
+      language: document.getElementById('tLang').value,
+      category: document.getElementById('tCat').value,
+      template_text: text,
+      wa_template_name: waName,
+      variables: '{}'
+    })});
+    if (submitToMeta && saved.template) {
+      const header = document.getElementById('tHeader').value;
+      const footer = document.getElementById('tFooter').value;
+      const examples = (document.getElementById('tExamples').value||'').split(',').map(s=>s.trim()).filter(Boolean);
+      try {
+        const metaResult = await api('/api/v1/templates/' + saved.template.id + '/submit-to-meta', {
+          method: 'POST',
+          body: JSON.stringify({ header_text: header || undefined, footer_text: footer || undefined, example_values: examples.length ? examples : undefined })
+        });
+        alert('Template submitted to Meta! Status: ' + (metaResult.status || 'PENDING') + '. Approval usually takes a few minutes to 24 hours.');
+      } catch (metaErr) {
+        alert('Template saved locally but Meta submission failed: ' + (metaErr.message || JSON.stringify(metaErr)) + '. You can retry from the template list.');
+      }
+    }
+    closeModal(); loadTemplates();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function submitToMeta(templateId) {
+  if (!confirm('Submit this template to Meta for approval?')) return;
+  try {
+    const result = await api('/api/v1/templates/' + templateId + '/submit-to-meta', { method: 'POST', body: '{}' });
+    alert('Submitted! Meta ID: ' + (result.meta_id || 'pending') + '. Approval takes a few minutes to 24 hours.');
+    loadTemplates();
+  } catch (e) { alert('Meta submission failed: ' + (e.message || JSON.stringify(e))); }
+}
+
+async function syncMetaStatus(templateId) {
+  try {
+    const result = await api('/api/v1/templates/' + templateId + '/sync-meta', { method: 'POST' });
+    alert('Status synced: ' + (result.status || 'unknown'));
+    loadTemplates();
+  } catch (e) { alert('Sync failed: ' + e.message); }
+}
+
+async function syncAllMetaTemplates() {
+  try {
+    const d = await api('/api/v1/templates');
+    let synced = 0;
+    for (const t of (d.templates||[])) {
+      if (t.wa_template_name) {
+        try { await api('/api/v1/templates/' + t.id + '/sync-meta', { method: 'POST' }); synced++; } catch(e) {}
+      }
+    }
+    alert('Synced ' + synced + ' templates from Meta');
+    loadTemplates();
+  } catch (e) { alert('Sync failed: ' + e.message); }
+}
+
+function previewTemplate(encoded) {
+  const t = JSON.parse(decodeURIComponent(encoded));
+  openModal('Template Preview', `
+    <div style="max-width:360px;margin:0 auto">
+      <div style="background:#075e54;color:#fff;padding:12px;border-radius:8px 8px 0 0;font-size:14px"><i class="fas fa-check-circle"></i> ${t.wa_template_name || t.name}</div>
+      <div style="background:#e5ddd5;padding:16px;min-height:100px">
+        <div style="background:#dcf8c6;padding:12px;border-radius:8px;font-size:14px;white-space:pre-wrap;max-width:280px;margin-left:auto">${t.template_text || ''}</div>
+      </div>
+      <div style="background:#f0f0f0;padding:8px 12px;border-radius:0 0 8px 8px;font-size:12px;color:#666">
+        <strong>Language:</strong> ${t.language} | <strong>Category:</strong> ${(t.category||'').toUpperCase()} | <strong>Status:</strong> ${(t.status||'draft').toUpperCase()}
+      </div>
+    </div>
+  `, '<button class="btn btn-outline" onclick="closeModal()">Close</button>');
+}
+
+async function submitToMeta(templateId) {
+  if (!confirm('Submit this template to Meta for approval?')) return;
+  try {
+    var result = await api('/api/v1/templates/' + templateId + '/submit-to-meta', { method: 'POST', body: '{}' });
+    alert('Submitted to Meta! Approval takes a few minutes to 24 hours.');
+    loadTemplates();
+  } catch (e) { alert('Meta submission failed: ' + (e.message || JSON.stringify(e))); }
+}
+
+async function syncMetaStatus(templateId) {
+  try {
+    var result = await api('/api/v1/templates/' + templateId + '/sync-meta', { method: 'POST' });
+    alert('Status synced: ' + (result.status || 'unknown'));
+    loadTemplates();
+  } catch (e) { alert('Sync failed: ' + e.message); }
+}
+
+async function syncAllMetaTemplates() {
+  try {
+    var d = await api('/api/v1/templates');
+    var synced = 0;
+    for (var i = 0; i < (d.templates||[]).length; i++) {
+      if (d.templates[i].wa_template_name) {
+        try { await api('/api/v1/templates/' + d.templates[i].id + '/sync-meta', { method: 'POST' }); synced++; } catch(e) {}
+      }
+    }
+    alert('Synced ' + synced + ' templates from Meta');
+    loadTemplates();
+  } catch (e) { alert('Sync failed: ' + e.message); }
+}
+
 
 function editTemplate(id, encoded) {
   const t = JSON.parse(decodeURIComponent(encoded));
@@ -831,10 +1004,10 @@ function editTemplate(id, encoded) {
     <div class="form-group"><label>Name</label><input id="teName" value="${t.name}"></div>
     <div class="form-row">
       <div class="form-group"><label>Language</label><input id="teLang" value="${t.language}"></div>
-      <div class="form-group"><label>Category</label><input id="teCat" value="${t.category || ''}"></div>
+      <div class="form-group"><label>Category</label><select id="teCat"><option value="marketing" ${t.category==='marketing'?'selected':''}>Marketing</option><option value="utility" ${t.category==='utility'?'selected':''}>Utility</option></select></div>
     </div>
     <div class="form-group"><label>Template Text</label><textarea id="teText" rows="4">${t.template_text || ''}</textarea></div>
-    <div class="form-group"><label>Status</label><select id="teStatus"><option ${t.status==='active'?'selected':''}>active</option><option ${t.status==='inactive'?'selected':''}>inactive</option></select></div>
+    <div class="form-group"><label>Status</label><select id="teStatus"><option ${t.status==='active'?'selected':''}>active</option><option ${t.status==='approved'?'selected':''}>approved</option><option ${t.status==='pending'?'selected':''}>pending</option><option ${t.status==='inactive'?'selected':''}>inactive</option></select></div>
   `, `<button class="btn btn-primary" onclick="updateTemplate('${id}')"><i class="fas fa-save"></i> Update</button>`);
 }
 
