@@ -1356,19 +1356,29 @@ async function loadAnalytics() {
 
 
   try {
-    const [campData, farmerData, templateData, geoData, convData, roiData] = await Promise.all([
+    const [campData, farmerData, templateData, geoData, convData, roiData, aiOverview, aiUsage, settingsResp] = await Promise.all([
       api('/api/v1/analytics/campaigns?days=30'),
       api('/api/v1/analytics/farmers?days=30'),
       api('/api/v1/analytics/templates'),
       api('/api/v1/analytics/geographic'),
       api('/api/v1/analytics/conversations?days=30'),
-      api('/api/v1/analytics/roi?days=30')
+
+      api('/api/v1/analytics/roi?days=30'),
+      api('/api/v1/analytics/overview?days=30'),
+      api('/api/v1/analytics/usage'),
+      api('/api/v1/settings')
     ]);
 
     const o = campData.overview || {};
     const conv = convData.overview || {};
     const roi = roiData || {};
-
+    const roi = roiData || {};
+    const aiOv = aiOverview || {};
+    const aiUs = aiUsage || {};
+    const sett = (settingsResp.settings || {});
+    const monthlyBudget = parseFloat(sett.ai_monthly_budget_inr || '2000');
+    const totalAiCost = (aiUs.by_feature||[]).reduce((s,f) => s + parseFloat(f.total_cost||0), 0);
+    const budgetPct = monthlyBudget > 0 ? ((totalAiCost / monthlyBudget) * 100).toFixed(1) : 0;
     el.innerHTML = `
     <div class="table-wrap">
       <div class="table-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
@@ -1575,6 +1585,81 @@ async function loadAnalytics() {
         <td><span style="color:${parseFloat(r.engagement_rate)>30?'#16a34a':'#f97316'};font-weight:600">${r.engagement_rate}%</span></td>
       </tr>`).join('')}
       </table>
+      <!-- AI Budget & Usage -->
+      <h4 style="margin:20px 0 10px;color:#666;font-size:13px;text-transform:uppercase;letter-spacing:1px">AI Budget & Usage (30 days)</h4>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:16px">
+        <div style="background:#f0f9ff;padding:16px;border-radius:10px;text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#0369a1">₹${totalAiCost.toFixed(2)}</div>
+          <div style="font-size:12px;color:#666">AI Spend (30d)</div>
+        </div>
+        <div style="background:${parseFloat(budgetPct)>80?'#fef2f2':'#f0fdf4'};padding:16px;border-radius:10px;text-align:center">
+          <div style="font-size:28px;font-weight:700;color:${parseFloat(budgetPct)>80?'#dc2626':'#16a34a'}">${budgetPct}%</div>
+          <div style="font-size:12px;color:#666">of ₹${monthlyBudget} Budget</div>
+        </div>
+        <div style="background:#faf5ff;padding:16px;border-radius:10px;text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#7c3aed">${(aiUs.daily||[]).reduce((s,d)=>s+parseInt(d.count||0),0)}</div>
+          <div style="font-size:12px;color:#666">AI Requests (30d)</div>
+        </div>
+        <div style="background:#fefce8;padding:16px;border-radius:10px;text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#ca8a04">${(aiUs.by_feature||[]).length}</div>
+          <div style="font-size:12px;color:#666">AI Features Used</div>
+        </div>
+      </div>
+      <!-- Budget Progress Bar -->
+      <div style="background:#e5e7eb;border-radius:8px;height:20px;margin-bottom:12px;overflow:hidden">
+        <div style="background:${parseFloat(budgetPct)>80?'#dc2626':parseFloat(budgetPct)>50?'#f59e0b':'#16a34a'};height:100%;width:${Math.min(100,parseFloat(budgetPct))}%;border-radius:8px;transition:width 0.5s"></div>
+      </div>
+      <!-- AI Feature Breakdown -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
+        <div style="background:#fff;padding:16px;border-radius:10px;border:1px solid #eee">
+          <h4 style="margin:0 0 12px;font-size:14px;color:#333"><i class="fas fa-robot" style="color:#7c3aed"></i> AI Usage by Feature</h4>
+          ${(aiUs.by_feature||[]).map(f => {
+            const maxF = Math.max(...(aiUs.by_feature||[]).map(x=>parseInt(x.count)||1));
+            const pct = ((parseInt(f.count)/maxF)*100).toFixed(0);
+            return '<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px"><span>'+f.feature+'</span><span style="font-weight:600">'+f.count+' calls · ₹'+parseFloat(f.total_cost||0).toFixed(2)+'</span></div><div style="background:#e5e7eb;border-radius:4px;height:8px"><div style="background:#7c3aed;height:100%;border-radius:4px;width:'+pct+'%"></div></div></div>';
+          }).join('')}
+        </div>
+        <div style="background:#fff;padding:16px;border-radius:10px;border:1px solid #eee">
+          <h4 style="margin:0 0 12px;font-size:14px;color:#333"><i class="fas fa-chart-area" style="color:#0369a1"></i> Daily AI Cost Trend</h4>
+          <div style="display:flex;align-items:flex-end;gap:3px;height:80px">
+            ${(aiUs.costs||[]).map(d => {
+              const maxC = Math.max(...(aiUs.costs||[]).map(x=>parseFloat(x.cost)||0.01));
+              const h = Math.max(4, (parseFloat(d.cost)/maxC)*100);
+              return '<div style="flex:1;background:#0369a1;height:'+h+'%;border-radius:2px 2px 0 0;min-height:2px" title="'+(d.date||'')+': ₹'+parseFloat(d.cost||0).toFixed(2)+'"></div>';
+            }).join('')}
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:9px;color:#999;margin-top:4px">
+            <span>${(aiUs.costs||[]).length > 0 ? (aiUs.costs[0].date||'').slice(5) : ''}</span>
+            <span>${(aiUs.costs||[]).length > 0 ? (aiUs.costs[aiUs.costs.length-1].date||'').slice(5) : ''}</span>
+          </div>
+        </div>
+      </div>
+      <!-- Conversation Analytics -->
+      <h4 style="margin:20px 0 10px;color:#666;font-size:13px;text-transform:uppercase;letter-spacing:1px">Conversation Insights (30 days)</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
+        <div style="background:#fff;padding:16px;border-radius:10px;border:1px solid #eee">
+          <h4 style="margin:0 0 12px;font-size:14px;color:#333"><i class="fas fa-brain" style="color:#f59e0b"></i> Top Intents</h4>
+          ${(aiOv.by_intent||[]).slice(0,8).map(i => {
+            const maxI = Math.max(...(aiOv.by_intent||[]).map(x=>parseInt(x.count)||1));
+            const pct = ((parseInt(i.count)/maxI)*100).toFixed(0);
+            return '<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px"><span>'+(i.intent||'unknown')+'</span><span style="font-weight:600">'+i.count+'</span></div><div style="background:#e5e7eb;border-radius:4px;height:8px"><div style="background:#f59e0b;height:100%;border-radius:4px;width:'+pct+'%"></div></div></div>';
+          }).join('')}
+        </div>
+        <div style="background:#fff;padding:16px;border-radius:10px;border:1px solid #eee">
+          <h4 style="margin:0 0 12px;font-size:14px;color:#333"><i class="fas fa-user-clock" style="color:#16a34a"></i> Farmer Growth Trend</h4>
+          <div style="display:flex;align-items:flex-end;gap:3px;height:80px">
+            ${(aiOv.farmer_growth||[]).map(d => {
+              const maxG = Math.max(...(aiOv.farmer_growth||[]).map(x=>parseInt(x.new_farmers)||1));
+              const h = Math.max(4, (parseInt(d.new_farmers)/maxG)*100);
+              return '<div style="flex:1;background:#16a34a;height:'+h+'%;border-radius:2px 2px 0 0;min-height:2px" title="'+(d.date||'')+': '+d.new_farmers+' new farmers"></div>';
+            }).join('')}
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:9px;color:#999;margin-top:4px">
+            <span>${(aiOv.farmer_growth||[]).length > 0 ? (aiOv.farmer_growth[0].date||'').slice(5) : ''}</span>
+            <span>${(aiOv.farmer_growth||[]).length > 0 ? (aiOv.farmer_growth[aiOv.farmer_growth.length-1].date||'').slice(5) : ''}</span>
+          </div>
+        </div>
+      </div>
     </div>`;
   } catch (e) {
     el.innerHTML = '<div style="padding:40px;text-align:center;color:#dc2626"><i class="fas fa-exclamation-triangle"></i> Error loading analytics: ' + e.message + '</div>';
