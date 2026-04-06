@@ -2140,6 +2140,349 @@ app.get('/api/v1/analytics/usage', auth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ═══════════════════════════════════════════════════════
+// ADVANCED ANALYTICS ENDPOINTS
+// ═══════════════════════════════════════════════════════
+
+// GET /api/v1/analytics/campaigns — Campaign performance summary
+app.get('/api/v1/analytics/campaigns', auth, async (req, res) => {
+  try {
+    const { days = 30 } = req.query;
+    
+    // Overall campaign stats
+    const overview = await pool.query(`
+      SELECT 
+        COUNT(*) as total_campaigns,
+        COUNT(*) FILTER (WHERE status='completed') as completed,
+        COUNT(*) FILTER (WHERE status='active' OR status='sending') as active,
+        COALESCE(SUM(sent_count),0) as total_sent,
+        COALESCE(SUM(delivered_count),0) as total_delivered,
+        COALESCE(SUM(read_count),0) as total_read,
+        COALESCE(SUM(total_cost),0) as total_cost
+      FROM campaigns WHERE created_at > NOW() - INTERVAL '1 day' * $1
+    `, [days]);
+
+    // Per-campaign breakdown
+    const campaigns = await pool.query(`
+      SELECT c.id, c.name, c.status, c.sent_count, c.delivered_count, c.read_count,
+        c.total_cost, c.created_at, c.sent_at,
+        t.name as template_name, t.wa_template_name,
+        CASE WHEN c.sent_count > 0 THEN ROUND(c.delivered_count::numeric/c.sent_count*100,1) ELSE 0 END as delivery_rate,
+        CASE WHEN c.delivered_count > 0 THEN ROUND(c.read_count::numeric/c.delivered_count*100,1) ELSE 0 END as read_rate,
+        (SELECT COUNT(*) FROM campaign_messages WHERE campaign_id=c.id AND status='failed') as failed_count
+      FROM campaigns c
+      LEFT JOIN message_templates t ON c.template_id=t.id
+      WHERE c.created_at > NOW() - INTERVAL '1 day' * $1
+      ORDER BY c.created_at DESC
+    `, [days]);
+
+    // Daily send volume (for chart)
+    const daily = await pool.query(`
+      SELECT DATE(sent_at) as date, 
+        COUNT(*) as sent,
+        COUNT(*) FILTER (WHERE status='delivered' OR status='read') as delivered,
+        COUNT(*) FILTER (WHERE status='read') as read,
+        COUNT(*) FILTER (WHERE status='failed') as failed
+      FROM campaign_messages
+      WHERE sent_at > NOW() - INTERVAL '1 day' * $1
+      GROUP BY DATE(sent_at)
+      ORDER BY date
+    `, [days]);
+
+    res.json({
+      overview: overview.rows[0],
+      campaigns: campaigns.rows,
+      daily_trend: daily.rows
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/v1/analytics/farmers — Farmer engagement analytics
+app.get('/api/v1/analytics/farmers', auth, async (req, res) => {
+  try {
+    const { days = 30 } = req.query;
+
+    // Engagement tier distribution
+    const tiers = await pool.query(`
+      SELECT 
+        CASE 
+          WHEN updated_at < NOW() - INTERVAL '90 days' OR updated_at IS NULL THEN 'inactive'
+          WHEN updated_at < NOW() - INTERVAL '30 days' THEN 'low'
+          WHEN updated_at < NOW() - INTERVAL '7 days' THEN 'medium'
+          ELSE 'high'
+        END as tier,
+        COUNT(*) as count
+      FROM farmers WHERE status='active'
+      GROUP BY tier
+    `);
+
+    // Farmer growth trend
+    const growth = await pool.query(`
+      SELECT DATE(created_at) as date, COUNT(*) as new_farmers,
+        SUM(COUNT(*)) OVER (ORDER BY DATE(created_at)) as cumulative
+      FROM farmers
+      WHERE created_at > NOW() - INTERVAL '1 day' * $1
+      GROUP BY DATE(created_at)
+      ORDER BY date
+    `, [days]);
+
+    // Top engaged farmers
+    const topFarmers = await pool.query(`
+      SELECT f.id, f.name, f.phone, f.village, f.crops,
+        COUNT(wm.id) as total_messages,
+        MAX(wm.created_at) as last_active,
+        COUNT(cm.id) FILTER (WHERE cm.status='read') as campaigns_read
+      FROM farmers f
+      LEFT JOIN wa_messages wm ON f.id=wm.farmer_id AND wm.created_at > NOW() - INTERVAL '1 day' * $1
+      LEFT JOIN campaign_messages cm ON f.id=cm.farmer_id AND cm.sent_at > NOW() - INTERVAL '1 day' * $1
+      WHERE f.status='active'
+      GROUP BY f.id, f.name, f.phone, f.village, f.crops
+      ORDER BY total_messages DESC
+      LIMIT 20
+    `, [days]);
+
+    // By crop
+    const byCrop = await pool.query(`
+      SELECT UNNEST(string_to_array(COALESCE(crops::text,'unknown'),',')) as crop, 
+        COUNT(DISTINCT f.id) as farmer_count
+      FROM farmers f WHERE f.status='active'
+      GROUP BY crop ORDER BY farmer_count DESC LIMIT 15
+    `);
+
+    // By district
+    const byDistrict = await pool.query(`
+      SELECT COALESCE(d.district_name,'Unknown') as district, 
+        COALESCE(d.state_name,'Unknown') as state,
+        COUNT(f.id) as farmer_count
+      FROM farmers f
+      LEFT JOIN districts_master d ON f.district_id=d.id
+      WHERE f.status='active'
+      GROUP BY d.district_name, d.state_name
+      ORDER BY farmer_count DESC LIMIT 20
+    `);
+
+    // By language
+    const byLanguage = await pool.query(`
+      SELECT COALESCE(language,'unknown') as language, COUNT(*) as count
+      FROM farmers WHERE status='active'
+      GROUP BY language ORDER BY count DESC
+    `);
+
+    res.json({
+      tiers: tiers.rows,
+      growth: growth.rows,
+      top_farmers: topFarmers.rows,
+      by_crop: byCrop.rows,
+      by_district: byDistrict.rows,
+      by_language: byLanguage.rows
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/v1/analytics/templates — Template performance comparison
+app.get('/api/v1/analytics/templates', auth, async (req, res) => {
+  try {
+    const templates = await pool.query(`
+      SELECT t.id, t.name, t.wa_template_name, t.category, t.language, t.status,
+        COALESCE(tp.total_sent,
+          (SELECT COUNT(*) FROM campaign_messages cm 
+           JOIN campaigns c ON cm.campaign_id=c.id 
+           WHERE c.template_id=t.id)) as total_sent,
+        COALESCE(tp.total_delivered,
+          (SELECT COUNT(*) FROM campaign_messages cm 
+           JOIN campaigns c ON cm.campaign_id=c.id 
+           WHERE c.template_id=t.id AND cm.status IN ('delivered','read'))) as total_delivered,
+        COALESCE(tp.total_read,
+          (SELECT COUNT(*) FROM campaign_messages cm 
+           JOIN campaigns c ON cm.campaign_id=c.id 
+           WHERE c.template_id=t.id AND cm.status='read')) as total_read,
+        COALESCE(tp.total_failed,
+          (SELECT COUNT(*) FROM campaign_messages cm 
+           JOIN campaigns c ON cm.campaign_id=c.id 
+           WHERE c.template_id=t.id AND cm.status='failed')) as total_failed
+      FROM message_templates t
+      LEFT JOIN template_performance tp ON t.id=tp.template_id
+      ORDER BY total_sent DESC
+    `);
+
+    res.json({ templates: templates.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/v1/analytics/geographic — District-level engagement heatmap data
+app.get('/api/v1/analytics/geographic', auth, async (req, res) => {
+  try {
+    const geo = await pool.query(`
+      SELECT d.district_name as district, d.state_name as state,
+        COUNT(DISTINCT f.id) as farmers,
+        COUNT(DISTINCT cm.id) as messages_sent,
+        COUNT(DISTINCT cm.id) FILTER (WHERE cm.status='read') as messages_read,
+        COUNT(DISTINCT cm.id) FILTER (WHERE cm.status='delivered' OR cm.status='read') as messages_delivered,
+        CASE WHEN COUNT(DISTINCT cm.id) > 0 
+          THEN ROUND(COUNT(DISTINCT cm.id) FILTER (WHERE cm.status='read')::numeric / COUNT(DISTINCT cm.id) * 100, 1)
+          ELSE 0 END as engagement_rate
+      FROM farmers f
+      LEFT JOIN districts_master d ON f.district_id=d.id
+      LEFT JOIN campaign_messages cm ON f.id=cm.farmer_id
+      WHERE f.status='active'
+      GROUP BY d.district_name, d.state_name
+      ORDER BY farmers DESC
+    `);
+
+    res.json({ regions: geo.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/v1/analytics/conversations — WhatsApp conversation analytics
+app.get('/api/v1/analytics/conversations', auth, async (req, res) => {
+  try {
+    const { days = 30 } = req.query;
+
+    const overview = await pool.query(`
+      SELECT 
+        COUNT(DISTINCT session_id) as total_sessions,
+        COUNT(*) as total_messages,
+        COUNT(*) FILTER (WHERE direction='inbound') as inbound,
+        COUNT(*) FILTER (WHERE direction='outbound') as outbound,
+        COUNT(DISTINCT farmer_id) as unique_farmers,
+        ROUND(AVG(CASE WHEN direction='inbound' THEN 1 ELSE 0 END)::numeric * 100, 1) as farmer_initiation_pct
+      FROM wa_messages
+      WHERE created_at > NOW() - INTERVAL '1 day' * $1
+    `, [days]);
+
+    // Hourly distribution (best time to send)
+    const hourly = await pool.query(`
+      SELECT EXTRACT(HOUR FROM created_at)::int as hour,
+        COUNT(*) FILTER (WHERE direction='inbound') as inbound,
+        COUNT(*) FILTER (WHERE direction='outbound') as outbound
+      FROM wa_messages
+      WHERE created_at > NOW() - INTERVAL '1 day' * $1
+      GROUP BY hour ORDER BY hour
+    `, [days]);
+
+    // Daily volume
+    const daily = await pool.query(`
+      SELECT DATE(created_at) as date,
+        COUNT(*) FILTER (WHERE direction='inbound') as inbound,
+        COUNT(*) FILTER (WHERE direction='outbound') as outbound,
+        COUNT(DISTINCT farmer_id) as active_farmers
+      FROM wa_messages
+      WHERE created_at > NOW() - INTERVAL '1 day' * $1
+      GROUP BY DATE(created_at) ORDER BY date
+    `, [days]);
+
+    // Top message types
+    const msgTypes = await pool.query(`
+      SELECT message_type, COUNT(*) as count
+      FROM wa_messages
+      WHERE created_at > NOW() - INTERVAL '1 day' * $1
+      GROUP BY message_type ORDER BY count DESC
+    `, [days]);
+
+    res.json({
+      overview: overview.rows[0],
+      hourly: hourly.rows,
+      daily: daily.rows,
+      message_types: msgTypes.rows
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/v1/analytics/refresh-engagement — Recalculate farmer engagement scores
+app.post('/api/v1/analytics/refresh-engagement', auth, async (req, res) => {
+  try {
+    await pool.query(`
+      INSERT INTO farmer_engagement_scores (farmer_id, total_messages_received, total_messages_sent, 
+        total_campaigns_received, campaigns_read, last_message_at, response_rate, engagement_score, engagement_tier, updated_at)
+      SELECT f.id,
+        COALESCE((SELECT COUNT(*) FROM wa_messages WHERE farmer_id=f.id AND direction='outbound'), 0),
+        COALESCE((SELECT COUNT(*) FROM wa_messages WHERE farmer_id=f.id AND direction='inbound'), 0),
+        COALESCE((SELECT COUNT(*) FROM campaign_messages WHERE farmer_id=f.id), 0),
+        COALESCE((SELECT COUNT(*) FROM campaign_messages WHERE farmer_id=f.id AND status='read'), 0),
+        (SELECT MAX(created_at) FROM wa_messages WHERE farmer_id=f.id),
+        CASE WHEN (SELECT COUNT(*) FROM wa_messages WHERE farmer_id=f.id AND direction='outbound') > 0
+          THEN ROUND((SELECT COUNT(*) FROM wa_messages WHERE farmer_id=f.id AND direction='inbound')::numeric / 
+               (SELECT COUNT(*) FROM wa_messages WHERE farmer_id=f.id AND direction='outbound') * 100, 1)
+          ELSE 0 END,
+        LEAST(100, (
+          COALESCE((SELECT COUNT(*) FROM wa_messages WHERE farmer_id=f.id AND direction='inbound'), 0) * 5 +
+          COALESCE((SELECT COUNT(*) FROM campaign_messages WHERE farmer_id=f.id AND status='read'), 0) * 10 +
+          CASE WHEN (SELECT MAX(created_at) FROM wa_messages WHERE farmer_id=f.id) > NOW() - INTERVAL '7 days' THEN 30 ELSE 0 END +
+          CASE WHEN (SELECT MAX(created_at) FROM wa_messages WHERE farmer_id=f.id) > NOW() - INTERVAL '30 days' THEN 15 ELSE 0 END
+        )),
+        CASE 
+          WHEN LEAST(100, (COALESCE((SELECT COUNT(*) FROM wa_messages WHERE farmer_id=f.id AND direction='inbound'), 0) * 5 +
+            COALESCE((SELECT COUNT(*) FROM campaign_messages WHERE farmer_id=f.id AND status='read'), 0) * 10 +
+            CASE WHEN (SELECT MAX(created_at) FROM wa_messages WHERE farmer_id=f.id) > NOW() - INTERVAL '7 days' THEN 30 ELSE 0 END +
+            CASE WHEN (SELECT MAX(created_at) FROM wa_messages WHERE farmer_id=f.id) > NOW() - INTERVAL '30 days' THEN 15 ELSE 0 END)) >= 70 THEN 'super'
+          WHEN LEAST(100, (COALESCE((SELECT COUNT(*) FROM wa_messages WHERE farmer_id=f.id AND direction='inbound'), 0) * 5 +
+            COALESCE((SELECT COUNT(*) FROM campaign_messages WHERE farmer_id=f.id AND status='read'), 0) * 10 +
+            CASE WHEN (SELECT MAX(created_at) FROM wa_messages WHERE farmer_id=f.id) > NOW() - INTERVAL '7 days' THEN 30 ELSE 0 END +
+            CASE WHEN (SELECT MAX(created_at) FROM wa_messages WHERE farmer_id=f.id) > NOW() - INTERVAL '30 days' THEN 15 ELSE 0 END)) >= 40 THEN 'high'
+          WHEN LEAST(100, (COALESCE((SELECT COUNT(*) FROM wa_messages WHERE farmer_id=f.id AND direction='inbound'), 0) * 5 +
+            COALESCE((SELECT COUNT(*) FROM campaign_messages WHERE farmer_id=f.id AND status='read'), 0) * 10 +
+            CASE WHEN (SELECT MAX(created_at) FROM wa_messages WHERE farmer_id=f.id) > NOW() - INTERVAL '7 days' THEN 30 ELSE 0 END +
+            CASE WHEN (SELECT MAX(created_at) FROM wa_messages WHERE farmer_id=f.id) > NOW() - INTERVAL '30 days' THEN 15 ELSE 0 END)) >= 15 THEN 'medium'
+          ELSE 'low'
+        END,
+        NOW()
+      FROM farmers f WHERE f.status='active'
+      ON CONFLICT (farmer_id) DO UPDATE SET
+        total_messages_received = EXCLUDED.total_messages_received,
+        total_messages_sent = EXCLUDED.total_messages_sent,
+        total_campaigns_received = EXCLUDED.total_campaigns_received,
+        campaigns_read = EXCLUDED.campaigns_read,
+        last_message_at = EXCLUDED.last_message_at,
+        response_rate = EXCLUDED.response_rate,
+        engagement_score = EXCLUDED.engagement_score,
+        engagement_tier = EXCLUDED.engagement_tier,
+        updated_at = NOW()
+    `);
+
+    const counts = await pool.query(`
+      SELECT engagement_tier, COUNT(*) as count FROM farmer_engagement_scores GROUP BY engagement_tier
+    `);
+    res.json({ success: true, tiers: counts.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/v1/analytics/roi — Cost & ROI analytics
+app.get('/api/v1/analytics/roi', auth, async (req, res) => {
+  try {
+    const { days = 30 } = req.query;
+    // WhatsApp conversation pricing (approximate INR rates)
+    const WA_MARKETING_COST = 0.83;  // INR per marketing conversation
+    const WA_UTILITY_COST = 0.35;    // INR per utility conversation
+    
+    const costs = await pool.query(`
+      SELECT 
+        COUNT(*) as total_messages,
+        COUNT(*) FILTER (WHERE cm.status IN ('delivered','read')) as successful,
+        COUNT(*) FILTER (WHERE cm.status='read') as read_messages,
+        COUNT(DISTINCT cm.farmer_id) as farmers_reached,
+        COUNT(DISTINCT c.id) as campaigns_used
+      FROM campaign_messages cm
+      JOIN campaigns c ON cm.campaign_id=c.id
+      WHERE cm.sent_at > NOW() - INTERVAL '1 day' * $1
+    `, [days]);
+
+    const row = costs.rows[0];
+    const estCost = (parseInt(row.total_messages) || 0) * WA_MARKETING_COST;
+    const costPerRead = row.read_messages > 0 ? (estCost / parseInt(row.read_messages)).toFixed(2) : 0;
+    const costPerFarmer = row.farmers_reached > 0 ? (estCost / parseInt(row.farmers_reached)).toFixed(2) : 0;
+
+    res.json({
+      ...row,
+      estimated_cost_inr: estCost.toFixed(2),
+      cost_per_read_inr: costPerRead,
+      cost_per_farmer_reached_inr: costPerFarmer,
+      wa_marketing_rate: WA_MARKETING_COST,
+      wa_utility_rate: WA_UTILITY_COST
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+
 // ─── DISTRICTS ───
 app.get('/api/v1/districts', auth, async (req, res) => {
   try {

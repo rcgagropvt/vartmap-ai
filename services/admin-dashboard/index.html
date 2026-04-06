@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -197,6 +197,9 @@ tr:hover{background:rgba(76,175,80,.03)}
       <div class="nav-section-title">Engagement</div>
       <div class="nav-item" onclick="navigate('templates')"><i class="fas fa-file-alt"></i> Templates</div>
       <div class="nav-item" onclick="navigate('campaigns')"><i class="fas fa-bullhorn"></i> Campaigns</div>
+
+
+
       <div class="nav-item" onclick="navigate('spin-wheels')"><i class="fas fa-dharmachakra"></i> Spin Wheels</div>
       <div class="nav-item" onclick="navigate('loyalty')"><i class="fas fa-crown"></i> Loyalty Program</div>
       <div class="nav-item" onclick="navigate('coupons')"><i class="fas fa-ticket-alt"></i> Coupon Codes</div>
@@ -557,7 +560,7 @@ async function viewFarmer(id) {
   } catch(e) { console.log('Chat fetch error:', e); }
 
   const spinHtml = (d.spin_history || []).length > 0 
-    ? d.spin_history.map(s => '<span class="tag" style="margin:2px">' + (s.prize_type === 'better_luck' ? 'Better Luck' : (s.prize_label || s.prize_type)) + ': ₹' + s.prize_value + '</span>').join('')
+    ? d.spin_history.map(s => '<span class="tag" style="margin:2px">' + (s.prize_type === 'better_luck' ? 'Better Luck' : (s.prize_label || s.prize_type)) + ': â‚¹' + s.prize_value + '</span>').join('')
     : '<span style="color:var(--text-secondary)">No spins yet</span>';
 
   const profileHtml = `
@@ -662,7 +665,7 @@ async function loadFarmerChat(sessionId, farmerId) {
                          m.message_type === 'audio' ? '<div style="margin-bottom:4px"><i class="fas fa-microphone" style="color:#e91e63"></i> <em>Voice message</em></div>' : '';
         return '<div style="display:flex;justify-content:' + align + ';margin-bottom:8px">' +
           '<div style="max-width:80%;background:' + bgColor + ';padding:8px 12px;border-radius:12px;font-size:13px">' +
-          '<div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;font-size:11px;color:#666">' + icon + ' <strong>' + label + '</strong> · ' + date + ' ' + time + '</div>' +
+          '<div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;font-size:11px;color:#666">' + icon + ' <strong>' + label + '</strong> Â· ' + date + ' ' + time + '</div>' +
           mediaTag +
           '<div style="white-space:pre-wrap;word-break:break-word">' + (m.content || '').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>' +
           '</div></div>';
@@ -1087,7 +1090,7 @@ async function newCampaignModal() {
 
   openModal('New Broadcast Campaign', `
     <div style="background:#e8f5e9;padding:12px;border-radius:8px;margin-bottom:16px;font-size:13px">
-      <i class="fas fa-satellite-dish"></i> Create a targeted broadcast — select audience filters, choose an approved template, and launch. Messages are sent via WhatsApp Business API.
+      <i class="fas fa-satellite-dish"></i> Create a targeted broadcast â€” select audience filters, choose an approved template, and launch. Messages are sent via WhatsApp Business API.
     </div>
     <div class="form-group"><label>Campaign Name</label><input id="cName" placeholder="e.g. Kharif Season Mandi Alert"></div>
     <div class="form-group"><label>Template (must be Meta-approved)</label><select id="cTemplate">${tmplOpts}</select><div id="cTemplatePreview" style="font-size:12px;color:#666;margin-top:4px"></div></div>
@@ -1117,7 +1120,7 @@ async function newCampaignModal() {
 
     <div style="background:#f0f7ff;padding:16px;border-radius:8px;margin-top:12px;text-align:center">
       <button class="btn btn-outline btn-sm" onclick="previewAudience()" style="margin-bottom:8px"><i class="fas fa-users"></i> Preview Audience Count</button>
-      <div id="cAudienceCount" style="font-size:24px;font-weight:700;color:#2563eb">—</div>
+      <div id="cAudienceCount" style="font-size:24px;font-weight:700;color:#2563eb">â€”</div>
       <div style="font-size:12px;color:#666">farmers matching your filters</div>
     </div>
   `, `<button class="btn btn-outline" onclick="createCampaign(false)"><i class="fas fa-save"></i> Save Draft</button> <button class="btn btn-primary" onclick="createCampaign(true)"><i class="fas fa-rocket"></i> Save & Launch Now</button>`);
@@ -1343,6 +1346,249 @@ async function deleteCampaign(id) {
 async function updateCampaignStatus(id, status) { await api('/api/v1/campaigns/' + id, { method: 'PUT', body: JSON.stringify({ status: status }) }); loadCampaigns(); }
 
 // ------
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ANALYTICS DASHBOARD
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+async function loadAnalytics() {
+  const el = document.getElementById('pageContent');
+  const el = document.getElementById('pageContent');
+
+
+  try {
+    const [campData, farmerData, templateData, geoData, convData, roiData] = await Promise.all([
+      api('/api/v1/analytics/campaigns?days=30'),
+      api('/api/v1/analytics/farmers?days=30'),
+      api('/api/v1/analytics/templates'),
+      api('/api/v1/analytics/geographic'),
+      api('/api/v1/analytics/conversations?days=30'),
+      api('/api/v1/analytics/roi?days=30')
+    ]);
+
+    const o = campData.overview || {};
+    const conv = convData.overview || {};
+    const roi = roiData || {};
+
+    el.innerHTML = `
+    <div class="table-wrap">
+      <div class="table-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <h3><i class="fas fa-chart-line"></i> Analytics Dashboard</h3>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="analyticsDays" onchange="loadAnalytics()" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd">
+            <option value="7">Last 7 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+          <button class="btn btn-sm btn-outline" onclick="refreshEngagement()"><i class="fas fa-sync"></i> Refresh Scores</button>
+        </div>
+      </div>
+
+      <!-- KPI Cards Row 1: Campaign Overview -->
+      <h4 style="margin:20px 0 10px;color:#666;font-size:13px;text-transform:uppercase;letter-spacing:1px">Campaign Performance</h4>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:24px">
+        <div style="background:#f0f9ff;padding:16px;border-radius:10px;text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#0369a1">${o.total_campaigns||0}</div>
+          <div style="font-size:12px;color:#666">Total Campaigns</div>
+        </div>
+        <div style="background:#f0fdf4;padding:16px;border-radius:10px;text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#16a34a">${o.total_sent||0}</div>
+          <div style="font-size:12px;color:#666">Messages Sent</div>
+        </div>
+        <div style="background:#eff6ff;padding:16px;border-radius:10px;text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#2563eb">${o.total_delivered||0}</div>
+          <div style="font-size:12px;color:#666">Delivered</div>
+        </div>
+        <div style="background:#faf5ff;padding:16px;border-radius:10px;text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#7c3aed">${o.total_read||0}</div>
+          <div style="font-size:12px;color:#666">Read</div>
+        </div>
+        <div style="background:#fefce8;padding:16px;border-radius:10px;text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#ca8a04">${o.total_sent > 0 ? ((o.total_delivered/o.total_sent)*100).toFixed(1) : 0}%</div>
+          <div style="font-size:12px;color:#666">Delivery Rate</div>
+        </div>
+        <div style="background:#fef2f2;padding:16px;border-radius:10px;text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#dc2626">${o.total_delivered > 0 ? ((o.total_read/o.total_delivered)*100).toFixed(1) : 0}%</div>
+          <div style="font-size:12px;color:#666">Read Rate</div>
+        </div>
+      </div>
+
+      <!-- KPI Cards Row 2: Conversations & ROI -->
+      <h4 style="margin:20px 0 10px;color:#666;font-size:13px;text-transform:uppercase;letter-spacing:1px">WhatsApp Conversations & ROI</h4>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:24px">
+        <div style="background:#f0f9ff;padding:16px;border-radius:10px;text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#0369a1">${conv.total_sessions||0}</div>
+          <div style="font-size:12px;color:#666">Sessions</div>
+        </div>
+        <div style="background:#f0fdf4;padding:16px;border-radius:10px;text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#16a34a">${conv.total_messages||0}</div>
+          <div style="font-size:12px;color:#666">Total Messages</div>
+        </div>
+        <div style="background:#faf5ff;padding:16px;border-radius:10px;text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#7c3aed">${conv.unique_farmers||0}</div>
+          <div style="font-size:12px;color:#666">Active Farmers</div>
+        </div>
+        <div style="background:#fefce8;padding:16px;border-radius:10px;text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#ca8a04">â‚¹${roi.estimated_cost_inr||'0.00'}</div>
+          <div style="font-size:12px;color:#666">Est. Cost (30d)</div>
+        </div>
+        <div style="background:#f0fdf4;padding:16px;border-radius:10px;text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#16a34a">â‚¹${roi.cost_per_read_inr||'0.00'}</div>
+          <div style="font-size:12px;color:#666">Cost per Read</div>
+        </div>
+        <div style="background:#eff6ff;padding:16px;border-radius:10px;text-align:center">
+          <div style="font-size:28px;font-weight:700;color:#2563eb">â‚¹${roi.cost_per_farmer_reached_inr||'0.00'}</div>
+          <div style="font-size:12px;color:#666">Cost per Farmer</div>
+        </div>
+      </div>
+
+      <!-- Delivery Trend Chart (CSS-only bar chart) -->
+      <h4 style="margin:20px 0 10px;color:#666;font-size:13px;text-transform:uppercase;letter-spacing:1px">Daily Message Volume (30 days)</h4>
+      <div style="display:flex;align-items:flex-end;gap:3px;height:120px;padding:10px;background:#f9fafb;border-radius:10px;margin-bottom:24px;overflow-x:auto">
+        ${(campData.daily_trend||[]).map(d => {
+          const maxVal = Math.max(...(campData.daily_trend||[]).map(x=>parseInt(x.sent)||1));
+          const h = Math.max(4, (parseInt(d.sent)/maxVal)*100);
+          const rh = Math.max(0, (parseInt(d.read)/maxVal)*100);
+          return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:16px" title="${d.date}: ${d.sent} sent, ${d.delivered} delivered, ${d.read} read">
+            <div style="width:100%;max-width:24px;background:linear-gradient(to top,#22c55e ${rh}%,#3b82f6 ${rh}%);height:${h}%;border-radius:3px 3px 0 0;min-height:4px"></div>
+            <div style="font-size:8px;color:#999;margin-top:2px;transform:rotate(-45deg);white-space:nowrap">${(d.date||'').slice(5)}</div>
+          </div>`;
+        }).join('')}
+      </div>
+
+      <!-- Farmer Engagement Tiers -->
+      <h4 style="margin:20px 0 10px;color:#666;font-size:13px;text-transform:uppercase;letter-spacing:1px">Farmer Engagement Distribution</h4>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:24px">
+        ${(farmerData.tiers||[]).map(t => {
+          const colors = {high:'#16a34a',medium:'#ca8a04',low:'#f97316',inactive:'#dc2626'};
+          const icons = {high:'fas fa-fire',medium:'fas fa-chart-line',low:'fas fa-seedling',inactive:'fas fa-moon'};
+          return `<div style="background:#fff;padding:16px;border-radius:10px;text-align:center;border:2px solid ${colors[t.tier]||'#ccc'}">
+            <i class="${icons[t.tier]||'fas fa-user'}" style="font-size:20px;color:${colors[t.tier]||'#666'}"></i>
+            <div style="font-size:24px;font-weight:700;color:${colors[t.tier]||'#333'};margin:6px 0">${t.count}</div>
+            <div style="font-size:12px;color:#666;text-transform:capitalize">${t.tier} Engagement</div>
+          </div>`;
+        }).join('')}
+      </div>
+
+      <!-- Two-column layout: Crop breakdown + District breakdown -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
+        <!-- Crop Breakdown -->
+        <div style="background:#fff;padding:16px;border-radius:10px;border:1px solid #eee">
+          <h4 style="margin:0 0 12px;font-size:14px;color:#333"><i class="fas fa-seedling" style="color:#16a34a"></i> Farmers by Crop</h4>
+          ${(farmerData.by_crop||[]).slice(0,10).map(c => {
+            const maxCrop = Math.max(...(farmerData.by_crop||[]).map(x=>parseInt(x.farmer_count)||1));
+            const pct = ((parseInt(c.farmer_count)/maxCrop)*100).toFixed(0);
+            return `<div style="margin-bottom:8px">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px">
+                <span>${(c.crop||'').trim()}</span><span style="font-weight:600">${c.farmer_count}</span>
+              </div>
+              <div style="background:#e5e7eb;border-radius:4px;height:8px"><div style="background:#16a34a;height:100%;border-radius:4px;width:${pct}%"></div></div>
+            </div>`;
+          }).join('')}
+        </div>
+        <!-- District Breakdown -->
+        <div style="background:#fff;padding:16px;border-radius:10px;border:1px solid #eee">
+          <h4 style="margin:0 0 12px;font-size:14px;color:#333"><i class="fas fa-map-marker-alt" style="color:#dc2626"></i> Farmers by District</h4>
+          ${(farmerData.by_district||[]).slice(0,10).map(d => {
+            const maxDist = Math.max(...(farmerData.by_district||[]).map(x=>parseInt(x.farmer_count)||1));
+            const pct = ((parseInt(d.farmer_count)/maxDist)*100).toFixed(0);
+            return `<div style="margin-bottom:8px">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px">
+                <span>${d.district}, ${d.state}</span><span style="font-weight:600">${d.farmer_count}</span>
+              </div>
+              <div style="background:#e5e7eb;border-radius:4px;height:8px"><div style="background:#2563eb;height:100%;border-radius:4px;width:${pct}%"></div></div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- Language + Best Time to Send -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
+        <div style="background:#fff;padding:16px;border-radius:10px;border:1px solid #eee">
+          <h4 style="margin:0 0 12px;font-size:14px;color:#333"><i class="fas fa-language" style="color:#7c3aed"></i> Language Distribution</h4>
+          ${(farmerData.by_language||[]).map(l => {
+            const total = (farmerData.by_language||[]).reduce((s,x)=>s+parseInt(x.count),0);
+            const pct = total > 0 ? ((parseInt(l.count)/total)*100).toFixed(1) : 0;
+            return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;font-size:13px">
+              <span>${l.language}</span><span style="font-weight:600">${l.count} (${pct}%)</span>
+            </div>`;
+          }).join('')}
+        </div>
+        <div style="background:#fff;padding:16px;border-radius:10px;border:1px solid #eee">
+          <h4 style="margin:0 0 12px;font-size:14px;color:#333"><i class="fas fa-clock" style="color:#ca8a04"></i> Best Time to Send (Hourly Activity)</h4>
+          <div style="display:flex;align-items:flex-end;gap:2px;height:80px">
+            ${Array.from({length:24}, (_, h) => {
+              const found = (convData.hourly||[]).find(x=>parseInt(x.hour)===h);
+              const val = found ? parseInt(found.inbound)+parseInt(found.outbound) : 0;
+              const maxH = Math.max(...(convData.hourly||[]).map(x=>parseInt(x.inbound)+parseInt(x.outbound)), 1);
+              const ht = Math.max(4, (val/maxH)*100);
+              return `<div style="flex:1;background:#7c3aed;height:${ht}%;border-radius:2px 2px 0 0;min-height:2px" title="${h}:00 - ${val} messages"></div>`;
+            }).join('')}
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:9px;color:#999;margin-top:4px">
+            <span>12AM</span><span>6AM</span><span>12PM</span><span>6PM</span><span>11PM</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Template Performance Table -->
+      <h4 style="margin:20px 0 10px;color:#666;font-size:13px;text-transform:uppercase;letter-spacing:1px">Template Performance</h4>
+      <table><tr><th>Template</th><th>Category</th><th>Sent</th><th>Delivered</th><th>Read</th><th>Failed</th><th>Delivery %</th><th>Read %</th></tr>
+      ${(templateData.templates||[]).map(t => {
+        const dr = parseInt(t.total_sent)>0 ? ((parseInt(t.total_delivered)/parseInt(t.total_sent))*100).toFixed(1) : '-';
+        const rr = parseInt(t.total_delivered)>0 ? ((parseInt(t.total_read)/parseInt(t.total_delivered))*100).toFixed(1) : '-';
+        return `<tr>
+          <td><strong>${t.name}</strong><br><span style="font-size:11px;color:#888;font-family:monospace">${t.wa_template_name||'-'}</span></td>
+          <td>${(t.category||'-').toUpperCase()}</td>
+          <td>${t.total_sent}</td>
+          <td>${t.total_delivered}</td>
+          <td>${t.total_read}</td>
+          <td style="color:#dc2626">${t.total_failed}</td>
+          <td><span style="color:${parseFloat(dr)>80?'#16a34a':'#f97316'};font-weight:600">${dr}%</span></td>
+          <td><span style="color:${parseFloat(rr)>50?'#16a34a':'#ca8a04'};font-weight:600">${rr}%</span></td>
+        </tr>`;
+      }).join('')}
+      </table>
+
+      <!-- Top Engaged Farmers -->
+      <h4 style="margin:20px 0 10px;color:#666;font-size:13px;text-transform:uppercase;letter-spacing:1px">Top Engaged Farmers (30 days)</h4>
+      <table><tr><th>Name</th><th>Village</th><th>Crops</th><th>Messages</th><th>Campaigns Read</th><th>Last Active</th></tr>
+      ${(farmerData.top_farmers||[]).slice(0,10).map(f => `<tr>
+        <td><strong>${f.name||'Unknown'}</strong></td>
+        <td>${f.village||'-'}</td>
+        <td>${f.crops||'-'}</td>
+        <td>${f.total_messages}</td>
+        <td>${f.campaigns_read}</td>
+        <td>${f.last_active ? new Date(f.last_active).toLocaleDateString('en-IN') : '-'}</td>
+      </tr>`).join('')}
+      </table>
+
+      <!-- Geographic Engagement -->
+      <h4 style="margin:20px 0 10px;color:#666;font-size:13px;text-transform:uppercase;letter-spacing:1px">Geographic Engagement</h4>
+      <table><tr><th>District</th><th>State</th><th>Farmers</th><th>Messages</th><th>Delivered</th><th>Read</th><th>Engagement %</th></tr>
+      ${(geoData.regions||[]).slice(0,15).map(r => `<tr>
+        <td><strong>${r.district||'Unknown'}</strong></td>
+        <td>${r.state||'-'}</td>
+        <td>${r.farmers}</td>
+        <td>${r.messages_sent}</td>
+        <td>${r.messages_delivered}</td>
+        <td>${r.messages_read}</td>
+        <td><span style="color:${parseFloat(r.engagement_rate)>30?'#16a34a':'#f97316'};font-weight:600">${r.engagement_rate}%</span></td>
+      </tr>`).join('')}
+      </table>
+    </div>`;
+  } catch (e) {
+    el.innerHTML = '<div style="padding:40px;text-align:center;color:#dc2626"><i class="fas fa-exclamation-triangle"></i> Error loading analytics: ' + e.message + '</div>';
+  }
+}
+
+async function refreshEngagement() {
+  try {
+    const r = await api('/api/v1/analytics/refresh-engagement', { method: 'POST' });
+    alert('Engagement scores refreshed! ' + (r.tiers||[]).map(t => t.engagement_tier + ': ' + t.count).join(', '));
+    loadAnalytics();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
 // ------
 async function loadSpinWheels() {
   const el = document.getElementById('pageContent');
@@ -1354,7 +1600,7 @@ async function loadSpinWheels() {
       <div class="stat-card"><div class="stat-icon"><i class="fas fa-dharmachakra"></i></div><div class="stat-value">${d.wheels.length}</div><div class="stat-label">Total Wheels</div></div>
       <div class="stat-card accent"><div class="stat-icon"><i class="fas fa-play-circle" style="color:var(--accent)"></i></div><div class="stat-value">${d.wheels.filter(w=>w.status==='active').length}</div><div class="stat-label">Active Wheels</div></div>
       <div class="stat-card info"><div class="stat-icon"><i class="fas fa-trophy" style="color:var(--info)"></i></div><div class="stat-value">${d.wheels.reduce((a,w)=>a+(w.stats?.winners||0),0)}</div><div class="stat-label">Total Winners</div></div>
-      <div class="stat-card danger"><div class="stat-icon"><i class="fas fa-rupee-sign" style="color:var(--danger)"></i></div><div class="stat-value">â‚¹${d.wheels.reduce((a,w)=>a+(w.spent_budget||0),0)}</div><div class="stat-label">Total Spent</div></div>
+      <div class="stat-card danger"><div class="stat-icon"><i class="fas fa-rupee-sign" style="color:var(--danger)"></i></div><div class="stat-value">Ã¢â€šÂ¹${d.wheels.reduce((a,w)=>a+(w.spent_budget||0),0)}</div><div class="stat-label">Total Spent</div></div>
     </div>
     <div class="flex justify-between items-center mb-16">
       <h3>Spin Wheels & Lucky Draw</h3>
@@ -1369,7 +1615,7 @@ async function loadSpinWheels() {
             <p style="font-size:13px;color:var(--text-light)">${w.description || ''}</p>
             <div style="font-size:12px;color:var(--text-light);margin-top:6px">
               <i class="fas fa-calendar"></i> ${fmtDate(w.start_date)} - ${fmtDate(w.end_date)} |
-              <i class="fas fa-sync"></i> Max ${w.max_spins_per_farmer} spin/farmer Â· 
+              <i class="fas fa-sync"></i> Max ${w.max_spins_per_farmer} spin/farmer Ã‚Â· 
               <i class="fas fa-wallet"></i> Budget: Rs.${w.total_budget} (Spent: Rs.${w.spent_budget || 0})
             </div>
           </div>
@@ -1400,7 +1646,7 @@ async function loadSpinWheels() {
                     <small>${s.prize_type} | Rs.${s.prize_value} | Prob: ${(s.probability * 100).toFixed(1)}%</small>
                   </div>
                   <div style="text-align:right;font-size:12px">
-                    <div style="font-weight:700;color:${s.current_winners >= (s.max_winners||9999) ? 'var(--danger)' : 'var(--primary)'}">${s.current_winners}/${s.max_winners || 'âˆž'}</div>
+                    <div style="font-weight:700;color:${s.current_winners >= (s.max_winners||9999) ? 'var(--danger)' : 'var(--primary)'}">${s.current_winners}/${s.max_winners || 'Ã¢Ë†Å¾'}</div>
                     <small>winners</small>
                   </div>
                 </div>
@@ -1410,7 +1656,7 @@ async function loadSpinWheels() {
               <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;text-align:center">
                 <div><div style="font-size:22px;font-weight:700;color:var(--primary)">${w.stats?.total_spins || 0}</div><div style="font-size:11px;color:var(--text-light)">Total Spins</div></div>
                 <div><div style="font-size:22px;font-weight:700;color:var(--accent)">${w.stats?.winners || 0}</div><div style="font-size:11px;color:var(--text-light)">Winners</div></div>
-                <div><div style="font-size:22px;font-weight:700;color:var(--info)">â‚¹${w.spent_budget || 0}</div><div style="font-size:11px;color:var(--text-light)">Spent</div></div>
+                <div><div style="font-size:22px;font-weight:700;color:var(--info)">Ã¢â€šÂ¹${w.spent_budget || 0}</div><div style="font-size:11px;color:var(--text-light)">Spent</div></div>
               </div>
               <div style="margin-top:10px">
                 <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px"><span>Budget Used</span><span>${w.total_budget ? Math.round(((w.spent_budget||0)/w.total_budget)*100) : 0}%</span></div>
@@ -1614,10 +1860,10 @@ function shareWheelLink(wheelId) {
          <strong>Kisan Lucky Draw!</strong><br><br>
         Spin the wheel and win exciting prizes!<br>
          Cash prizes up to Rs.500<br>
-        � Loyalty points<br>
-        ðŸ·ï¸ Discount coupons<br><br>
-        ðŸ‘‰ Spin now: ${link}<br><br>
-        ðŸ™ VartMap Krishi Sahayak
+        ï¿½ Loyalty points<br>
+        Ã°Å¸ÂÂ·Ã¯Â¸Â Discount coupons<br><br>
+        Ã°Å¸â€˜â€° Spin now: ${link}<br><br>
+        Ã°Å¸â„¢Â VartMap Krishi Sahayak
       </div>
     </div>
   `, `<button class="btn btn-primary" onclick="navigator.clipboard.writeText('${link}');alert('Link copied!')"><i class="fas fa-copy"></i> Copy Link</button>`);
@@ -1774,8 +2020,8 @@ function showLoyaltyTab(tab) {
           </tr></thead>
           <tbody>
             ${leaderboard.map((f, i) => `<tr style="border-top:1px solid #f1f5f9">
-              <td style="padding:12px;text-align:center;font-weight:700;font-size:18px">${i < 3 ? ['ðŸ¥‡','ðŸ¥ˆ','ðŸ¥‰'][i] : i+1}</td>
-              <td style="padding:12px"><strong>${f.name}</strong><br><small style="color:#6b7280">${f.phone} Â· ${f.district || 'N/A'}</small></td>
+              <td style="padding:12px;text-align:center;font-weight:700;font-size:18px">${i < 3 ? ['Ã°Å¸Â¥â€¡','Ã°Å¸Â¥Ë†','Ã°Å¸Â¥â€°'][i] : i+1}</td>
+              <td style="padding:12px"><strong>${f.name}</strong><br><small style="color:#6b7280">${f.phone} Ã‚Â· ${f.district || 'N/A'}</small></td>
               <td style="padding:12px;text-align:center"><span style="color:${f.tier_color || '#666'}">${f.tier_icon || ''} ${f.tier_name || 'None'}</span></td>
               <td style="padding:12px;text-align:center;font-weight:600;color:#f59e0b">${(f.loyalty_points||0).toLocaleString()}</td>
               <td style="padding:12px;text-align:center;color:#6b7280">${(f.lifetime_points||0).toLocaleString()}</td>
@@ -1984,7 +2230,7 @@ async function viewWheelResults(wheelId, wheelName) {
     el.innerHTML = `
     <div class="flex justify-between items-center mb-16">
       <div>
-        <h3><i class="fas fa-trophy"></i> Prize Fulfillment â€” ${wheelName || 'All Wheels'}</h3>
+        <h3><i class="fas fa-trophy"></i> Prize Fulfillment Ã¢â‚¬â€ ${wheelName || 'All Wheels'}</h3>
         <p style="font-size:13px;color:var(--text-light)">Approve, reject, and track prize delivery</p>
       </div>
       <button class="btn btn-outline" onclick="loadSpinWheels()"><i class="fas fa-arrow-left"></i> Back to Wheels</button>
@@ -1993,17 +2239,17 @@ async function viewWheelResults(wheelId, wheelName) {
     <div class="stats-grid mb-24">
       <div class="stat-card accent"><div class="stat-icon"><i class="fas fa-clock" style="color:var(--accent)"></i></div><div class="stat-value">${s.pending_approval || 0}</div><div class="stat-label">Pending Approval</div></div>
       <div class="stat-card info"><div class="stat-icon"><i class="fas fa-check-circle" style="color:var(--info)"></i></div><div class="stat-value">${s.verified || 0}</div><div class="stat-label">Verified</div></div>
-      <div class="stat-card"><div class="stat-icon"><i class="fas fa-rupee-sign"></i></div><div class="stat-value">â‚¹${s.total_paid || 0}</div><div class="stat-label">Total Paid</div></div>
+      <div class="stat-card"><div class="stat-icon"><i class="fas fa-rupee-sign"></i></div><div class="stat-value">Ã¢â€šÂ¹${s.total_paid || 0}</div><div class="stat-label">Total Paid</div></div>
       <div class="stat-card danger"><div class="stat-icon"><i class="fas fa-times-circle" style="color:var(--danger)"></i></div><div class="stat-value">${s.rejected || 0}</div><div class="stat-label">Rejected</div></div>
     </div>
 
     <div class="flex gap-10 mb-16 flex-wrap">
       <button class="btn btn-sm ${!currentPrizeFilter ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','')">All</button>
-      <button class="btn btn-sm ${currentPrizeFilter==='won' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','won')">â³ Pending</button>
-      <button class="btn btn-sm ${currentPrizeFilter==='verified' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','verified')">âœ… Verified</button>
-      <button class="btn btn-sm ${currentPrizeFilter==='paid' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','paid')">ðŸ’° Paid</button>
-      <button class="btn btn-sm ${currentPrizeFilter==='delivered' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','delivered')">ðŸŽ Delivered</button>
-      <button class="btn btn-sm ${currentPrizeFilter==='rejected' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','rejected')">âŒ Rejected</button>
+      <button class="btn btn-sm ${currentPrizeFilter==='won' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','won')">Ã¢ÂÂ³ Pending</button>
+      <button class="btn btn-sm ${currentPrizeFilter==='verified' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','verified')">Ã¢Å“â€¦ Verified</button>
+      <button class="btn btn-sm ${currentPrizeFilter==='paid' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','paid')">Ã°Å¸â€™Â° Paid</button>
+      <button class="btn btn-sm ${currentPrizeFilter==='delivered' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','delivered')">Ã°Å¸Å½Â Delivered</button>
+      <button class="btn btn-sm ${currentPrizeFilter==='rejected' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','rejected')">Ã¢ÂÅ’ Rejected</button>
     </div>
 
     <div class="table-wrap">
@@ -2016,16 +2262,16 @@ async function viewWheelResults(wheelId, wheelName) {
           <tr>
             <td>
               <strong>${p.farmer_name || 'Unknown'}</strong><br>
-              <small style="color:var(--text-light)">${p.farmer_phone} ${p.village ? 'Â· ' + p.village : ''}</small>
+              <small style="color:var(--text-light)">${p.farmer_phone} ${p.village ? 'Ã‚Â· ' + p.village : ''}</small>
             </td>
             <td>
               <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${p.segment_color || '#999'};margin-right:6px"></span>
               ${p.segment_label || p.prize_type}
             </td>
-            <td><strong>${p.prize_type === 'cash' ? 'â‚¹' + p.prize_value : p.prize_type === 'points' ? p.prize_value + ' pts' : p.prize_type === 'discount' ? p.prize_value + '%' : '-'}</strong></td>
+            <td><strong>${p.prize_type === 'cash' ? 'Ã¢â€šÂ¹' + p.prize_value : p.prize_type === 'points' ? p.prize_value + ' pts' : p.prize_type === 'discount' ? p.prize_value + '%' : '-'}</strong></td>
             <td><span class="status ${p.status === 'won' ? 'pending' : p.status === 'verified' ? 'active' : p.status === 'paid' || p.status === 'delivered' ? 'completed' : p.status === 'rejected' ? 'failed' : ''}">${p.status}</span>
-              ${p.coupon_code ? '<br><small style="color:var(--primary)">ðŸ·ï¸ ' + p.coupon_code + '</small>' : ''}
-              ${p.payment_reference ? '<br><small style="color:var(--info)">ðŸ’³ ' + p.payment_reference + '</small>' : ''}
+              ${p.coupon_code ? '<br><small style="color:var(--primary)">Ã°Å¸ÂÂ·Ã¯Â¸Â ' + p.coupon_code + '</small>' : ''}
+              ${p.payment_reference ? '<br><small style="color:var(--info)">Ã°Å¸â€™Â³ ' + p.payment_reference + '</small>' : ''}
             </td>
             <td><small>${fmtDate(p.created_at)}</small>${p.paid_at ? '<br><small style="color:var(--primary)">Paid: ' + fmtDate(p.paid_at) + '</small>' : ''}</td>
             <td>
@@ -2037,7 +2283,7 @@ async function viewWheelResults(wheelId, wheelName) {
                 <button class="btn btn-sm btn-primary" onclick="markPrizePaid('${p.id}','${p.prize_type}','${p.prize_value}','${p.farmer_name}')"><i class="fas fa-rupee-sign"></i> Mark Paid</button>
               ` : ''}
               ${p.status === 'paid' || p.status === 'delivered' ? '<span style="color:var(--primary)"><i class="fas fa-check-double"></i> Done</span>' : ''}
-              ${p.status === 'no_prize' ? '<span style="color:var(--text-light)">â€”</span>' : ''}
+              ${p.status === 'no_prize' ? '<span style="color:var(--text-light)">Ã¢â‚¬â€</span>' : ''}
               ${p.status === 'rejected' ? '<span style="color:var(--danger)" title="' + (p.rejection_reason || '') + '"><i class="fas fa-ban"></i> Rejected</span>' : ''}
             </td>
           </tr>
@@ -2061,8 +2307,8 @@ async function approvePrize(prizeId) {
       method: 'PUT',
       body: JSON.stringify({ notes: notes || '' })
     });
-    if (r.coupon_code) alert('âœ… Approved! Coupon generated: ' + r.coupon_code + '\nWhatsApp notification sent to farmer.');
-    else alert('âœ… Approved! WhatsApp notification sent to farmer.');
+    if (r.coupon_code) alert('Ã¢Å“â€¦ Approved! Coupon generated: ' + r.coupon_code + '\nWhatsApp notification sent to farmer.');
+    else alert('Ã¢Å“â€¦ Approved! WhatsApp notification sent to farmer.');
     viewWheelResults('', 'All Wheels');
   } catch (e) { alert('Error: ' + (e.message || 'Failed to approve')); }
 }
@@ -2075,13 +2321,13 @@ async function rejectPrize(prizeId) {
       method: 'PUT',
       body: JSON.stringify({ reason })
     });
-    alert('âŒ Rejected. Farmer has been notified via WhatsApp.');
+    alert('Ã¢ÂÅ’ Rejected. Farmer has been notified via WhatsApp.');
     viewWheelResults('', 'All Wheels');
   } catch (e) { alert('Error: ' + (e.message || 'Failed to reject')); }
 }
 
 async function markPrizePaid(prizeId, prizeType, value, farmerName) {
-  const method = prompt(`Payment method for ${farmerName} (â‚¹${value}):\n\nOptions: UPI, Paytm, Bank Transfer, Cash, Coupon\n\nEnter method:`, 'UPI');
+  const method = prompt(`Payment method for ${farmerName} (Ã¢â€šÂ¹${value}):\n\nOptions: UPI, Paytm, Bank Transfer, Cash, Coupon\n\nEnter method:`, 'UPI');
   if (!method) return;
   const reference = prompt('Payment reference / Transaction ID:', '');
   try {
@@ -2089,7 +2335,7 @@ async function markPrizePaid(prizeId, prizeType, value, farmerName) {
       method: 'PUT',
       body: JSON.stringify({ payment_method: method, payment_reference: reference || '' })
     });
-    alert('ðŸ’° Marked as ' + (prizeType === 'cash' ? 'Paid' : 'Delivered') + '! Farmer notified via WhatsApp.');
+    alert('Ã°Å¸â€™Â° Marked as ' + (prizeType === 'cash' ? 'Paid' : 'Delivered') + '! Farmer notified via WhatsApp.');
     viewWheelResults('', 'All Wheels');
   } catch (e) { alert('Error: ' + (e.message || 'Failed to update')); }
 }
@@ -2107,13 +2353,13 @@ function newSpinWheelModal() {
       <div class="form-group"><label>Start Date</label><input id="swStart" type="datetime-local"></div>
       <div class="form-group"><label>End Date</label><input id="swEnd" type="datetime-local"></div>
     </div>
-    <div class="form-group"><label>Total Budget (â‚¹)</label><input id="swBudget" type="number" value="10000"></div>
+    <div class="form-group"><label>Total Budget (Ã¢â€šÂ¹)</label><input id="swBudget" type="number" value="10000"></div>
     <h4 style="margin:16px 0 8px">Segments (Prizes)</h4>
     <div id="segmentsList">
       <div class="segment-row" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
         <input placeholder="Label" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-label">
         <select style="padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-type"><option value="cash">Cash</option><option value="discount">Discount</option><option value="points">Points</option><option value="product">Product</option><option value="better_luck">Better Luck</option></select>
-        <input placeholder="Value â‚¹" type="number" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-value">
+        <input placeholder="Value Ã¢â€šÂ¹" type="number" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-value">
         <input placeholder="Prob (0-1)" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-prob" value="0.2">
         <input type="color" value="#4CAF50" class="seg-color" style="width:40px;height:36px;border:none;cursor:pointer">
       </div>
@@ -2127,7 +2373,7 @@ function addSegmentRow() {
     <div class="segment-row" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
       <input placeholder="Label" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-label">
       <select style="padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-type"><option value="cash">Cash</option><option value="discount">Discount</option><option value="points">Points</option><option value="product">Product</option><option value="better_luck">Better Luck</option></select>
-      <input placeholder="Value â‚¹" type="number" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-value">
+      <input placeholder="Value Ã¢â€šÂ¹" type="number" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-value">
       <input placeholder="Prob" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-prob" value="0.1">
       <input type="color" value="#FF9800" class="seg-color" style="width:40px;height:36px;border:none;cursor:pointer">
     </div>`;
@@ -2799,11 +3045,11 @@ async function showAddRecoModal(presetProductId) {
     <div style="display:grid;gap:12px">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div><label style="font-size:12px;font-weight:600">Crop Name (English) *</label><input id="rcCrop" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. Wheat"></div>
-        <div><label style="font-size:12px;font-weight:600">Crop Name (Hindi)</label><input id="rcCropHi" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. गेहूं"></div>
+        <div><label style="font-size:12px;font-weight:600">Crop Name (Hindi)</label><input id="rcCropHi" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. à¤—à¥‡à¤¹à¥‚à¤‚"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div><label style="font-size:12px;font-weight:600">Growth Stage *</label><input id="rcStage" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. Sowing, Tillering, Flowering"></div>
-        <div><label style="font-size:12px;font-weight:600">Growth Stage (Hindi)</label><input id="rcStageHi" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. बुवाई, कल्ले निकलना"></div>
+        <div><label style="font-size:12px;font-weight:600">Growth Stage (Hindi)</label><input id="rcStageHi" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. à¤¬à¥à¤µà¤¾à¤ˆ, à¤•à¤²à¥à¤²à¥‡ à¤¨à¤¿à¤•à¤²à¤¨à¤¾"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div><label style="font-size:12px;font-weight:600">Days Range</label><input id="rcDays" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. 20-30 days"></div>
@@ -2815,7 +3061,7 @@ async function showAddRecoModal(presetProductId) {
       <div><label style="font-size:12px;font-weight:600">Dosage *</label><input id="rcDosage" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. 10 kg/acre mixed with soil"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div><label style="font-size:12px;font-weight:600">Application Method</label><input id="rcMethod" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. Soil application, Foliar spray"></div>
-        <div><label style="font-size:12px;font-weight:600">Application Method (Hindi)</label><input id="rcMethodHi" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. मिट्टी में मिलाएं"></div>
+        <div><label style="font-size:12px;font-weight:600">Application Method (Hindi)</label><input id="rcMethodHi" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. à¤®à¤¿à¤Ÿà¥à¤Ÿà¥€ à¤®à¥‡à¤‚ à¤®à¤¿à¤²à¤¾à¤à¤‚"></div>
       </div>
       <div><label style="font-size:12px;font-weight:600">Notes</label><textarea id="rcNotes" rows="2" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="Additional notes"></textarea></div>
       <button onclick="submitReco()" style="padding:10px 20px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">Save Recommendation</button>
@@ -3577,7 +3823,7 @@ async function loadSoilData() {
           <div class="nutrient-bar"><div class="label"><span>Phosphorus (P)</span><span>L:${d.phosphorus_low_pct}% M:${d.phosphorus_medium_pct}% H:${d.phosphorus_high_pct}%</span></div><div class="bar"><div class="bar-low" style="width:${d.phosphorus_low_pct}%"></div><div class="bar-medium" style="width:${d.phosphorus_medium_pct}%"></div><div class="bar-high" style="width:${d.phosphorus_high_pct}%"></div></div></div>
           <div class="nutrient-bar"><div class="label"><span>Potassium (K)</span><span>L:${d.potassium_low_pct}% M:${d.potassium_medium_pct}% H:${d.potassium_high_pct}%</span></div><div class="bar"><div class="bar-low" style="width:${d.potassium_low_pct}%"></div><div class="bar-medium" style="width:${d.potassium_medium_pct}%"></div><div class="bar-high" style="width:${d.potassium_high_pct}%"></div></div></div>
           <div class="nutrient-bar"><div class="label"><span>Organic Carbon</span><span>L:${d.organic_carbon_low_pct}% M:${d.organic_carbon_medium_pct}% H:${d.organic_carbon_high_pct}%</span></div><div class="bar"><div class="bar-low" style="width:${d.organic_carbon_low_pct}%"></div><div class="bar-medium" style="width:${d.organic_carbon_medium_pct}%"></div><div class="bar-high" style="width:${d.organic_carbon_high_pct}%"></div></div></div>
-          <p style="font-size:12px;margin-top:8px">pH: ${d.avg_ph || '-'} Â· Soil: ${d.soil_type || '-'} Â· Samples: ${d.total_samples}</p>
+          <p style="font-size:12px;margin-top:8px">pH: ${d.avg_ph || '-'} Ã‚Â· Soil: ${d.soil_type || '-'} Ã‚Â· Samples: ${d.total_samples}</p>
         </div>
       `).join('')}
     </div>` : ''}`;
@@ -3816,8 +4062,8 @@ async function loadMandi() {
         <div class="table-actions"><div class="search-box"><i class="fas fa-search"></i><input id="mandiSearch" placeholder="Search commodity..." onkeydown="if(event.key==='Enter')filterMandiTable(this.value)"></div><button class="btn btn-primary btn-sm" onclick="newMandiModal()"><i class="fas fa-plus"></i> Add Price</button></div>
       </div>
       <div style="overflow-x:auto">
-      <table id="mandiTable"><tr><th>Commodity</th><th>Variety</th><th>Market</th><th>District</th><th>State</th><th>Min â‚¹</th><th>Max â‚¹</th><th>Modal â‚¹</th><th>Date</th></tr>
-      ${d.prices.map(p => `<tr><td><strong>${p.commodity}</strong></td><td>${p.variety || '-'}</td><td>${p.market_name || '-'}</td><td>${p.district || '-'}</td><td>${p.state || '-'}</td><td>${p.min_price || '-'}</td><td>${p.max_price || '-'}</td><td><strong>â‚¹${p.modal_price || '-'}</strong></td><td>${fmtDate(p.price_date)}</td></tr>`).join('')}
+      <table id="mandiTable"><tr><th>Commodity</th><th>Variety</th><th>Market</th><th>District</th><th>State</th><th>Min Ã¢â€šÂ¹</th><th>Max Ã¢â€šÂ¹</th><th>Modal Ã¢â€šÂ¹</th><th>Date</th></tr>
+      ${d.prices.map(p => `<tr><td><strong>${p.commodity}</strong></td><td>${p.variety || '-'}</td><td>${p.market_name || '-'}</td><td>${p.district || '-'}</td><td>${p.state || '-'}</td><td>${p.min_price || '-'}</td><td>${p.max_price || '-'}</td><td><strong>Ã¢â€šÂ¹${p.modal_price || '-'}</strong></td><td>${fmtDate(p.price_date)}</td></tr>`).join('')}
       </table></div>
     </div>`;
   } catch (e) { el.innerHTML = '<div class="empty"><p>Error loading mandi prices</p></div>'; }
@@ -3834,8 +4080,8 @@ async function fetchMandiLive(state, commodity, limit) {
     if (resultEl) {
       resultEl.innerHTML = `<div style="padding:12px;background:#E8F5E9;border-radius:8px;font-size:13px">
         <strong><i class="fas fa-check-circle" style="color:#2E7D32"></i> ${r.message}</strong><br>
-        Fetched: ${r.fetched} Â· Inserted: ${r.inserted} into database
-        ${r.sample && r.sample.length ? '<br>Sample: ' + r.sample.map(s => s.commodity + ' â‚¹' + s.modal_price + ' (' + s.market + ')').join(', ') : ''}
+        Fetched: ${r.fetched} Ã‚Â· Inserted: ${r.inserted} into database
+        ${r.sample && r.sample.length ? '<br>Sample: ' + r.sample.map(s => s.commodity + ' Ã¢â€šÂ¹' + s.modal_price + ' (' + s.market + ')').join(', ') : ''}
       </div>`;
     }
     setTimeout(() => loadMandi(), 2000);
@@ -3864,8 +4110,8 @@ function newMandiModal() {
     <div class="form-row"><div class="form-group"><label>Commodity</label><input id="mpComm"></div><div class="form-group"><label>Variety</label><input id="mpVar"></div></div>
     <div class="form-row"><div class="form-group"><label>Market Name</label><input id="mpMarket"></div><div class="form-group"><label>District</label><input id="mpDist"></div></div>
     <div class="form-row"><div class="form-group"><label>State</label><input id="mpState"></div><div class="form-group"><label>Price Date</label><input id="mpDate" type="date"></div></div>
-    <div class="form-row"><div class="form-group"><label>Min â‚¹/qtl</label><input id="mpMin" type="number"></div><div class="form-group"><label>Max â‚¹/qtl</label><input id="mpMax" type="number"></div></div>
-    <div class="form-group"><label>Modal â‚¹/qtl</label><input id="mpModal" type="number"></div>
+    <div class="form-row"><div class="form-group"><label>Min Ã¢â€šÂ¹/qtl</label><input id="mpMin" type="number"></div><div class="form-group"><label>Max Ã¢â€šÂ¹/qtl</label><input id="mpMax" type="number"></div></div>
+    <div class="form-group"><label>Modal Ã¢â€šÂ¹/qtl</label><input id="mpModal" type="number"></div>
   `, `<button class="btn btn-primary" onclick="createMandiPrice()"><i class="fas fa-save"></i> Save</button>`);
 }
 
@@ -3889,7 +4135,7 @@ async function loadDealers() {
     <div class="table-wrap">
       <div class="table-header"><h3>Dealers (${d.dealers.length})</h3><button class="btn btn-primary btn-sm" onclick="newDealerModal()"><i class="fas fa-plus"></i> Add Dealer</button></div>
       <table><tr><th>Name</th><th>Phone</th><th>District</th><th>License</th><th>Verified</th><th>Status</th></tr>
-      ${d.dealers.map(d => `<tr><td><strong>${d.name}</strong></td><td>${d.phone}</td><td>${d.district_name || '-'}</td><td>${d.license_number || '-'}</td><td>${d.verified ? 'âœ…' : 'âŒ'}</td><td><span class="status ${d.status}">${d.status}</span></td></tr>`).join('')}
+      ${d.dealers.map(d => `<tr><td><strong>${d.name}</strong></td><td>${d.phone}</td><td>${d.district_name || '-'}</td><td>${d.license_number || '-'}</td><td>${d.verified ? 'Ã¢Å“â€¦' : 'Ã¢ÂÅ’'}</td><td><span class="status ${d.status}">${d.status}</span></td></tr>`).join('')}
       </table>
     </div>`;
   } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
@@ -3949,7 +4195,7 @@ async function loadOrders() {
     <div class="table-wrap">
       <div class="table-header"><h3>Orders (${d.orders.length})</h3></div>
       <table><tr><th>Farmer</th><th>Product</th><th>Dealer</th><th>Qty</th><th>Amount</th><th>Status</th><th>Payment</th><th>Date</th></tr>
-      ${d.orders.map(o => `<tr><td>${o.farmer_name || '-'}</td><td>${o.product_name || '-'}</td><td>${o.dealer_name || '-'}</td><td>${o.quantity}</td><td>â‚¹${o.total_amount || 0}</td><td><span class="status ${o.status}">${o.status}</span></td><td><span class="status ${o.payment_status}">${o.payment_status}</span></td><td>${fmtDate(o.created_at)}</td></tr>`).join('')}
+      ${d.orders.map(o => `<tr><td>${o.farmer_name || '-'}</td><td>${o.product_name || '-'}</td><td>${o.dealer_name || '-'}</td><td>${o.quantity}</td><td>Ã¢â€šÂ¹${o.total_amount || 0}</td><td><span class="status ${o.status}">${o.status}</span></td><td><span class="status ${o.payment_status}">${o.payment_status}</span></td><td>${fmtDate(o.created_at)}</td></tr>`).join('')}
       </table>
     </div>`;
   } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
@@ -3991,158 +4237,158 @@ async function loadNotifications() {
 
 // ------
 async function loadAnalytics() {
-  const el = document.getElementById('pageContent');
-  try {
-    const [overview, usage, settingsResp] = await Promise.all([
-      api('/api/v1/analytics/overview'),
-      api('/api/v1/analytics/usage'),
-      api('/api/v1/settings')
-    ]);
-    const s = settingsResp.settings || {};
-    const monthlyBudget = parseFloat(s.ai_monthly_budget_inr || '2000');
-    const dailyLimitGlobal = parseInt(s.ai_daily_limit_global || '500');
-    const dailyLimitPerFarmer = parseInt(s.ai_daily_limit_per_farmer || '20');
-    const warningThreshold = parseInt(s.ai_budget_warning_threshold || '80');
-
-    // Calculate totals
-    const totalCostMonth = usage.costs.reduce((sum, c) => sum + parseFloat(c.cost || 0), 0);
-    const totalCallsMonth = usage.by_feature.reduce((sum, f) => sum + parseInt(f.count || 0), 0);
-    const todayCalls = usage.daily.length > 0 ? parseInt(usage.daily[usage.daily.length - 1].count || 0) : 0;
-    const todayCost = usage.costs.length > 0 ? parseFloat(usage.costs[usage.costs.length - 1].cost || 0) : 0;
-    const budgetPercent = monthlyBudget > 0 ? Math.min((totalCostMonth / monthlyBudget) * 100, 100) : 0;
-    const dailyPercent = dailyLimitGlobal > 0 ? Math.min((todayCalls / dailyLimitGlobal) * 100, 100) : 0;
-    const budgetColor = budgetPercent >= warningThreshold ? '#ef4444' : budgetPercent >= 50 ? '#f59e0b' : '#10b981';
-    const dailyColor = dailyPercent >= 80 ? '#ef4444' : dailyPercent >= 50 ? '#f59e0b' : '#10b981';
-
-    el.innerHTML = `
-    <div class="tabs">
-      <div class="tab active" onclick="showAnalyticsTab('budgetTab',this)">AI Budget</div>
-      <div class="tab" onclick="showAnalyticsTab('convTab',this)">Conversations</div>
-      <div class="tab" onclick="showAnalyticsTab('usageTab',this)">Detailed Usage</div>
-    </div>
-
-    <div id="budgetTab">
-      <div class="stats-grid" style="margin-bottom:24px">
-        <div class="stat-card" style="border-left:4px solid ${budgetColor}">
-          <div class="stat-icon" style="color:${budgetColor}"><i class="fas fa-rupee-sign"></i></div>
-          <div class="stat-value">\u20B9${totalCostMonth.toFixed(2)}</div>
-          <div class="stat-label">Monthly Spend</div>
-          <div style="margin-top:8px;background:#e5e7eb;border-radius:8px;height:8px;overflow:hidden">
-            <div style="width:${budgetPercent}%;height:100%;background:${budgetColor};border-radius:8px;transition:width 0.5s"></div>
-          </div>
-          <small style="color:#6b7280">${budgetPercent.toFixed(1)}% of \u20B9${monthlyBudget} budget</small>
-        </div>
-        <div class="stat-card" style="border-left:4px solid ${dailyColor}">
-          <div class="stat-icon" style="color:${dailyColor}"><i class="fas fa-bolt"></i></div>
-          <div class="stat-value">${todayCalls}</div>
-          <div class="stat-label">Today's AI Calls</div>
-          <div style="margin-top:8px;background:#e5e7eb;border-radius:8px;height:8px;overflow:hidden">
-            <div style="width:${dailyPercent}%;height:100%;background:${dailyColor};border-radius:8px;transition:width 0.5s"></div>
-          </div>
-          <small style="color:#6b7280">${dailyPercent.toFixed(0)}% of ${dailyLimitGlobal} daily limit</small>
-        </div>
-        <div class="stat-card" style="border-left:4px solid #6366f1">
-          <div class="stat-icon" style="color:#6366f1"><i class="fas fa-calculator"></i></div>
-          <div class="stat-value">\u20B9${todayCost.toFixed(4)}</div>
-          <div class="stat-label">Today's Cost</div>
-          <small style="color:#6b7280">Avg \u20B9${todayCalls > 0 ? (todayCost / todayCalls).toFixed(4) : '0.0000'} per call</small>
-        </div>
-        <div class="stat-card" style="border-left:4px solid #8b5cf6">
-          <div class="stat-icon" style="color:#8b5cf6"><i class="fas fa-chart-line"></i></div>
-          <div class="stat-value">${totalCallsMonth}</div>
-          <div class="stat-label">Monthly AI Calls</div>
-          <small style="color:#6b7280">\u20B9${totalCallsMonth > 0 ? (totalCostMonth / totalCallsMonth).toFixed(4) : '0.0000'} avg per call</small>
-        </div>
-      </div>
-
-      ${budgetPercent >= warningThreshold ? '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:16px;margin-bottom:24px;display:flex;align-items:center;gap:12px"><i class="fas fa-exclamation-triangle" style="color:#ef4444;font-size:24px"></i><div><strong style="color:#ef4444">Budget Warning!</strong><br><span style="color:#6b7280">Monthly spend has reached ' + budgetPercent.toFixed(1) + '% of your \u20B9' + monthlyBudget + ' budget. Adjust limits in Settings if needed.</span></div></div>' : ''}
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
-        <div class="table-wrap">
-          <div class="table-header"><h3>Cost by AI Model</h3></div>
-          <table><tr><th>Feature</th><th>Calls</th><th>Cost (\u20B9)</th><th>% of Total</th></tr>
-          ${usage.by_feature.map(f => {
-            const pct = totalCostMonth > 0 ? ((parseFloat(f.total_cost) / totalCostMonth) * 100).toFixed(1) : '0.0';
-            return '<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + (f.feature === 'ai_chat' ? '#10b981' : f.feature === 'ai_image_analysis' ? '#6366f1' : f.feature === 'ai_voice' ? '#f59e0b' : '#8b5cf6') + ';margin-right:8px"></span>' + f.feature + '</td><td>' + f.count + '</td><td>\u20B9' + (+f.total_cost).toFixed(4) + '</td><td>' + pct + '%</td></tr>';
-          }).join('')}
-          ${usage.by_feature.length === 0 ? '<tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:20px">No usage data yet. Send WhatsApp messages to generate data.</td></tr>' : ''}
-          </table>
-        </div>
-        <div class="table-wrap">
-          <div class="table-header"><h3>Daily Cost Trend (Last 30 days)</h3></div>
-          <div style="padding:16px">
-            ${usage.costs.length > 0 ? usage.costs.map(c => {
-              const costVal = parseFloat(c.cost);
-              const maxCost = Math.max(...usage.costs.map(x => parseFloat(x.cost)), 0.001);
-              const barWidth = (costVal / maxCost) * 100;
-              const dateStr = new Date(c.date).toLocaleDateString('en-IN', {day:'numeric',month:'short'});
-              return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="min-width:60px;font-size:12px;color:#6b7280">' + dateStr + '</span><div style="flex:1;background:#e5e7eb;border-radius:4px;height:20px;overflow:hidden"><div style="width:' + barWidth + '%;height:100%;background:linear-gradient(90deg,#10b981,#6366f1);border-radius:4px"></div></div><span style="min-width:70px;text-align:right;font-size:12px;font-weight:600">\u20B9' + costVal.toFixed(4) + '</span></div>';
-            }).join('') : '<div style="text-align:center;color:#9ca3af;padding:40px">No cost data yet</div>'}
-          </div>
-        </div>
-      </div>
-
-      <div style="margin-top:24px;background:#f8fafc;border-radius:12px;padding:20px">
-        <h4 style="margin-bottom:12px;color:#1e293b"><i class="fas fa-info-circle" style="color:#6366f1;margin-right:8px"></i>Cost Estimation Rates</h4>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
-          <div style="background:#fff;padding:12px;border-radius:8px;text-align:center;border:1px solid #e5e7eb"><strong style="font-size:12px;color:#6b7280">Gemini 2.5 Flash Lite</strong><br><span style="font-size:18px;font-weight:700;color:#10b981">\u20B90.60</span><br><small style="color:#9ca3af">per 1M input tokens</small></div>
-          <div style="background:#fff;padding:12px;border-radius:8px;text-align:center;border:1px solid #e5e7eb"><strong style="font-size:12px;color:#6b7280">Gemini 2.0 Flash</strong><br><span style="font-size:18px;font-weight:700;color:#f59e0b">\u20B90.80</span><br><small style="color:#9ca3af">per 1M input tokens</small></div>
-          <div style="background:#fff;padding:12px;border-radius:8px;text-align:center;border:1px solid #e5e7eb"><strong style="font-size:12px;color:#6b7280">Gemini 2.5 Flash</strong><br><span style="font-size:18px;font-weight:700;color:#6366f1">\u20B91.20</span><br><small style="color:#9ca3af">per 1M input tokens</small></div>
-          <div style="background:#fff;padding:12px;border-radius:8px;text-align:center;border:1px solid #e5e7eb"><strong style="font-size:12px;color:#6b7280">Groq Llama 3.3 70B</strong><br><span style="font-size:18px;font-weight:700;color:#8b5cf6">\u20B90.50</span><br><small style="color:#9ca3af">per 1M input tokens</small></div>
-        </div>
-      </div>
-    </div>
-
-    <div id="convTab" style="display:none">
-      <div class="table-wrap">
-        <div class="table-header"><h3>Daily Conversations (Last 30 days)</h3></div>
-        <table><tr><th>Date</th><th>Conversations</th><th>Active Farmers</th></tr>
-        ${(overview.daily || []).map(d => '<tr><td>' + d.date + '</td><td>' + d.conversations + '</td><td>' + d.active_farmers + '</td></tr>').join('')}
-        </table>
-      </div>
-      <div class="form-row">
-        <div class="table-wrap"><div class="table-header"><h3>Top Intents</h3></div>
-          <table><tr><th>Intent</th><th>Count</th></tr>${(overview.by_intent || []).map(i => '<tr><td>' + i.intent + '</td><td>' + i.count + '</td></tr>').join('')}</table></div>
-        <div class="table-wrap"><div class="table-header"><h3>Farmer Growth</h3></div>
-          <table><tr><th>Date</th><th>New Farmers</th></tr>${(overview.farmer_growth || []).map(g => '<tr><td>' + g.date + '</td><td>' + g.new_farmers + '</td></tr>').join('')}</table></div>
-      </div>
-    </div>
-
-    <div id="usageTab" style="display:none">
-      <div class="table-wrap">
-        <div class="table-header"><h3>Usage by Feature</h3></div>
-        <table><tr><th>Feature</th><th>Count</th><th>Cost (\u20B9)</th></tr>
-        ${usage.by_feature.map(f => '<tr><td>' + f.feature + '</td><td>' + f.count + '</td><td>\u20B9' + (+f.total_cost).toFixed(4) + '</td></tr>').join('')}
-        </table>
-      </div>
-      <div class="table-wrap">
-        <div class="table-header"><h3>Daily Costs</h3></div>
-        <table><tr><th>Date</th><th>Cost (\u20B9)</th></tr>
-        ${usage.costs.map(c => '<tr><td>' + c.date + '</td><td>\u20B9' + (+c.cost).toFixed(4) + '</td></tr>').join('')}
-        </table>
-      </div>
-    </div>`;
-  } catch (e) { el.innerHTML = '<div class="empty"><p>Error loading analytics: ' + e.message + '</p></div>'; }
-}
-
-function showAnalyticsTab(tabId, el) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-  ['budgetTab','convTab','usageTab'].forEach(id => {
-    const elem = document.getElementById(id);
-    if (elem) elem.style.display = id === tabId ? 'block' : 'none';
-  });
-}
 
 
-function showAnalyticsTab(tabId, el) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-  document.getElementById('convTab').style.display = tabId === 'convTab' ? 'block' : 'none';
-  document.getElementById('usageTab').style.display = tabId === 'usageTab' ? 'block' : 'none';
-}
 
-// ------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 async function loadServices() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="stats-grid">' + SVCS.map(s => `<div class="stat-card" id="svc-${s.name.replace(/\s/g,'')}"><div class="stat-icon"><i class="fas fa-spinner fa-spin"></i></div><div class="stat-value">${s.name}</div><div class="stat-label">Checking...</div></div>`).join('') + '</div>';
@@ -4151,7 +4397,7 @@ async function loadServices() {
       const r = await fetch(s.url).then(r => r.json());
       const card = document.getElementById('svc-' + s.name.replace(/\s/g, ''));
       card.className = 'stat-card' + (r.status === 'healthy' ? '' : ' danger');
-      card.innerHTML = `<div class="stat-icon"><i class="fas ${r.status === 'healthy' ? 'fa-check-circle' : 'fa-times-circle'}" style="color:${r.status === 'healthy' ? '#4CAF50' : '#E53935'}"></i></div><div class="stat-value">${s.name}</div><div class="stat-label"><span class="status ${r.status === 'healthy' ? 'healthy' : 'unhealthy'}">${r.status}</span> Â· DB: ${r.database || '?'} Â· Redis: ${r.redis || '?'}</div>`;
+      card.innerHTML = `<div class="stat-icon"><i class="fas ${r.status === 'healthy' ? 'fa-check-circle' : 'fa-times-circle'}" style="color:${r.status === 'healthy' ? '#4CAF50' : '#E53935'}"></i></div><div class="stat-value">${s.name}</div><div class="stat-label"><span class="status ${r.status === 'healthy' ? 'healthy' : 'unhealthy'}">${r.status}</span> Ã‚Â· DB: ${r.database || '?'} Ã‚Â· Redis: ${r.redis || '?'}</div>`;
     } catch (e) {
       const card = document.getElementById('svc-' + s.name.replace(/\s/g, ''));
       card.className = 'stat-card danger';
