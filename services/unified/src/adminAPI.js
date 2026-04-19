@@ -1,4 +1,4 @@
-﻿// VartMap Admin API Routes Module
+// VartMap Admin API Routes Module
 const bcrypt = require('bcryptjs');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');

@@ -1,4 +1,4 @@
-﻿// VartMap WhatsApp Gateway Routes Module
+// VartMap WhatsApp Gateway Routes Module
 const axios = require('axios');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
