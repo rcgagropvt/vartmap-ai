@@ -327,7 +327,7 @@ function buildSystemPrompt(catalog, farmer, language, botConfig) {
     '  * "Hum aapki kheti ka poora roadmap bana sakte hain"\n' +
     '  * "Yeh raha aapki samasya ka solution map"\n' +
     '- Do NOT force "map" into every message - use it only when it sounds natural (roughly 1 in 3-4 messages)\n' +
-    '- Sign off important advice with: "VartMap - Aapki Kheti Ka Digital Map ðŸŒ¾"\n\n' +
+    '- Sign off important advice with: "VartMap - Aapki Kheti Ka Digital Map 🌾"\n\n' +
     'STRICT RULES (NEVER VIOLATE):\n' +
     '1. You discuss topics related to: agriculture, farming, crops, soil, fertilizers, pesticides, irrigation, weather for farming, government agricultural schemes, mandi/market prices for crops, Vartmaan Fertilizers products, AND anything about Vartmaan Fertilizers as a company (vision, mission, values, brand story, contact info, etc.).\n' +
     '2. If a farmer asks about topics completely unrelated to agriculture or Vartmaan (movies, cricket, politics, entertainment, personal advice, etc.), politely redirect: "Main kheti-kisaani aur Vartmaan Fertilizers se jude sawaalon mein madad kar sakta hoon. Kripya apni fasal ya hamare products se juda koi sawal poochein."\n' +
@@ -497,7 +497,7 @@ async function getAIResponse(farmerId, sessionId, farmer, messageText, messageTy
     try {
       const inputChars = (messageText || '').length + (systemPrompt ? systemPrompt.length : 0);
       const outputChars = response.length;
-      // Estimated token counts (1 token â‰ˆ 4 chars for English, 2 chars for Hindi)
+      // Estimated token counts (1 token ≈ 4 chars for English, 2 chars for Hindi)
       const inputTokens = Math.ceil(inputChars / 3);
       const outputTokens = Math.ceil(outputChars / 3);
       // Cost estimation per model (INR per 1M tokens)
@@ -754,19 +754,19 @@ async function getWeather(city) {
       params: { q: city + ',IN', appid: apiKey, units: 'metric', lang: 'hi' }
     });
     const d = resp.data;
-    let msg = '*ðŸŒ¤ï¸ ' + d.name + ' ka Mausam*\n\n';
-    msg += 'ðŸŒ¡ï¸ *Taapman:* ' + Math.round(d.main.temp) + 'Â°C (Min: ' + Math.round(d.main.temp_min) + 'Â°C, Max: ' + Math.round(d.main.temp_max) + 'Â°C)\n';
-    msg += 'ðŸ’§ *Nami (Humidity):* ' + d.main.humidity + '%\n';
-    msg += 'ðŸŒ¬ï¸ *Hawa:* ' + Math.round(d.wind.speed * 3.6) + ' km/h\n';
-    msg += 'â˜ï¸ *Haalat:* ' + d.weather[0].description + '\n';
-    msg += 'ðŸ‘ï¸ *Dikhai:* ' + (d.visibility / 1000).toFixed(1) + ' km\n\n';
-    msg += 'ðŸŒ¾ *Kheti Salah:* ';
-    if (d.main.temp > 40) msg += 'Bahut garmi hai â€” subah/shaam sinchai karein, fasal ko dhoop se bachaayein.';
-    else if (d.main.temp > 35) msg += 'Garmi zyada hai â€” sinchai ka dhyan rakhein aur mulching karein.';
-    else if (d.main.humidity > 80) msg += 'Nami zyada hai â€” fungal rog ka dhyan rakhein, davai ka chhidkaav karein.';
-    else if (d.wind.speed > 10) msg += 'Tez hawa â€” chhidkaav se bachein, fasal ko support dein.';
-    else msg += 'Mausam anukool hai â€” kheti ka kaam jari rakhein.';
-    msg += '\n\n_VartMap - Aapki Kheti Ka Digital Map ðŸŒ¾_';
+    let msg = '*🌤️ ' + d.name + ' ka Mausam*\n\n';
+    msg += '🌡️ *Taapman:* ' + Math.round(d.main.temp) + '°C (Min: ' + Math.round(d.main.temp_min) + '°C, Max: ' + Math.round(d.main.temp_max) + '°C)\n';
+    msg += '💧 *Nami (Humidity):* ' + d.main.humidity + '%\n';
+    msg += '🌬️ *Hawa:* ' + Math.round(d.wind.speed * 3.6) + ' km/h\n';
+    msg += '☁️ *Haalat:* ' + d.weather[0].description + '\n';
+    msg += '👁️ *Dikhai:* ' + (d.visibility / 1000).toFixed(1) + ' km\n\n';
+    msg += '🌾 *Kheti Salah:* ';
+    if (d.main.temp > 40) msg += 'Bahut garmi hai — subah/shaam sinchai karein, fasal ko dhoop se bachaayein.';
+    else if (d.main.temp > 35) msg += 'Garmi zyada hai — sinchai ka dhyan rakhein aur mulching karein.';
+    else if (d.main.humidity > 80) msg += 'Nami zyada hai — fungal rog ka dhyan rakhein, davai ka chhidkaav karein.';
+    else if (d.wind.speed > 10) msg += 'Tez hawa — chhidkaav se bachein, fasal ko support dein.';
+    else msg += 'Mausam anukool hai — kheti ka kaam jari rakhein.';
+    msg += '\n\n_VartMap - Aapki Kheti Ka Digital Map 🌾_';
     return msg;
   } catch (e) {
     console.error('Weather API error:', e.message);
@@ -790,11 +790,11 @@ async function getMandiPrices(crop, state, district) {
 
 function formatMandiPrices(prices, crop) {
   if (!prices.length) return 'Maaf kijiye, "' + (crop || '') + '" ke liye abhi mandi bhav uplabdh nahi hai.';
-  let msg = '*ðŸŒ¾ Mandi Bhav - ' + (crop || prices[0].commodity) + '*\n\n';
+  let msg = '*🌾 Mandi Bhav - ' + (crop || prices[0].commodity) + '*\n\n';
   prices.forEach(p => {
-    msg += 'ðŸ“ *' + (p.market_name || p.district) + '* (' + (p.state || '') + ')\n';
-    msg += '   Min: â‚¹' + p.min_price + ' | Max: â‚¹' + p.max_price + ' | Modal: â‚¹' + p.modal_price + '/' + (p.unit || 'quintal') + '\n';
-    if (p.price_date) msg += '   ðŸ“… ' + new Date(p.price_date).toLocaleDateString('hi-IN') + '\n';
+    msg += '📍 *' + (p.market_name || p.district) + '* (' + (p.state || '') + ')\n';
+    msg += '   Min: ₹' + p.min_price + ' | Max: ₹' + p.max_price + ' | Modal: ₹' + p.modal_price + '/' + (p.unit || 'quintal') + '\n';
+    if (p.price_date) msg += '   📅 ' + new Date(p.price_date).toLocaleDateString('hi-IN') + '\n';
     msg += '\n';
   });
   msg += '_Mandi bhav samay ke saath badal sakte hain._';
@@ -814,13 +814,13 @@ async function getGovtSchemes(state) {
 
 function formatGovtSchemes(schemes, farmer) {
   if (!schemes.length) return 'Maaf kijiye, abhi koi sarkari yojana ki jankari uplabdh nahi hai.';
-  let msg = '*ðŸ›ï¸ Sarkari Yojanayen*\n\n';
+  let msg = '*🏛️ Sarkari Yojanayen*\n\n';
   schemes.slice(0, 5).forEach((s, i) => {
     msg += (i + 1) + '. *' + (s.name_hi || s.name) + '*\n';
     if (s.description) msg += '   ' + s.description.substring(0, 100) + '\n';
-    if (s.benefits) msg += '   âœ… ' + s.benefits.substring(0, 80) + '\n';
-    if (s.helpline) msg += '   ðŸ“ž ' + s.helpline + '\n';
-    if (s.apply_url) msg += '   ðŸ”— ' + s.apply_url + '\n';
+    if (s.benefits) msg += '   ✅ ' + s.benefits.substring(0, 80) + '\n';
+    if (s.helpline) msg += '   📞 ' + s.helpline + '\n';
+    if (s.apply_url) msg += '   🔗 ' + s.apply_url + '\n';
     msg += '\n';
   });
   msg += '_Adhik jankari ke liye helpline par call karein._';
@@ -841,14 +841,14 @@ async function getSoilData(state, district) {
 function formatSoilData(soilData, district) {
   if (!soilData.length) return 'Maaf kijiye, "' + (district || 'aapke area') + '" ke liye mitti ki jankari uplabdh nahi hai.';
   const s = soilData[0];
-  let msg = '*ðŸŒ Mitti ki Jankari - ' + (s.district_name || district) + ', ' + (s.state_name || '') + '*\n\n';
-  msg += 'ðŸ“Š *Nitrogen (N):*\n   Low: ' + s.nitrogen_low_pct + '% | Medium: ' + s.nitrogen_medium_pct + '% | High: ' + s.nitrogen_high_pct + '%\n\n';
-  msg += 'ðŸ“Š *Phosphorus (P):*\n   Low: ' + s.phosphorus_low_pct + '% | Medium: ' + s.phosphorus_medium_pct + '% | High: ' + s.phosphorus_high_pct + '%\n\n';
-  msg += 'ðŸ“Š *Potassium (K):*\n   Low: ' + s.potassium_low_pct + '% | Medium: ' + s.potassium_medium_pct + '% | High: ' + s.potassium_high_pct + '%\n\n';
-  msg += 'ðŸ“Š *Organic Carbon:*\n   Low: ' + (s.oc_low_pct || '-') + '% | Medium: ' + (s.oc_medium_pct || '-') + '% | High: ' + (s.oc_high_pct || '-') + '%\n\n';
-  msg += 'ðŸ§ª *pH:* ' + (s.avg_ph || '-') + '\n';
-  msg += 'ðŸ·ï¸ *Soil Type:* ' + (s.soil_type || '-') + '\n';
-  msg += 'ðŸ“ *Samples:* ' + (s.total_samples || '-') + '\n\n';
+  let msg = '*🌍 Mitti ki Jankari - ' + (s.district_name || district) + ', ' + (s.state_name || '') + '*\n\n';
+  msg += '📊 *Nitrogen (N):*\n   Low: ' + s.nitrogen_low_pct + '% | Medium: ' + s.nitrogen_medium_pct + '% | High: ' + s.nitrogen_high_pct + '%\n\n';
+  msg += '📊 *Phosphorus (P):*\n   Low: ' + s.phosphorus_low_pct + '% | Medium: ' + s.phosphorus_medium_pct + '% | High: ' + s.phosphorus_high_pct + '%\n\n';
+  msg += '📊 *Potassium (K):*\n   Low: ' + s.potassium_low_pct + '% | Medium: ' + s.potassium_medium_pct + '% | High: ' + s.potassium_high_pct + '%\n\n';
+  msg += '📊 *Organic Carbon:*\n   Low: ' + (s.oc_low_pct || '-') + '% | Medium: ' + (s.oc_medium_pct || '-') + '% | High: ' + (s.oc_high_pct || '-') + '%\n\n';
+  msg += '🧪 *pH:* ' + (s.avg_ph || '-') + '\n';
+  msg += '🏷️ *Soil Type:* ' + (s.soil_type || '-') + '\n';
+  msg += '📝 *Samples:* ' + (s.total_samples || '-') + '\n\n';
   msg += '_Mitti test karwayen aur Vartmaan fertilizers se sahi poshak tatva dein._';
   return msg;
 }
@@ -924,7 +924,7 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
     const crops = Array.isArray(farmerData.crops) ? farmerData.crops : (farmerData.crops || '').split(',');
     const primaryCrop = crops[0] ? translateCrop(crops[0].trim()) : '';
     if (primaryCrop) {
-      await sendWhatsAppMessage(from, lang === 'hi' ? 'ðŸŒ¾ "' + primaryCrop + '" ka mandi bhav dhundh raha hoon...' : 'Looking up mandi prices for "' + primaryCrop + '"...');
+      await sendWhatsAppMessage(from, lang === 'hi' ? '🌾 "' + primaryCrop + '" ka mandi bhav dhundh raha hoon...' : 'Looking up mandi prices for "' + primaryCrop + '"...');
       let prices = await getMandiPrices(primaryCrop, '');
       if (!prices.length) prices = await getMandiPrices(crops[0].trim(), '');
       const reply = formatMandiPrices(prices, primaryCrop);
@@ -933,7 +933,7 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
     // Show crop selection list for next lookup
     setPendingAction(farmerId, 'mandi_crop');
     await sendWhatsAppList(from,
-      lang === 'hi' ? 'ðŸŒ¾ Kis fasal ka bhav dekhna hai? Neeche se chunein ya naam type karein:' : 'Select a crop or type its name:',
+      lang === 'hi' ? '🌾 Kis fasal ka bhav dekhna hai? Neeche se chunein ya naam type karein:' : 'Select a crop or type its name:',
       'Fasal Chunein',
       [{ title: 'Pramukh Fasalein', rows: popularCrops }]
     );
@@ -945,7 +945,7 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
 
   // GOVERNMENT SCHEMES
   if (menuKey === 'govt_schemes' || menuKey === 'government_schemes' || menuKey === 'sarkari_yojana') {
-    await sendWhatsAppMessage(from, lang === 'hi' ? 'ðŸ›ï¸ Sarkari yojanayen dhundh raha hoon...' : 'Looking up government schemes...');
+    await sendWhatsAppMessage(from, lang === 'hi' ? '🏛️ Sarkari yojanayen dhundh raha hoon...' : 'Looking up government schemes...');
     const schemes = await getGovtSchemes(farmerData.state_name || '');
     const reply = formatGovtSchemes(schemes, farmerData);
     await sendWhatsAppMessage(from, reply);
@@ -958,7 +958,7 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
   if (menuKey === 'soil_info' || menuKey === 'mitti') {
     const district = farmerData.district || farmerData.village || '';
     if (district) {
-      await sendWhatsAppMessage(from, lang === 'hi' ? 'ðŸŒ "' + district + '" ki mitti ki jankari dhundh raha hoon...' : 'Looking up soil data for "' + district + '"...');
+      await sendWhatsAppMessage(from, lang === 'hi' ? '🌍 "' + district + '" ki mitti ki jankari dhundh raha hoon...' : 'Looking up soil data for "' + district + '"...');
       const soilData = await getSoilData('', district);
       const reply = formatSoilData(soilData, district);
       await sendWhatsAppMessage(from, reply);
@@ -967,12 +967,12 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
     setPendingAction(farmerId, 'soil_district');
     if (popularDistricts.length <= 3) {
       await sendWhatsAppButtons(from,
-        lang === 'hi' ? 'ðŸŒ Kis district ki mitti ki jankari chahiye? Chunein ya naam type karein:' : 'Select district or type name:',
+        lang === 'hi' ? '🌍 Kis district ki mitti ki jankari chahiye? Chunein ya naam type karein:' : 'Select district or type name:',
         popularDistricts.map(d => ({ id: d.id, title: d.title }))
       );
     } else {
       await sendWhatsAppList(from,
-        lang === 'hi' ? 'ðŸŒ Kis district ki mitti ki jankari chahiye? Chunein ya naam type karein:' : 'Select district or type name:',
+        lang === 'hi' ? '🌍 Kis district ki mitti ki jankari chahiye? Chunein ya naam type karein:' : 'Select district or type name:',
         'District Chunein',
         [{ title: 'Districts', rows: popularDistricts }]
       );
@@ -987,20 +987,20 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
   if (menuKey === 'weather' || menuKey === 'mausam') {
     const district = farmerData.district || farmerData.village || '';
     if (district) {
-      await sendWhatsAppMessage(from, lang === 'hi' ? 'ðŸŒ¤ï¸ "' + district + '" ka mausam dhundh raha hoon...' : 'Looking up weather for "' + district + '"...');
+      await sendWhatsAppMessage(from, lang === 'hi' ? '🌤️ "' + district + '" ka mausam dhundh raha hoon...' : 'Looking up weather for "' + district + '"...');
       const weatherMsg = await getWeather(district);
       if (weatherMsg) {
         await sendWhatsAppMessage(from, weatherMsg);
         setPendingAction(farmerId, 'weather_city');
         await sendWhatsAppMessage(from, lang === 'hi' ? 'Kisi aur shehar ka mausam jaanne ke liye naam likhen, ya "menu" type karein.' : 'Type another city name, or type "menu".');
       } else {
-        await sendWhatsAppMessage(from, lang === 'hi' ? 'âŒ "' + district + '" ka mausam nahi mil paya. Kripya sahi shehar/district naam likhen.' : 'Could not find weather for "' + district + '". Please type correct city name.');
+        await sendWhatsAppMessage(from, lang === 'hi' ? '❌ "' + district + '" ka mausam nahi mil paya. Kripya sahi shehar/district naam likhen.' : 'Could not find weather for "' + district + '". Please type correct city name.');
         setPendingAction(farmerId, 'weather_city');
       }
     } else {
       setPendingAction(farmerId, 'weather_city');
       await sendWhatsAppMessage(from, lang === 'hi'
-        ? 'ðŸŒ¤ï¸ Mausam ki jankari ke liye apna shehar/district type karein (jaise: Karnal, Lucknow, Indore)'
+        ? '🌤️ Mausam ki jankari ke liye apna shehar/district type karein (jaise: Karnal, Lucknow, Indore)'
         : 'Type your city/district name for weather info');
     }
     return true;
@@ -1011,16 +1011,16 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
   if (menuKey === 'my_profile' || menuKey === 'profile') {
     const f = farmerData;
     const crops = Array.isArray(f.crops) ? f.crops.join(', ') : (f.crops || 'Not set');
-    let profileMsg = '*ðŸ‘¨â€ðŸŒ¾ Meri Profile*\n\n';
-    profileMsg += 'ðŸ“› *Naam:* ' + (f.name || '-') + '\n';
-    profileMsg += 'ðŸ“± *Phone:* ' + (f.phone || '-') + '\n';
-    profileMsg += 'ðŸŒ *Bhaasha:* ' + (f.language === 'hi' ? 'Hindi' : f.language === 'en' ? 'English' : (f.language || '-')) + '\n';
-    profileMsg += 'ðŸ˜ï¸ *Gaon:* ' + (f.village || '-') + '\n';
-    profileMsg += 'ðŸŒ¾ *Fasalein:* ' + crops + '\n';
-    profileMsg += 'ðŸžï¸ *Zameen:* ' + (f.land_holding_acres ? f.land_holding_acres + ' acre' : 'Not set') + '\n';
-    profileMsg += 'ðŸ§ª *Mitti:* ' + (f.soil_type || 'Not set') + '\n';
-    profileMsg += 'ðŸ’§ *Sinchai:* ' + (f.irrigation_type || 'Not set') + '\n';
-    profileMsg += 'ðŸŒ¿ *Kheti ka tarika:* ' + (f.farming_type || 'Not set') + '\n\n';
+    let profileMsg = '*👨‍🌾 Meri Profile*\n\n';
+    profileMsg += '📛 *Naam:* ' + (f.name || '-') + '\n';
+    profileMsg += '📱 *Phone:* ' + (f.phone || '-') + '\n';
+    profileMsg += '🌐 *Bhaasha:* ' + (f.language === 'hi' ? 'Hindi' : f.language === 'en' ? 'English' : (f.language || '-')) + '\n';
+    profileMsg += '🏘️ *Gaon:* ' + (f.village || '-') + '\n';
+    profileMsg += '🌾 *Fasalein:* ' + crops + '\n';
+    profileMsg += '🏞️ *Zameen:* ' + (f.land_holding_acres ? f.land_holding_acres + ' acre' : 'Not set') + '\n';
+    profileMsg += '🧪 *Mitti:* ' + (f.soil_type || 'Not set') + '\n';
+    profileMsg += '💧 *Sinchai:* ' + (f.irrigation_type || 'Not set') + '\n';
+    profileMsg += '🌿 *Kheti ka tarika:* ' + (f.farming_type || 'Not set') + '\n\n';
     profileMsg += '_"menu" type karein aur options dekhein._';
     await sendWhatsAppMessage(from, profileMsg);
     return true;
@@ -1033,7 +1033,7 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
     setPendingAction(farmerId, 'fertilizer_crop');
     await sendWhatsAppList(from,
       lang === 'hi'
-        ? 'ðŸ§ª *Khad Salah*\n\nKis fasal ke liye khad ki salah chahiye? Neeche se chunein ya fasal ka naam type karein:'
+        ? '🧪 *Khad Salah*\n\nKis fasal ke liye khad ki salah chahiye? Neeche se chunein ya fasal ka naam type karein:'
         : 'Which crop do you need fertilizer advice for?',
       'Fasal Chunein',
       [{ title: 'Pramukh Fasalein', rows: popularCrops }]
@@ -1047,8 +1047,8 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
   if (menuKey === 'crop_doctor') {
     setPendingAction(farmerId, 'crop_doctor_photo');
     await sendWhatsAppMessage(from, lang === 'hi'
-      ? 'ðŸ”¬ *Fasal Doctor*\n\nApni beemaar fasal ki photo bhejein, hum AI se bimari pahchaanenge!\n\nðŸ“¸ *Photo kaise lein:*\nâ€¢ Paas se lein (close-up)\nâ€¢ Rog wali patti ya hissa dikhayein\nâ€¢ Acchi roshni mein lein\n\nPhoto bhejein ya samasya likhen:'
-      : 'ðŸ”¬ *Crop Doctor*\n\nSend a photo of the affected crop for AI diagnosis!\n\nðŸ“¸ *Photo tips:*\nâ€¢ Take a close-up\nâ€¢ Show the affected leaf/part\nâ€¢ Good lighting\n\nSend photo or describe the problem:');
+      ? '🔬 *Fasal Doctor*\n\nApni beemaar fasal ki photo bhejein, hum AI se bimari pahchaanenge!\n\n📸 *Photo kaise lein:*\n• Paas se lein (close-up)\n• Rog wali patti ya hissa dikhayein\n• Acchi roshni mein lein\n\nPhoto bhejein ya samasya likhen:'
+      : '🔬 *Crop Doctor*\n\nSend a photo of the affected crop for AI diagnosis!\n\n📸 *Photo tips:*\n• Take a close-up\n• Show the affected leaf/part\n• Good lighting\n\nSend photo or describe the problem:');
     activateAiChat(farmerId);
     return true;
   }
@@ -1057,8 +1057,8 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
   // MODERN FARMING
   if (menuKey === 'modern_farming') {
     await sendWhatsAppMessage(from, lang === 'hi'
-      ? 'ðŸŒ± *Adhunik Kheti*\n\nAap kisi bhi kheti se judi jaankari poochh sakte hain:\nâ€¢ Nayi techniques\nâ€¢ Beej aur ugaane ka tarika\nâ€¢ Keetnashak aur dawaiyan\nâ€¢ Organic kheti\n\nApna sawaal poochhein:'
-      : 'ðŸŒ± *Modern Farming*\n\nAsk about any farming topic:\nâ€¢ New techniques\nâ€¢ Seeds & cultivation\nâ€¢ Pest management\nâ€¢ Organic farming\n\nAsk your question:');
+      ? '🌱 *Adhunik Kheti*\n\nAap kisi bhi kheti se judi jaankari poochh sakte hain:\n• Nayi techniques\n• Beej aur ugaane ka tarika\n• Keetnashak aur dawaiyan\n• Organic kheti\n\nApna sawaal poochhein:'
+      : '🌱 *Modern Farming*\n\nAsk about any farming topic:\n• New techniques\n• Seeds & cultivation\n• Pest management\n• Organic farming\n\nAsk your question:');
     activateAiChat(farmerId);
     return true;
   }
@@ -1068,16 +1068,16 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
   if (menuKey === 'ai_chat' || menuKey === 'ai_se_baat') {
     activateAiChat(farmerId);
     await sendWhatsAppMessage(from, lang === 'hi'
-      ? 'ðŸ¤– *AI Chat Mode ON*\n\nAap ab AI se seedha baat kar sakte hain. Apna sawaal poochhein!\n\nâ±ï¸ 10 minute baad menu wapas aa jayega.\nðŸ“‹ Menu dekhne ke liye "menu" type karein.'
-      : 'ðŸ¤– *AI Chat Mode ON*\n\nYou can now chat directly with AI. Ask your question!\n\nâ±ï¸ Session expires in 10 minutes.\nðŸ“‹ Type "menu" to go back.');
+      ? '🤖 *AI Chat Mode ON*\n\nAap ab AI se seedha baat kar sakte hain. Apna sawaal poochhein!\n\n⏱️ 10 minute baad menu wapas aa jayega.\n📋 Menu dekhne ke liye "menu" type karein.'
+      : '🤖 *AI Chat Mode ON*\n\nYou can now chat directly with AI. Ask your question!\n\n⏱️ Session expires in 10 minutes.\n📋 Type "menu" to go back.');
     return true;
   }
 
   // TALK TO EXPERT
   if (menuKey === 'talk_to_expert') {
     await sendWhatsAppMessage(from, lang === 'hi'
-      ? 'ðŸ‘¨â€ðŸ”¬ Aapka sandesh hamare visheshagya ko bhej diya gaya hai. Woh jaldi se aapko call karenge.\n\nðŸ“ž Seedha baat karne ke liye call karein: 1800-XXX-XXXX\n\n_"menu" type karein aur options dekhein._'
-      : 'Your message has been forwarded to our expert. They will call you soon.\n\nðŸ“ž Direct call: 1800-XXX-XXXX\n\nType "menu" for options.');
+      ? '👨‍🔬 Aapka sandesh hamare visheshagya ko bhej diya gaya hai. Woh jaldi se aapko call karenge.\n\n📞 Seedha baat karne ke liye call karein: 1800-XXX-XXXX\n\n_"menu" type karein aur options dekhein._'
+      : 'Your message has been forwarded to our expert. They will call you soon.\n\n📞 Direct call: 1800-XXX-XXXX\n\nType "menu" for options.');
     return true;
   }
 
@@ -1291,7 +1291,7 @@ app.post('/webhook', async (req, res) => {
               clearPendingAction(farmerId);
               let crop = cropIdMapping[msgBody.trim()] || translateCrop(msgBody.trim());
               await sendWhatsAppMessage(from, lang === 'hi'
-                ? 'ðŸŒ¾ "' + crop + '" ka mandi bhav dhundh raha hoon...'
+                ? '🌾 "' + crop + '" ka mandi bhav dhundh raha hoon...'
                 : 'Looking up prices for "' + crop + '"...');
               let prices = await getMandiPrices(crop, '');
               if (!prices.length) prices = await getMandiPrices(msgBody.trim(), '');
@@ -1303,7 +1303,7 @@ app.post('/webhook', async (req, res) => {
                 const stateRows = states.slice(0, 10).map(s => ({ id: 'state_' + s.replace(/\s/g, '_'), title: s.substring(0, 24) }));
                 pendingActions[farmerId] = { action: 'mandi_state', timestamp: Date.now(), crop: crop };
                 await sendWhatsAppList(from,
-                  lang === 'hi' ? 'ðŸ“ Kisi khaas state ka bhav dekhein, ya "menu" type karein:' : 'Filter by state, or type "menu":',
+                  lang === 'hi' ? '📍 Kisi khaas state ka bhav dekhein, ya "menu" type karein:' : 'Filter by state, or type "menu":',
                   'State Chunein',
                   [{ title: 'States', rows: stateRows }]
                 );
@@ -1332,7 +1332,7 @@ app.post('/webhook', async (req, res) => {
                 state = msgBody.trim().replace('state_', '').replace(/_/g, ' ');
               }
               await sendWhatsAppMessage(from, lang === 'hi'
-                ? 'ðŸŒ¾ "' + crop + '" ka bhav "' + state + '" mein dhundh raha hoon...'
+                ? '🌾 "' + crop + '" ka bhav "' + state + '" mein dhundh raha hoon...'
                 : 'Looking up "' + crop + '" prices in "' + state + '"...');
               const prices = await getMandiPrices(crop, state);
               const reply = formatMandiPrices(prices, crop + ' (' + state + ')');
@@ -1343,7 +1343,7 @@ app.post('/webhook', async (req, res) => {
                 const distRows = districts.slice(0, 10).map(d => ({ id: 'mdist_' + d.replace(/\s/g, '_'), title: d.substring(0, 24) }));
                 pendingActions[farmerId] = { action: 'mandi_district', timestamp: Date.now(), crop: crop, state: state };
                 await sendWhatsAppList(from,
-                  lang === 'hi' ? 'ðŸ“ Kisi khaas district ka bhav dekhein, ya "menu" type karein:' : 'Filter by district, or type "menu":',
+                  lang === 'hi' ? '📍 Kisi khaas district ka bhav dekhein, ya "menu" type karein:' : 'Filter by district, or type "menu":',
                   'District Chunein',
                   [{ title: 'Districts', rows: distRows }]
                 );
@@ -1369,7 +1369,7 @@ const state = pendingData.state || '';
                 district = district.replace('mdist_', '').replace(/_/g, ' ');
               }
               await sendWhatsAppMessage(from, lang === 'hi'
-                ? 'ðŸŒ¾ "' + crop + '" ka bhav "' + district + '" mein dhundh raha hoon...'
+                ? '🌾 "' + crop + '" ka bhav "' + district + '" mein dhundh raha hoon...'
                 : 'Looking up "' + crop + '" prices in "' + district + '"...');
               const prices = await getMandiPrices(crop, state, district);
               const reply = formatMandiPrices(prices, crop + ' (' + district + ')');
@@ -1388,7 +1388,7 @@ const state = pendingData.state || '';
               clearPendingAction(farmerId);
               let district = districtIdMapping[msgBody.trim()] || msgBody.trim();
               await sendWhatsAppMessage(from, lang === 'hi'
-                ? 'ðŸŒ "' + district + '" ki mitti ki jankari dhundh raha hoon...'
+                ? '🌍 "' + district + '" ki mitti ki jankari dhundh raha hoon...'
                 : 'Looking up soil data for "' + district + '"...');
               const soilData = await getSoilData('', district);
               const reply = formatSoilData(soilData, district);
@@ -1417,14 +1417,14 @@ const state = pendingData.state || '';
             if (pendingAction === 'weather_city') {
               clearPendingAction(farmerId);
               const city = msgBody.trim();
-              await sendWhatsAppMessage(from, lang === 'hi' ? 'ðŸŒ¤ï¸ "' + city + '" ka mausam dhundh raha hoon...' : 'Looking up weather for "' + city + '"...');
+              await sendWhatsAppMessage(from, lang === 'hi' ? '🌤️ "' + city + '" ka mausam dhundh raha hoon...' : 'Looking up weather for "' + city + '"...');
               const weatherMsg = await getWeather(city);
               if (weatherMsg) {
                 await sendWhatsAppMessage(from, weatherMsg);
                 setPendingAction(farmerId, 'weather_city');
                 await sendWhatsAppMessage(from, lang === 'hi' ? 'Kisi aur shehar ka mausam jaanne ke liye naam likhen, ya "menu" type karein.' : 'Type another city name, or type "menu".');
               } else {
-                await sendWhatsAppMessage(from, lang === 'hi' ? 'âŒ "' + city + '" ka mausam nahi mil paya. Kripya sahi shehar naam likhen.' : 'Could not find weather for "' + city + '".');
+                await sendWhatsAppMessage(from, lang === 'hi' ? '❌ "' + city + '" ka mausam nahi mil paya. Kripya sahi shehar naam likhen.' : 'Could not find weather for "' + city + '".');
                 setPendingAction(farmerId, 'weather_city');
               }
               await pool.query(
@@ -1462,9 +1462,9 @@ const state = pendingData.state || '';
 
                     // 8.5 CHECK AI CHAT MODE
           if (!isAiChatActive(farmerId)) {
-            // Not in AI mode â€” show menu instead of calling AI
+            // Not in AI mode — show menu instead of calling AI
             await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi'
-              ? 'ðŸ™ Kripya neeche diye menu mein se chunein, ya "AI se baat karein" select karein:'
+              ? '🙏 Kripya neeche diye menu mein se chunein, ya "AI se baat karein" select karein:'
               : 'Please select from the menu below, or choose "Chat with AI":');
             await sendMenuMessage(from, botConfig, farmerData.language || 'hi');
             await pool.query(
