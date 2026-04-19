@@ -1,0 +1,134 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ðŸ† My Prizes - VartMap</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Segoe UI',sans-serif; background:#f0f2f5; min-height:100vh; }
+.container { max-width:420px; margin:0 auto; padding:16px; }
+.header { background:linear-gradient(135deg,#1a5e1a,#2d8e2d); color:#fff; padding:24px 16px; border-radius:0 0 20px 20px; text-align:center; margin:-16px -16px 20px; }
+.header h1 { font-size:20px; margin-bottom:4px; }
+.header p { font-size:13px; opacity:.85; }
+.card { background:#fff; border-radius:14px; padding:20px; margin-bottom:14px; box-shadow:0 2px 8px rgba(0,0,0,.06); }
+.form-group { margin-bottom:14px; }
+.form-group label { display:block; font-size:13px; font-weight:600; margin-bottom:6px; }
+.form-group input { width:100%; padding:12px; border:2px solid #e0e0e0; border-radius:10px; font-size:15px; }
+.form-group input:focus { outline:none; border-color:#2d8e2d; }
+.btn { width:100%; padding:14px; border:none; border-radius:12px; font-size:16px; font-weight:700; cursor:pointer; background:linear-gradient(135deg,#2d8e2d,#1a5e1a); color:#fff; }
+.btn:disabled { opacity:.5; }
+.summary { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px; }
+.summary-card { background:#f8f9fa; border-radius:10px; padding:14px; text-align:center; }
+.summary-card .num { font-size:24px; font-weight:700; color:#1a5e1a; }
+.summary-card .lbl { font-size:11px; color:#999; margin-top:2px; }
+.prize-item { border:1px solid #e8e8e8; border-radius:12px; padding:16px; margin-bottom:12px; position:relative; overflow:hidden; }
+.prize-item .color-bar { position:absolute; left:0; top:0; bottom:0; width:5px; }
+.prize-item .prize-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.prize-item .prize-name { font-size:16px; font-weight:700; }
+.prize-item .prize-status { font-size:11px; padding:4px 10px; border-radius:20px; font-weight:600; }
+.status-won { background:#FFF3E0; color:#E65100; }
+.status-verified { background:#E3F2FD; color:#1565C0; }
+.status-paid, .status-delivered { background:#E8F5E9; color:#2E7D32; }
+.status-rejected { background:#FFEBEE; color:#C62828; }
+.prize-item .prize-details { font-size:13px; color:#666; }
+.prize-item .prize-details div { padding:3px 0; display:flex; justify-content:space-between; }
+.prize-item .coupon-box { background:#FFF8E1; border:2px dashed #FFB300; border-radius:8px; padding:10px; text-align:center; margin-top:10px; }
+.prize-item .coupon-box .code { font-size:20px; font-weight:700; color:#E65100; letter-spacing:2px; }
+.empty { text-align:center; padding:40px; color:#999; }
+.empty i { font-size:48px; opacity:.3; margin-bottom:12px; display:block; }
+</style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>ðŸ† My Prizes</h1>
+    <p>Check your spin wheel winnings</p>
+  </div>
+
+  <div id="phoneForm" class="card">
+    <div class="form-group">
+      <label>Enter your WhatsApp number</label>
+      <input type="tel" id="phone" placeholder="e.g. 9876543210" maxlength="10" inputmode="numeric">
+    </div>
+    <button class="btn" id="btnCheck" onclick="checkPrizes()">Check My Prizes</button>
+  </div>
+
+  <div id="results" style="display:none"></div>
+</div>
+
+<script>
+const API = '';
+
+async function checkPrizes() {
+  const phone = document.getElementById('phone').value.trim().replace(/\D/g, '');
+  if (phone.length < 10) return alert('Please enter a valid 10-digit phone number');
+
+  const btn = document.getElementById('btnCheck');
+  btn.disabled = true;
+  btn.textContent = 'â³ Checking...';
+
+  try {
+    const fullPhone = '91' + phone.slice(-10);
+    const r = await fetch(API + '/api/v1/public/prizes/' + fullPhone);
+    if (!r.ok) {
+      const err = await r.json();
+      throw new Error(err.error || 'Not found');
+    }
+    const d = await r.json();
+
+    document.getElementById('phoneForm').style.display = 'none';
+    const el = document.getElementById('results');
+    el.style.display = 'block';
+
+    if (!d.prizes.length) {
+      el.innerHTML = '<div class="empty"><i class="fas fa-gift"></i><p>No prizes yet. Spin the wheel to win!</p></div>';
+      return;
+    }
+
+    el.innerHTML = `
+      <div class="card" style="text-align:center;padding:16px">
+        <p style="font-size:14px;color:#666">Welcome, <strong>${d.farmer.name}</strong>!</p>
+      </div>
+      <div class="summary">
+        <div class="summary-card"><div class="num">${d.total_won}</div><div class="lbl">Prizes Won</div></div>
+        <div class="summary-card"><div class="num">â‚¹${d.total_value}</div><div class="lbl">Total Value</div></div>
+      </div>
+      ${d.prizes.map(p => `
+        <div class="prize-item">
+          <div class="color-bar" style="background:${p.color || '#4CAF50'}"></div>
+          <div style="padding-left:10px">
+            <div class="prize-header">
+              <span class="prize-name">${p.segment_label || p.prize_type}</span>
+              <span class="prize-status status-${p.status}">${p.status === 'won' ? 'â³ Pending' : p.status === 'verified' ? 'âœ… Verified' : p.status === 'paid' ? 'ðŸ’° Paid' : p.status === 'delivered' ? 'ðŸŽ Delivered' : 'âŒ Rejected'}</span>
+            </div>
+            <div class="prize-details">
+              <div><span>Campaign</span><span>${p.wheel_name}</span></div>
+              <div><span>Value</span><span>${p.prize_type === 'cash' ? 'â‚¹' + p.prize_value : p.prize_type === 'points' ? p.prize_value + ' points' : p.prize_type === 'discount' ? p.prize_value + '% off' : p.prize_value}</span></div>
+              <div><span>Won on</span><span>${new Date(p.created_at).toLocaleDateString('en-IN')}</span></div>
+              ${p.paid_at ? `<div><span>${p.prize_type === 'cash' ? 'Paid on' : 'Delivered on'}</span><span>${new Date(p.paid_at).toLocaleDateString('en-IN')}</span></div>` : ''}
+              ${p.payment_method ? `<div><span>Method</span><span>${p.payment_method}</span></div>` : ''}
+              ${p.payment_reference ? `<div><span>Reference</span><span>${p.payment_reference}</span></div>` : ''}
+            </div>
+            ${p.coupon_code ? `
+              <div class="coupon-box">
+                <div style="font-size:11px;color:#666;margin-bottom:4px">Your Discount Coupon</div>
+                <div class="code">${p.coupon_code}</div>
+                <div style="font-size:11px;color:#999;margin-top:4px">Show at dealer to avail ${p.prize_value}% discount</div>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `).join('')}
+    `;
+  } catch(e) {
+    alert(e.message || 'Could not find your prizes. Make sure you entered the correct phone number.');
+    btn.disabled = false;
+    btn.textContent = 'Check My Prizes';
+  }
+}
+</script>
+</body>
+</html>
+

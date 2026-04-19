@@ -1,0 +1,1149 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Loyalty Rewards - VartMap</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+            min-height: 100vh;
+            color: #e2e8f0;
+        }
+
+        .lang-toggle {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            z-index: 100;
+            display: flex;
+            gap: 4px;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 8px;
+            padding: 4px;
+        }
+
+        .lang-btn {
+            padding: 6px 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            background: transparent;
+            color: #94a3b8;
+            transition: all 0.2s;
+        }
+
+        .lang-btn.active {
+            background: #10b981;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 480px;
+            margin: 0 auto;
+            padding: 16px;
+            padding-top: 60px;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .header-logo {
+            font-size: 42px;
+            margin-bottom: 8px;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #10b981, #34d399);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 4px;
+        }
+
+        .header p {
+            color: #94a3b8;
+            font-size: 14px;
+        }
+
+        /* Phone Entry */
+        .phone-section {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 32px 24px;
+            text-align: center;
+        }
+
+        .phone-section h2 {
+            font-size: 20px;
+            margin-bottom: 8px;
+        }
+
+        .phone-section p {
+            color: #94a3b8;
+            font-size: 14px;
+            margin-bottom: 24px;
+        }
+
+        .phone-input-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .phone-prefix {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 12px;
+            padding: 14px 16px;
+            color: #e2e8f0;
+            font-size: 16px;
+            font-weight: 600;
+            width: 70px;
+            text-align: center;
+        }
+
+        .phone-input {
+            flex: 1;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 12px;
+            padding: 14px 16px;
+            color: #fff;
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .phone-input:focus {
+            border-color: #10b981;
+        }
+
+        .phone-input::placeholder {
+            color: #475569;
+            letter-spacing: 4px;
+        }
+
+        .check-btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .check-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3);
+        }
+
+        .check-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* Dashboard */
+        .dashboard { display: none; }
+
+        /* Farmer Card */
+        .farmer-card {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+
+        .farmer-name {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .farmer-phone {
+            color: #94a3b8;
+            font-size: 14px;
+            margin-bottom: 16px;
+        }
+
+        /* Tier Badge */
+        .tier-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 24px;
+            border-radius: 50px;
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            border: 2px solid;
+        }
+
+        .tier-icon { font-size: 24px; }
+
+        /* Points Display */
+        .points-display {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .points-card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .points-value {
+            font-size: 28px;
+            font-weight: 800;
+        }
+
+        .points-label {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-top: 2px;
+        }
+
+        /* Tier Progress */
+        .tier-progress {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .tier-progress-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            color: #94a3b8;
+            margin-bottom: 8px;
+        }
+
+        .progress-bar {
+            height: 10px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 5px;
+            transition: width 1s ease;
+        }
+
+        .tier-perks {
+            margin-top: 12px;
+            font-size: 13px;
+        }
+
+        .tier-perks span {
+            display: inline-block;
+            background: rgba(16,185,129,0.15);
+            color: #34d399;
+            padding: 4px 10px;
+            border-radius: 6px;
+            margin: 3px 4px 3px 0;
+            font-size: 12px;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 4px;
+            margin-bottom: 16px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 10px 8px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            background: transparent;
+            color: #94a3b8;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            background: #10b981;
+            color: #fff;
+        }
+
+        /* Rewards Catalog */
+        .catalog-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .catalog-item {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .catalog-item:hover {
+            transform: translateY(-2px);
+            border-color: rgba(16,185,129,0.3);
+        }
+
+        .catalog-item.disabled {
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
+        .catalog-icon {
+            font-size: 36px;
+            margin-bottom: 8px;
+        }
+
+        .catalog-name {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            line-height: 1.3;
+        }
+
+        .catalog-category {
+            font-size: 11px;
+            color: #94a3b8;
+            margin-bottom: 8px;
+        }
+
+        .catalog-points {
+            font-size: 18px;
+            font-weight: 800;
+            color: #f59e0b;
+            margin-bottom: 8px;
+        }
+
+        .catalog-points small {
+            font-size: 11px;
+            font-weight: 400;
+            color: #94a3b8;
+        }
+
+        .redeem-btn {
+            width: 100%;
+            padding: 8px;
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        .redeem-btn:hover { transform: scale(1.02); }
+
+        .redeem-btn:disabled {
+            background: #374151;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Transaction History */
+        .transaction-list { display: flex; flex-direction: column; gap: 8px; }
+
+        .txn-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 14px 16px;
+        }
+
+        .txn-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .txn-icon.earn { background: rgba(16,185,129,0.15); }
+        .txn-icon.redeem { background: rgba(239,68,68,0.15); }
+        .txn-icon.expire { background: rgba(245,158,11,0.15); }
+        .txn-icon.adjust { background: rgba(99,102,241,0.15); }
+
+        .txn-details { flex: 1; }
+
+        .txn-desc {
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+
+        .txn-meta {
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        .txn-points {
+            text-align: right;
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+        .txn-points.earn { color: #10b981; }
+        .txn-points.redeem { color: #ef4444; }
+        .txn-points.expire { color: #f59e0b; }
+        .txn-points.adjust { color: #6366f1; }
+
+        .txn-balance {
+            font-size: 11px;
+            color: #94a3b8;
+            text-align: right;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #64748b;
+        }
+
+        .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+        .empty-state h3 { margin-bottom: 8px; color: #94a3b8; }
+
+        /* Redeem Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(4px);
+            z-index: 200;
+            justify-content: center;
+            align-items: flex-end;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: #1e293b;
+            border-radius: 20px 20px 0 0;
+            padding: 32px 24px;
+            width: 100%;
+            max-width: 480px;
+            max-height: 80vh;
+            overflow-y: auto;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h3 { font-size: 18px; }
+
+        .modal-close {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: #94a3b8;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-item {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .modal-item-icon { font-size: 36px; }
+
+        .modal-item-info h4 { margin-bottom: 4px; }
+        .modal-item-info p { color: #94a3b8; font-size: 13px; }
+
+        .modal-field {
+            margin-bottom: 16px;
+        }
+
+        .modal-field label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #94a3b8;
+            margin-bottom: 6px;
+        }
+
+        .modal-field input, .modal-field textarea {
+            width: 100%;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 10px;
+            padding: 12px 14px;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .modal-field textarea { resize: vertical; min-height: 80px; }
+
+        .modal-field input:focus, .modal-field textarea:focus {
+            border-color: #10b981;
+        }
+
+        .modal-summary {
+            background: rgba(16,185,129,0.1);
+            border: 1px solid rgba(16,185,129,0.2);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+
+        .modal-summary-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            font-size: 14px;
+        }
+
+        .modal-summary-row.total {
+            border-top: 1px solid rgba(255,255,255,0.1);
+            margin-top: 8px;
+            padding-top: 8px;
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+        .confirm-btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .confirm-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Success Screen */
+        .success-screen {
+            display: none;
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .success-screen.show { display: block; }
+
+        .success-icon {
+            font-size: 72px;
+            margin-bottom: 16px;
+            animation: popIn 0.5s ease;
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0); }
+            70% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        .success-screen h2 {
+            font-size: 24px;
+            margin-bottom: 8px;
+            color: #10b981;
+        }
+
+        .success-screen p {
+            color: #94a3b8;
+            margin-bottom: 24px;
+            line-height: 1.6;
+        }
+
+        /* Loading */
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid rgba(255,255,255,0.1);
+            border-top-color: #10b981;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Error */
+        .error-msg {
+            background: rgba(239,68,68,0.15);
+            border: 1px solid rgba(239,68,68,0.3);
+            color: #fca5a5;
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-size: 14px;
+            margin-top: 16px;
+            display: none;
+        }
+
+        .error-msg.show { display: block; }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 32px 16px;
+            color: #475569;
+            font-size: 12px;
+        }
+
+        .footer a { color: #10b981; text-decoration: none; }
+    </style>
+</head>
+<body>
+
+<!-- Language Toggle -->
+<div class="lang-toggle">
+    <button class="lang-btn active" onclick="setLang('en')">EN</button>
+    <button class="lang-btn" onclick="setLang('hi')">à¤¹à¤¿à¤‚à¤¦à¥€</button>
+</div>
+
+<div class="container">
+
+    <!-- Header -->
+    <div class="header">
+        <div class="header-logo">ðŸŒ¾</div>
+        <h1 data-en="My Loyalty Rewards" data-hi="à¤®à¥‡à¤°à¥‡ à¤²à¥‰à¤¯à¤²à¥à¤Ÿà¥€ à¤°à¤¿à¤µà¥‰à¤°à¥à¤¡à¥à¤¸">My Loyalty Rewards</h1>
+        <p data-en="Check your points, tier & redeem rewards" data-hi="à¤…à¤ªà¤¨à¥‡ à¤ªà¥‰à¤‡à¤‚à¤Ÿà¥à¤¸, à¤Ÿà¤¿à¤¯à¤° à¤”à¤° à¤°à¤¿à¤µà¥‰à¤°à¥à¤¡à¥à¤¸ à¤¦à¥‡à¤–à¥‡à¤‚">Check your points, tier & redeem rewards</p>
+    </div>
+
+    <!-- Phone Entry Section -->
+    <div class="phone-section" id="phoneSection">
+        <h2 data-en="Enter Your Number" data-hi="à¤…à¤ªà¤¨à¤¾ à¤¨à¤‚à¤¬à¤° à¤¦à¤°à¥à¤œ à¤•à¤°à¥‡à¤‚">Enter Your Number</h2>
+        <p data-en="Enter the WhatsApp number you registered with" data-hi="à¤†à¤ªà¤•à¤¾ WhatsApp à¤¨à¤‚à¤¬à¤° à¤¡à¤¾à¤²à¥‡à¤‚ à¤œà¤¿à¤¸à¤¸à¥‡ à¤°à¤œà¤¿à¤¸à¥à¤Ÿà¤° à¤•à¤¿à¤¯à¤¾ à¤¥à¤¾">Enter the WhatsApp number you registered with</p>
+        
+        <div class="phone-input-group">
+            <div class="phone-prefix">+91</div>
+            <input type="tel" class="phone-input" id="phoneInput" placeholder="9876543210" maxlength="10" inputmode="numeric" pattern="[0-9]*">
+        </div>
+        
+        <button class="check-btn" id="checkBtn" onclick="checkLoyalty()" data-en="Check My Rewards â†’" data-hi="à¤®à¥‡à¤°à¥‡ à¤°à¤¿à¤µà¥‰à¤°à¥à¤¡à¥à¤¸ à¤¦à¥‡à¤–à¥‡à¤‚ â†’">Check My Rewards â†’</button>
+        
+        <div class="error-msg" id="phoneError"></div>
+    </div>
+
+    <!-- Loading -->
+    <div id="loadingSection" style="display:none;text-align:center;padding:60px 20px">
+        <div class="spinner"></div>
+        <p data-en="Fetching your rewards..." data-hi="à¤†à¤ªà¤•à¥‡ à¤°à¤¿à¤µà¥‰à¤°à¥à¤¡à¥à¤¸ à¤²à¥‹à¤¡ à¤¹à¥‹ à¤°à¤¹à¥‡ à¤¹à¥ˆà¤‚...">Fetching your rewards...</p>
+    </div>
+
+    <!-- Dashboard -->
+    <div class="dashboard" id="dashboard">
+        
+        <!-- Farmer Card -->
+        <div class="farmer-card">
+            <div class="farmer-name" id="farmerName"></div>
+            <div class="farmer-phone" id="farmerPhone"></div>
+            
+            <div class="tier-badge" id="tierBadge">
+                <span class="tier-icon" id="tierIcon"></span>
+                <span id="tierName"></span>
+            </div>
+            
+            <div class="points-display">
+                <div class="points-card">
+                    <div class="points-value" id="currentPoints" style="color:#10b981">0</div>
+                    <div class="points-label" data-en="Available Points" data-hi="à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤ªà¥‰à¤‡à¤‚à¤Ÿà¥à¤¸">Available Points</div>
+                </div>
+                <div class="points-card">
+                    <div class="points-value" id="lifetimePoints" style="color:#f59e0b">0</div>
+                    <div class="points-label" data-en="Lifetime Earned" data-hi="à¤•à¥à¤² à¤•à¤®à¤¾à¤ à¤—à¤">Lifetime Earned</div>
+                </div>
+            </div>
+
+            <!-- Tier Progress -->
+            <div class="tier-progress" id="tierProgress">
+                <div class="tier-progress-header">
+                    <span id="currentTierLabel"></span>
+                    <span id="nextTierLabel"></span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width:0%"></div>
+                </div>
+                <div class="tier-perks" id="tierPerks"></div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" id="tabRewards" onclick="switchTab('rewards')" data-en="ðŸŽ Rewards" data-hi="ðŸŽ à¤°à¤¿à¤µà¥‰à¤°à¥à¤¡à¥à¤¸">ðŸŽ Rewards</button>
+            <button class="tab-btn" id="tabHistory" onclick="switchTab('history')" data-en="ðŸ“‹ History" data-hi="ðŸ“‹ à¤‡à¤¤à¤¿à¤¹à¤¾à¤¸">ðŸ“‹ History</button>
+        </div>
+
+        <!-- Tab Content -->
+        <div id="tabContent"></div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        <p>Powered by <a href="#">VartMap</a> ðŸŒ¾</p>
+        <p style="margin-top:4px" data-en="Need help? Message us on WhatsApp" data-hi="à¤®à¤¦à¤¦ à¤šà¤¾à¤¹à¤¿à¤? WhatsApp à¤ªà¤° à¤¸à¤‚à¤ªà¤°à¥à¤• à¤•à¤°à¥‡à¤‚">Need help? Message us on WhatsApp</p>
+    </div>
+</div>
+
+<!-- Redeem Modal -->
+<div class="modal-overlay" id="redeemModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 data-en="Confirm Redemption" data-hi="à¤°à¤¿à¤¡à¥‡à¤®à¥à¤ªà¥à¤¶à¤¨ à¤•à¥€ à¤ªà¥à¤·à¥à¤Ÿà¤¿ à¤•à¤°à¥‡à¤‚">Confirm Redemption</h3>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        
+        <div class="modal-item" id="modalItem">
+            <div class="modal-item-icon" id="modalItemIcon"></div>
+            <div class="modal-item-info">
+                <h4 id="modalItemName"></h4>
+                <p id="modalItemDesc"></p>
+            </div>
+        </div>
+
+        <div class="modal-field" id="addressField" style="display:none">
+            <label data-en="Delivery Address (for physical items)" data-hi="à¤¡à¤¿à¤²à¥€à¤µà¤°à¥€ à¤ªà¤¤à¤¾ (à¤«à¤¿à¤œà¤¿à¤•à¤² à¤†à¤‡à¤Ÿà¤® à¤•à¥‡ à¤²à¤¿à¤)">Delivery Address (for physical items)</label>
+            <textarea id="deliveryAddress" placeholder="Enter your full delivery address..."></textarea>
+        </div>
+
+        <div class="modal-summary">
+            <div class="modal-summary-row">
+                <span data-en="Your Points" data-hi="à¤†à¤ªà¤•à¥‡ à¤ªà¥‰à¤‡à¤‚à¤Ÿà¥à¤¸">Your Points</span>
+                <span id="modalCurrentPts"></span>
+            </div>
+            <div class="modal-summary-row">
+                <span data-en="Cost" data-hi="à¤²à¤¾à¤—à¤¤">Cost</span>
+                <span id="modalCostPts" style="color:#ef4444"></span>
+            </div>
+            <div class="modal-summary-row total">
+                <span data-en="Remaining" data-hi="à¤¶à¥‡à¤·">Remaining</span>
+                <span id="modalRemainingPts" style="color:#10b981"></span>
+            </div>
+        </div>
+
+        <button class="confirm-btn" id="confirmRedeemBtn" onclick="confirmRedeem()" data-en="Confirm & Redeem" data-hi="à¤ªà¥à¤·à¥à¤Ÿà¤¿ à¤•à¤°à¥‡à¤‚ à¤”à¤° à¤°à¤¿à¤¡à¥€à¤® à¤•à¤°à¥‡à¤‚">Confirm & Redeem</button>
+
+        <div class="error-msg" id="redeemError" style="margin-top:12px"></div>
+    </div>
+</div>
+
+<!-- Success Screen (shown after redeem) -->
+<div class="modal-overlay" id="successModal">
+    <div class="modal-content" style="text-align:center;padding-top:48px">
+        <div class="success-icon">ðŸŽ‰</div>
+        <h2 data-en="Redemption Successful!" data-hi="à¤°à¤¿à¤¡à¥‡à¤®à¥à¤ªà¥à¤¶à¤¨ à¤¸à¤«à¤²!">Redemption Successful!</h2>
+        <p id="successMessage" data-en="Your request has been submitted. You'll receive a WhatsApp notification once it's processed." data-hi="à¤†à¤ªà¤•à¤¾ à¤…à¤¨à¥à¤°à¥‹à¤§ à¤¸à¤¬à¤®à¤¿à¤Ÿ à¤¹à¥‹ à¤—à¤¯à¤¾ à¤¹à¥ˆà¥¤ à¤ªà¥à¤°à¥‹à¤¸à¥‡à¤¸ à¤¹à¥‹à¤¨à¥‡ à¤ªà¤° WhatsApp à¤ªà¤° à¤¸à¥‚à¤šà¤¨à¤¾ à¤®à¤¿à¤²à¥‡à¤—à¥€à¥¤">Your request has been submitted. You'll receive a WhatsApp notification once it's processed.</p>
+        <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:16px;margin-bottom:24px">
+            <div style="font-size:13px;color:#94a3b8;margin-bottom:4px" data-en="New Balance" data-hi="à¤¨à¤¯à¤¾ à¤¬à¥ˆà¤²à¥‡à¤‚à¤¸">New Balance</div>
+            <div style="font-size:32px;font-weight:800;color:#10b981" id="successBalance">0</div>
+            <div style="font-size:12px;color:#94a3b8" data-en="points" data-hi="à¤ªà¥‰à¤‡à¤‚à¤Ÿà¥à¤¸">points</div>
+        </div>
+        <button class="confirm-btn" onclick="closeSuccessModal()" data-en="Done" data-hi="à¤¹à¥‹ à¤—à¤¯à¤¾">Done</button>
+    </div>
+</div>
+
+<script>
+    const API_BASE = '';
+    let currentLang = 'en';
+    let farmerData = null;
+    let catalogData = [];
+    let transactionsData = [];
+    let selectedItem = null;
+
+    // Tier config for progress bar
+    const TIERS = [
+        { name: 'Bronze', min: 0, max: 499, color: '#CD7F32', icon: 'ðŸ¥‰', next: 'Silver' },
+        { name: 'Silver', min: 500, max: 1999, color: '#C0C0C0', icon: 'ðŸ¥ˆ', next: 'Gold' },
+        { name: 'Gold', min: 2000, max: 4999, color: '#FFD700', icon: 'ðŸ¥‡', next: 'Platinum' },
+        { name: 'Platinum', min: 5000, max: null, color: '#E5E4E2', icon: 'ðŸ’Ž', next: null }
+    ];
+
+    // Language
+    function setLang(lang) {
+        currentLang = lang;
+        document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector(`.lang-btn[onclick="setLang('${lang}')"]`).classList.add('active');
+        document.querySelectorAll('[data-' + lang + ']').forEach(el => {
+            el.textContent = el.getAttribute('data-' + lang);
+        });
+    }
+
+    // Phone input - numbers only
+    document.getElementById('phoneInput').addEventListener('input', function(e) {
+        this.value = this.value.replace(/\D/g, '').slice(0, 10);
+    });
+
+    document.getElementById('phoneInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') checkLoyalty();
+    });
+
+    // Check loyalty
+    async function checkLoyalty() {
+        const phone = document.getElementById('phoneInput').value.trim();
+        const errorEl = document.getElementById('phoneError');
+        errorEl.classList.remove('show');
+
+        if (phone.length !== 10) {
+            errorEl.textContent = currentLang === 'hi' ? 'à¤•à¥ƒà¤ªà¤¯à¤¾ 10 à¤…à¤‚à¤•à¥‹à¤‚ à¤•à¤¾ à¤¨à¤‚à¤¬à¤° à¤¡à¤¾à¤²à¥‡à¤‚' : 'Please enter a valid 10-digit number';
+            errorEl.classList.add('show');
+            return;
+        }
+
+        document.getElementById('checkBtn').disabled = true;
+        document.getElementById('phoneSection').style.display = 'none';
+        document.getElementById('loadingSection').style.display = 'block';
+
+        try {
+            const resp = await fetch(`${API_BASE}/api/v1/public/loyalty/${phone}`);
+            if (resp.status === 404) {
+                throw new Error(currentLang === 'hi' ? 'à¤¯à¤¹ à¤¨à¤‚à¤¬à¤° à¤°à¤œà¤¿à¤¸à¥à¤Ÿà¤°à¥à¤¡ à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆ' : 'This number is not registered');
+            }
+            if (!resp.ok) throw new Error('Server error');
+
+            const data = await resp.json();
+            farmerData = data.farmer;
+            catalogData = data.catalog || [];
+            transactionsData = data.transactions || [];
+
+            renderDashboard();
+        } catch (e) {
+            document.getElementById('loadingSection').style.display = 'none';
+            document.getElementById('phoneSection').style.display = 'block';
+            document.getElementById('checkBtn').disabled = false;
+            errorEl.textContent = e.message;
+            errorEl.classList.add('show');
+        }
+    }
+
+    // Render dashboard
+    function renderDashboard() {
+        document.getElementById('loadingSection').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+
+        const f = farmerData;
+        document.getElementById('farmerName').textContent = f.name || 'Farmer';
+        document.getElementById('farmerPhone').textContent = '+' + (f.phone || '');
+
+        // Tier
+        const tierName = f.tier_name || 'Bronze';
+        const tierIcon = f.tier_icon || 'ðŸ¥‰';
+        const tierColor = f.tier_color || '#CD7F32';
+        document.getElementById('tierIcon').textContent = tierIcon;
+        document.getElementById('tierName').textContent = tierName;
+        const badge = document.getElementById('tierBadge');
+        badge.style.background = tierColor + '22';
+        badge.style.borderColor = tierColor;
+        badge.style.color = tierColor;
+
+        // Points
+        const currentPts = f.loyalty_points || 0;
+        const lifetimePts = f.lifetime_points || 0;
+        animateNumber('currentPoints', currentPts);
+        animateNumber('lifetimePoints', lifetimePts);
+
+        // Tier progress
+        const currentTier = TIERS.find(t => t.name === tierName) || TIERS[0];
+        const nextTier = TIERS.find(t => t.name === currentTier.next);
+
+        document.getElementById('currentTierLabel').textContent = currentTier.icon + ' ' + currentTier.name;
+
+        if (nextTier) {
+            document.getElementById('nextTierLabel').textContent = nextTier.icon + ' ' + nextTier.name;
+            const progress = Math.min(100, ((lifetimePts - currentTier.min) / (nextTier.min - currentTier.min)) * 100);
+            const fill = document.getElementById('progressFill');
+            fill.style.background = `linear-gradient(90deg, ${currentTier.color}, ${nextTier.color})`;
+            setTimeout(() => { fill.style.width = progress + '%'; }, 100);
+
+            const ptsNeeded = nextTier.min - lifetimePts;
+            if (ptsNeeded > 0) {
+                document.getElementById('nextTierLabel').textContent += ` (${ptsNeeded} pts)`;
+            }
+        } else {
+            document.getElementById('nextTierLabel').textContent = 'ðŸŒŸ Max Tier!';
+            const fill = document.getElementById('progressFill');
+            fill.style.background = currentTier.color;
+            setTimeout(() => { fill.style.width = '100%'; }, 100);
+        }
+
+        // Perks
+        const perks = f.benefits?.perks || [];
+        document.getElementById('tierPerks').innerHTML = perks.map(p => `<span>âœ… ${p}</span>`).join('');
+
+        // Default tab
+        switchTab('rewards');
+    }
+
+    // Animate numbers
+    function animateNumber(elementId, target) {
+        const el = document.getElementById(elementId);
+        const duration = 1000;
+        const start = 0;
+        const startTime = Date.now();
+
+        function update() {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const eased = 1 - Math.pow(1 - progress, 3);
+            el.textContent = Math.round(start + (target - start) * eased).toLocaleString();
+            if (progress < 1) requestAnimationFrame(update);
+        }
+        update();
+    }
+
+    // Tab switching
+    function switchTab(tab) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(tab === 'rewards' ? 'tabRewards' : 'tabHistory').classList.add('active');
+
+        const container = document.getElementById('tabContent');
+
+        if (tab === 'rewards') {
+            renderCatalog(container);
+        } else {
+            renderHistory(container);
+        }
+    }
+
+    // Render catalog
+    function renderCatalog(container) {
+        if (!catalogData.length) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="icon">ðŸŽ</div>
+                    <h3>${currentLang === 'hi' ? 'à¤•à¥‹à¤ˆ à¤°à¤¿à¤µà¥‰à¤°à¥à¤¡ à¤‰à¤ªà¤²à¤¬à¥à¤§ à¤¨à¤¹à¥€à¤‚' : 'No rewards available yet'}</h3>
+                    <p>${currentLang === 'hi' ? 'à¤œà¤²à¥à¤¦ à¤¹à¥€ à¤°à¤¿à¤µà¥‰à¤°à¥à¤¡à¥à¤¸ à¤œà¥‹à¤¡à¤¼à¥‡ à¤œà¤¾à¤à¤‚à¤—à¥‡' : 'Rewards will be added soon'}</p>
+                </div>`;
+            return;
+        }
+
+        const currentPts = farmerData.loyalty_points || 0;
+
+        const categoryIcons = {
+            recharge: 'ðŸ“±',
+            coupon: 'ðŸ·ï¸',
+            physical: 'ðŸ“¦',
+            general: 'ðŸŽ'
+        };
+
+        container.innerHTML = `
+            <div class="catalog-grid">
+                ${catalogData.map(item => {
+                    const canAfford = currentPts >= item.points_required;
+                    return `
+                        <div class="catalog-item ${canAfford ? '' : 'disabled'}">
+                            <div class="catalog-icon">${categoryIcons[item.category] || 'ðŸŽ'}</div>
+                            <div class="catalog-name">${item.name}</div>
+                            <div class="catalog-category">${item.category}</div>
+                            <div class="catalog-points">${item.points_required} <small>pts</small></div>
+                            <button class="redeem-btn" ${canAfford ? '' : 'disabled'} onclick="openRedeemModal('${item.id}')">
+                                ${canAfford
+                                    ? (currentLang === 'hi' ? 'à¤°à¤¿à¤¡à¥€à¤® à¤•à¤°à¥‡à¤‚' : 'Redeem')
+                                    : (currentLang === 'hi' ? `${item.points_required - currentPts} à¤”à¤° à¤šà¤¾à¤¹à¤¿à¤` : `Need ${item.points_required - currentPts} more`)
+                                }
+                            </button>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    }
+
+    // Render transaction history
+    function renderHistory(container) {
+        if (!transactionsData.length) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="icon">ðŸ“‹</div>
+                    <h3>${currentLang === 'hi' ? 'à¤•à¥‹à¤ˆ à¤²à¥‡à¤¨-à¤¦à¥‡à¤¨ à¤¨à¤¹à¥€à¤‚' : 'No transactions yet'}</h3>
+                    <p>${currentLang === 'hi' ? 'à¤ªà¥‰à¤‡à¤‚à¤Ÿà¥à¤¸ à¤•à¤®à¤¾à¤¨à¤¾ à¤¶à¥à¤°à¥‚ à¤•à¤°à¥‡à¤‚!' : 'Start earning points to see your history!'}</p>
+                </div>`;
+            return;
+        }
+
+        const typeConfig = {
+            earn: { icon: 'â¬†ï¸', prefix: '+', label: currentLang === 'hi' ? 'à¤•à¤®à¤¾à¤¯à¤¾' : 'Earned' },
+            redeem: { icon: 'â¬‡ï¸', prefix: '-', label: currentLang === 'hi' ? 'à¤°à¤¿à¤¡à¥€à¤® à¤•à¤¿à¤¯à¤¾' : 'Redeemed' },
+            expire: { icon: 'â°', prefix: '-', label: currentLang === 'hi' ? 'à¤¸à¤®à¤¾à¤ªà¥à¤¤' : 'Expired' },
+            adjust: { icon: 'ðŸ”„', prefix: '', label: currentLang === 'hi' ? 'à¤¸à¤®à¤¾à¤¯à¥‹à¤œà¤¿à¤¤' : 'Adjusted' }
+        };
+
+        container.innerHTML = `
+            <div class="transaction-list">
+                ${transactionsData.map(txn => {
+                    const config = typeConfig[txn.type] || typeConfig.adjust;
+                    const date = new Date(txn.created_at);
+                    const dateStr = date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+                    const timeStr = date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+                    return `
+                        <div class="txn-item">
+                            <div class="txn-icon ${txn.type}">${config.icon}</div>
+                            <div class="txn-details">
+                                <div class="txn-desc">${txn.description || txn.source || config.label}</div>
+                                <div class="txn-meta">${dateStr} Â· ${timeStr}</div>
+                            </div>
+                            <div>
+                                <div class="txn-points ${txn.type}">${config.prefix}${txn.points}</div>
+                                <div class="txn-balance">${currentLang === 'hi' ? 'à¤¬à¥ˆà¤²à¥‡à¤‚à¤¸' : 'Bal'}: ${txn.balance_after}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    }
+
+    // Redeem modal
+    function openRedeemModal(itemId) {
+        selectedItem = catalogData.find(c => c.id === itemId);
+        if (!selectedItem) return;
+
+        const categoryIcons = { recharge: 'ðŸ“±', coupon: 'ðŸ·ï¸', physical: 'ðŸ“¦', general: 'ðŸŽ' };
+        const currentPts = farmerData.loyalty_points || 0;
+        const remaining = currentPts - selectedItem.points_required;
+
+        document.getElementById('modalItemIcon').textContent = categoryIcons[selectedItem.category] || 'ðŸŽ';
+        document.getElementById('modalItemName').textContent = selectedItem.name;
+        document.getElementById('modalItemDesc').textContent = selectedItem.description || selectedItem.category;
+        document.getElementById('modalCurrentPts').textContent = currentPts.toLocaleString() + ' pts';
+        document.getElementById('modalCostPts').textContent = '-' + selectedItem.points_required.toLocaleString() + ' pts';
+        document.getElementById('modalRemainingPts').textContent = remaining.toLocaleString() + ' pts';
+
+        // Show address field for physical items
+        document.getElementById('addressField').style.display = selectedItem.redemption_type === 'physical' ? 'block' : 'none';
+
+        document.getElementById('redeemError').classList.remove('show');
+        document.getElementById('confirmRedeemBtn').disabled = false;
+        document.getElementById('redeemModal').classList.add('show');
+    }
+
+    function closeModal() {
+        document.getElementById('redeemModal').classList.remove('show');
+        selectedItem = null;
+    }
+
+    // Confirm redemption
+    async function confirmRedeem() {
+        if (!selectedItem || !farmerData) return;
+
+        const btn = document.getElementById('confirmRedeemBtn');
+        const errorEl = document.getElementById('redeemError');
+        btn.disabled = true;
+        errorEl.classList.remove('show');
+        btn.textContent = currentLang === 'hi' ? 'à¤ªà¥à¤°à¥‹à¤¸à¥‡à¤¸ à¤¹à¥‹ à¤°à¤¹à¤¾ à¤¹à¥ˆ...' : 'Processing...';
+
+        try {
+            const phone = farmerData.phone;
+            const body = {
+                phone: phone,
+                catalog_item_id: selectedItem.id
+            };
+
+            // Add delivery address for physical items
+            const address = document.getElementById('deliveryAddress').value.trim();
+            if (selectedItem.redemption_type === 'physical') {
+                if (!address) {
+                    throw new Error(currentLang === 'hi' ? 'à¤•à¥ƒà¤ªà¤¯à¤¾ à¤¡à¤¿à¤²à¥€à¤µà¤°à¥€ à¤ªà¤¤à¤¾ à¤­à¤°à¥‡à¤‚' : 'Please enter a delivery address');
+                }
+                body.delivery_address = address;
+            }
+
+            const resp = await fetch(`${API_BASE}/api/v1/public/loyalty/redeem`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Redemption failed');
+
+            // Update local data
+            farmerData.loyalty_points = data.new_balance;
+
+            // Close redeem modal, show success
+            closeModal();
+            document.getElementById('successBalance').textContent = data.new_balance.toLocaleString();
+            document.getElementById('successModal').classList.add('show');
+
+        } catch (e) {
+            errorEl.textContent = e.message;
+            errorEl.classList.add('show');
+            btn.disabled = false;
+            btn.textContent = currentLang === 'hi' ? 'à¤ªà¥à¤·à¥à¤Ÿà¤¿ à¤•à¤°à¥‡à¤‚ à¤”à¤° à¤°à¤¿à¤¡à¥€à¤® à¤•à¤°à¥‡à¤‚' : 'Confirm & Redeem';
+        }
+    }
+
+    function closeSuccessModal() {
+        document.getElementById('successModal').classList.remove('show');
+        // Re-render dashboard with updated points
+        animateNumber('currentPoints', farmerData.loyalty_points);
+        switchTab('rewards');
+    }
+</script>
+
+</body>
+</html>
+
