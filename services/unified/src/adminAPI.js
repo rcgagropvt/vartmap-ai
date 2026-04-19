@@ -1,4 +1,4 @@
-// VartMap Admin API Routes Module
+﻿// VartMap Admin API Routes Module
 const bcrypt = require('bcryptjs');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
@@ -19,7 +19,7 @@ module.exports = function setupAdminAPI(app, pool) {
   
   
   
-  // â”€â”€â”€ AUTH MIDDLEWARE â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ AUTH MIDDLEWARE Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const auth = (req, res, next) => {
     const token = req.headers.authorization?.replace('Bearer ', '');
     if (!token) return res.status(401).json({ error: 'No token' });
@@ -27,7 +27,7 @@ module.exports = function setupAdminAPI(app, pool) {
     catch { res.status(401).json({ error: 'Invalid token' }); }
   };
   
-  // â”€â”€â”€ HEALTH â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ HEALTH Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.get('/health', async (req, res) => {
     try {
       const r = await pool.query('SELECT NOW()');
@@ -35,7 +35,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ status: 'unhealthy', error: e.message }); }
   });
   
-  // â”€â”€â”€ AUTH â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ AUTH Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.post('/api/v1/auth/login', async (req, res) => {
     try {
       const { email, password } = req.body;
@@ -49,30 +49,17 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ DASHBOARD â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ DASHBOARD Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.get('/api/v1/dashboard', auth, async (req, res) => {
     try {
-      // Helper: run query safely, return 0 if table doesn't exist
       const safeCount = async (query) => {
-        try {
-          const r = await pool.query(query);
-          return +(r.rows[0].count || r.rows[0].total || 0);
-        } catch (e) { return 0; }
+        try { const r = await pool.query(query); return +(r.rows[0].count || r.rows[0].total || r.rows[0].sum || 0); } catch (e) { return 0; }
       };
-  
-      const [
-        total_farmers,
-        conversations_24h,
-        active_farmers_24h,
-        total_templates,
-        active_campaigns,
-        moderation_pending,
-        total_rewards_points,
-        total_orders,
-        active_schemes,
-        active_spin_wheels,
-        open_chats
-      ] = await Promise.all([
+      const safeRows = async (query) => {
+        try { const r = await pool.query(query); return r.rows; } catch (e) { return []; }
+      };
+
+      const [total_farmers, conversations_24h, active_farmers_24h, total_templates, active_campaigns, moderation_pending, total_rewards_points, total_orders, active_schemes, active_spin_wheels, open_chats, total_messages_24h, total_campaigns, total_messages_sent, total_delivered, total_read, total_failed] = await Promise.all([
         safeCount('SELECT COUNT(*) FROM farmers'),
         safeCount("SELECT COUNT(*) FROM conversations WHERE created_at > NOW() - INTERVAL '24 hours'"),
         safeCount("SELECT COUNT(DISTINCT farmer_id) FROM conversations WHERE created_at > NOW() - INTERVAL '24 hours'"),
@@ -83,27 +70,39 @@ module.exports = function setupAdminAPI(app, pool) {
         safeCount('SELECT COUNT(*) FROM orders'),
         safeCount("SELECT COUNT(*) FROM government_schemes WHERE status='active'"),
         safeCount("SELECT COUNT(*) FROM spin_wheels WHERE status='active'"),
-        safeCount("SELECT COUNT(*) FROM wa_chat_sessions WHERE status IN ('open','active','assigned')")
+        safeCount("SELECT COUNT(*) FROM wa_chat_sessions WHERE status IN ('open','active','assigned')"),
+        safeCount("SELECT COUNT(*) FROM wa_messages WHERE created_at > NOW() - INTERVAL '24 hours'"),
+        safeCount('SELECT COUNT(*) FROM campaigns'),
+        safeCount('SELECT COALESCE(SUM(sent_count),0) as total FROM campaigns'),
+        safeCount('SELECT COALESCE(SUM(delivered_count),0) as total FROM campaigns'),
+        safeCount('SELECT COALESCE(SUM(read_count),0) as total FROM campaigns'),
+        safeCount("SELECT COUNT(*) FROM campaign_messages WHERE status='failed'")
       ]);
-  
+
+      const [farmer_growth_7d, message_volume_7d, top_crops, top_districts, recent_campaigns, recent_farmers, hourly_activity, farmer_languages, campaign_performance, ai_usage_cost] = await Promise.all([
+        safeRows("SELECT DATE(created_at) as date, COUNT(*) as count FROM farmers WHERE created_at > NOW() - INTERVAL '7 days' GROUP BY DATE(created_at) ORDER BY date"),
+        safeRows("SELECT DATE(created_at) as date, COUNT(*) FILTER (WHERE direction='inbound') as inbound, COUNT(*) FILTER (WHERE direction='outbound') as outbound FROM wa_messages WHERE created_at > NOW() - INTERVAL '7 days' GROUP BY DATE(created_at) ORDER BY date"),
+        safeRows("SELECT UNNEST(string_to_array(COALESCE(crops::text,'unknown'),',')) as crop, COUNT(DISTINCT id) as count FROM farmers WHERE status='active' GROUP BY crop ORDER BY count DESC LIMIT 8"),
+        safeRows("SELECT COALESCE(d.district_name,'Unknown') as district, COALESCE(d.state_name,'') as state, COUNT(f.id) as count FROM farmers f LEFT JOIN districts_master d ON f.district_id=d.id WHERE f.status='active' GROUP BY d.district_name, d.state_name ORDER BY count DESC LIMIT 8"),
+        safeRows("SELECT c.id, c.name, c.status, c.sent_count, c.delivered_count, c.read_count, c.created_at, t.name as template_name FROM campaigns c LEFT JOIN message_templates t ON c.template_id=t.id ORDER BY c.created_at DESC LIMIT 5"),
+        safeRows("SELECT id, name, phone, village, crops, created_at FROM farmers ORDER BY created_at DESC LIMIT 5"),
+        safeRows("SELECT EXTRACT(HOUR FROM created_at)::int as hour, COUNT(*) as count FROM wa_messages WHERE created_at > NOW() - INTERVAL '7 days' GROUP BY hour ORDER BY hour"),
+        safeRows("SELECT COALESCE(language,'unknown') as language, COUNT(*) as count FROM farmers WHERE status='active' GROUP BY language ORDER BY count DESC LIMIT 6"),
+        safeRows("SELECT c.name, c.sent_count, c.delivered_count, c.read_count, CASE WHEN c.sent_count>0 THEN ROUND(c.delivered_count::numeric/c.sent_count*100,1) ELSE 0 END as delivery_rate, CASE WHEN c.delivered_count>0 THEN ROUND(c.read_count::numeric/c.delivered_count*100,1) ELSE 0 END as read_rate FROM campaigns c WHERE c.sent_count > 0 ORDER BY c.created_at DESC LIMIT 5"),
+        safeRows("SELECT COALESCE(SUM(cost_inr),0) as total_cost, COUNT(*) as total_requests FROM usage_tracking WHERE created_at > NOW() - INTERVAL '30 days'")
+      ]);
+
       res.json({
-        total_farmers,
-        conversations_24h,
-        active_farmers_24h,
-        total_templates,
-        active_campaigns,
-        moderation_pending,
-        total_rewards_points,
-        total_orders,
-        active_schemes,
-        active_spin_wheels,
-        open_chats
+        total_farmers, conversations_24h, active_farmers_24h, total_templates, active_campaigns, moderation_pending, total_rewards_points, total_orders, active_schemes, active_spin_wheels, open_chats, total_messages_24h, total_campaigns, total_messages_sent, total_delivered, total_read, total_failed,
+        farmer_growth_7d, message_volume_7d, top_crops, top_districts, recent_campaigns, recent_farmers, hourly_activity, farmer_languages, campaign_performance,
+        ai_cost_30d: ai_usage_cost.length ? parseFloat(ai_usage_cost[0].total_cost) : 0,
+        ai_requests_30d: ai_usage_cost.length ? parseInt(ai_usage_cost[0].total_requests) : 0
       });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
   
-  // â”€â”€â”€ FARMERS (Full CRUD) â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ FARMERS (Full CRUD) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.get('/api/v1/farmers', auth, async (req, res) => {
     try {
       const { search, status, district, crop, limit = 50, offset = 0 } = req.query;
@@ -209,7 +208,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ WHATSAPP CHAT (Full CRM) â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ WHATSAPP CHAT (Full CRM) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.get('/api/v1/chats', auth, async (req, res) => {
     try {
       const { status, priority, search, limit = 50, offset = 0 } = req.query;
@@ -359,7 +358,7 @@ module.exports = function setupAdminAPI(app, pool) {
   });
   
   
-  // â”€â”€â”€ TEMPLATES (Full CRUD) â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ TEMPLATES (Full CRUD) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.get('/api/v1/templates', auth, async (req, res) => {
     try {
       const { category, language, status } = req.query;
@@ -405,7 +404,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ META TEMPLATE MANAGEMENT API â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ META TEMPLATE MANAGEMENT API Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   // Submit template to Meta for approval
   app.post('/api/v1/templates/:id/submit-to-meta', auth, async (req, res) => {
     try {
@@ -531,7 +530,7 @@ module.exports = function setupAdminAPI(app, pool) {
     }
   });
   
-  // â”€â”€â”€ CAMPAIGNS (BROADCAST) â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ CAMPAIGNS (BROADCAST) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   
   // Get audience count based on filters (preview before sending)
   app.post('/api/v1/campaigns/audience-count', auth, async (req, res) => {
@@ -677,14 +676,14 @@ module.exports = function setupAdminAPI(app, pool) {
       const criteria = typeof c.target_criteria === 'string' ? JSON.parse(c.target_criteria) : (c.target_criteria || {});
       let farmers;
       if (criteria.farmer_ids && Array.isArray(criteria.farmer_ids)) {
-        // Retarget campaign â€” use specific farmer IDs
+        // Retarget campaign Ã¢â‚¬â€ use specific farmer IDs
         const idPlaceholders = criteria.farmer_ids.map((_, i) => '$' + (i + 1)).join(',');
         farmers = await pool.query(
           `SELECT f.id, f.phone, f.name, f.crops, f.village FROM farmers f WHERE f.id IN (${idPlaceholders}) AND f.status='active' AND f.phone IS NOT NULL`,
           criteria.farmer_ids
         );
       } else {
-        // Normal campaign â€” use filters
+        // Normal campaign Ã¢â‚¬â€ use filters
         let fq = "SELECT f.id, f.phone, f.name, f.crops, f.village FROM farmers f LEFT JOIN districts_master d ON f.district_id=d.id WHERE f.status='active' AND f.phone IS NOT NULL";
         const fp = [];
         if (criteria.state) { fp.push('%' + criteria.state + '%'); fq += ` AND d.state_name ILIKE $${fp.length}`; }
@@ -1037,7 +1036,7 @@ module.exports = function setupAdminAPI(app, pool) {
         if (farmer.rows.length) {
           await axios.post('https://vartmap-whatsapp-gateway.onrender.com/api/v1/send-message', {
             phone: farmer.rows[0].phone,
-            message: `ðŸŽ‰ Hi ${farmer.rows[0].name}! Your redemption request for "${item.rows[0]?.name}" has been approved! We'll process it shortly. Ref: ${req.params.id.slice(0,8)}`
+            message: `Ã°Å¸Å½â€° Hi ${farmer.rows[0].name}! Your redemption request for "${item.rows[0]?.name}" has been approved! We'll process it shortly. Ref: ${req.params.id.slice(0,8)}`
           });
         }
       } catch (e) { console.log('WhatsApp notification failed:', e.message); }
@@ -1165,7 +1164,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ SPIN WHEELS (Digicides-style) â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ SPIN WHEELS (Digicides-style) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.get('/api/v1/spin-wheels', auth, async (req, res) => {
     try {
       const r = await pool.query('SELECT * FROM spin_wheels ORDER BY created_at DESC');
@@ -1224,7 +1223,7 @@ module.exports = function setupAdminAPI(app, pool) {
       res.json({ results: r.rows });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
-  // â”€â”€â”€ COUPON CODES â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ COUPON CODES Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.get('/api/v1/coupons', auth, async (req, res) => {
     try {
       const r = await pool.query('SELECT * FROM coupon_campaigns ORDER BY created_at DESC');
@@ -1403,7 +1402,7 @@ module.exports = function setupAdminAPI(app, pool) {
       try {
         await axios.post('https://vartmap-whatsapp-gateway.onrender.com/api/v1/send-message', {
           phone: fullPhone,
-          message: `âœ… Coupon ${c.code} redeemed successfully!\n\nðŸŽ ${c.campaign_name}\nðŸ’° ${c.discount_type === 'percentage' ? c.discount_value + '% discount' : c.discount_type === 'points' ? c.discount_value + ' loyalty points' : 'â‚¹' + c.discount_value + ' off'}\n\nThank you for your purchase! ðŸŒ¾`
+          message: `Ã¢Å“â€¦ Coupon ${c.code} redeemed successfully!\n\nÃ°Å¸Å½Â ${c.campaign_name}\nÃ°Å¸â€™Â° ${c.discount_type === 'percentage' ? c.discount_value + '% discount' : c.discount_type === 'points' ? c.discount_value + ' loyalty points' : 'Ã¢â€šÂ¹' + c.discount_value + ' off'}\n\nThank you for your purchase! Ã°Å¸Å’Â¾`
         });
       } catch (e) { console.log('WhatsApp notification failed:', e.message); }
       
@@ -1443,7 +1442,7 @@ module.exports = function setupAdminAPI(app, pool) {
   });
   
   // ==================== QR CODE GENERATION ====================
-  // â”€â”€â”€ QR CODE GENERATION â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ QR CODE GENERATION Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const QRCode = require('qrcode');
   
   // POST /api/v1/coupons/:id/generate-qr - Generate QR codes for all codes in a campaign
@@ -1508,7 +1507,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ DEALER ASSIGNMENT â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ DEALER ASSIGNMENT Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   
   // POST /api/v1/coupons/:id/assign-dealer - Assign batch of codes to a dealer
   app.post('/api/v1/coupons/:id/assign-dealer', auth, async (req, res) => {
@@ -1546,7 +1545,7 @@ module.exports = function setupAdminAPI(app, pool) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               phone: dealer_phone,
-              message: `ðŸŽ« VartMap Coupon Assignment\n\nDear ${dealer_name},\n${codes_count} coupon codes have been assigned to you.\n\nPlease distribute these to farmers along with product sales.\n\nThank you for your partnership!`
+              message: `Ã°Å¸Å½Â« VartMap Coupon Assignment\n\nDear ${dealer_name},\n${codes_count} coupon codes have been assigned to you.\n\nPlease distribute these to farmers along with product sales.\n\nThank you for your partnership!`
             })
           });
         } catch (e) { console.log('WhatsApp dealer notification failed:', e.message); }
@@ -1573,7 +1572,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ BULK DISTRIBUTION â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ BULK DISTRIBUTION Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   
   // POST /api/v1/coupons/:id/distribute - Bulk WhatsApp distribution
   app.post('/api/v1/coupons/:id/distribute', auth, async (req, res) => {
@@ -1620,7 +1619,7 @@ module.exports = function setupAdminAPI(app, pool) {
   
           const msg = message_template
             ? message_template.replace('{name}', f.name || 'Farmer').replace('{code}', code.code).replace('{discount}', discountText)
-            : `ðŸŽ Namaste ${f.name || 'Farmer'}!\n\nYou have a special offer from VartMap:\nðŸŽ« Code: *${code.code}*\nðŸ’° Discount: ${discountText}\nðŸ“¦ Campaign: ${camp.name}\n\nTo redeem, simply reply with your code or show it at your dealer.\n\nHappy farming! ðŸŒ¾`;
+            : `Ã°Å¸Å½Â Namaste ${f.name || 'Farmer'}!\n\nYou have a special offer from VartMap:\nÃ°Å¸Å½Â« Code: *${code.code}*\nÃ°Å¸â€™Â° Discount: ${discountText}\nÃ°Å¸â€œÂ¦ Campaign: ${camp.name}\n\nTo redeem, simply reply with your code or show it at your dealer.\n\nHappy farming! Ã°Å¸Å’Â¾`;
   
           await fetch(`${whatsappUrl}/api/send`, {
             method: 'POST',
@@ -1640,7 +1639,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ GEO-TRACKED REDEMPTION â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ GEO-TRACKED REDEMPTION Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   
   // POST /api/v1/coupons/redeem-geo - Redeem with location tracking
   app.post('/api/v1/coupons/redeem-geo', async (req, res) => {
@@ -1693,7 +1692,7 @@ module.exports = function setupAdminAPI(app, pool) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             phone,
-            message: `âœ… Coupon Redeemed!\n\nHi ${farmerName}, your code *${code.toUpperCase()}* has been successfully redeemed.\nðŸŽ Reward: ${discountText}\nðŸ“¦ Campaign: ${c.campaign_name}\n\nThank you for choosing VartMap! ðŸŒ¾`
+            message: `Ã¢Å“â€¦ Coupon Redeemed!\n\nHi ${farmerName}, your code *${code.toUpperCase()}* has been successfully redeemed.\nÃ°Å¸Å½Â Reward: ${discountText}\nÃ°Å¸â€œÂ¦ Campaign: ${c.campaign_name}\n\nThank you for choosing VartMap! Ã°Å¸Å’Â¾`
           })
         });
       } catch (e) { console.log('WhatsApp redeem notification failed:', e.message); }
@@ -1739,7 +1738,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ SOIL NUTRIENT DATA â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ SOIL NUTRIENT DATA Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.get('/api/v1/soil-data', auth, async (req, res) => {
     try {
       const { state, district, block, village, soil_type } = req.query;
@@ -1813,7 +1812,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ REWARDS (Points-based) â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ REWARDS (Points-based) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.get('/api/v1/rewards', auth, async (req, res) => {
     try {
       const r = await pool.query('SELECT r.*, f.name as farmer_name, f.phone FROM rewards r LEFT JOIN farmers f ON r.farmer_id=f.id ORDER BY r.created_at DESC LIMIT 100');
@@ -1839,7 +1838,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ REFERRALS â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ REFERRALS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.get('/api/v1/referrals', auth, async (req, res) => {
     try {
       const codes = await pool.query('SELECT rc.*, f.name as farmer_name, f.phone FROM referral_codes rc LEFT JOIN farmers f ON rc.farmer_id=f.id ORDER BY rc.created_at DESC');
@@ -1848,7 +1847,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ GOVERNMENT SCHEMES â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ GOVERNMENT SCHEMES Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.get('/api/v1/schemes', auth, async (req, res) => {
     try {
       const { status, level, state } = req.query;
@@ -1890,7 +1889,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ PRODUCTS â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ PRODUCTS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.get('/api/v1/products', auth, async (req, res) => {
     try {
       const { search, category, brand } = req.query;
@@ -1917,7 +1916,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ MANDI PRICES â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ MANDI PRICES Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.get('/api/v1/mandi-prices', auth, async (req, res) => {
     try {
       const { commodity, market, state, date } = req.query;
@@ -1945,7 +1944,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ MODERATION â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ MODERATION Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.get('/api/v1/moderation', auth, async (req, res) => {
     try {
       const { status } = req.query;
@@ -1971,7 +1970,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ ORDERS â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ ORDERS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.get('/api/v1/orders', auth, async (req, res) => {
     try {
       const r = await pool.query(
@@ -1983,7 +1982,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ DEALERS â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ DEALERS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.get('/api/v1/dealers', auth, async (req, res) => {
     try {
       const r = await pool.query('SELECT d.*, dm.district_name FROM dealers d LEFT JOIN districts_master dm ON d.district_id=dm.id ORDER BY d.created_at DESC');
@@ -2002,7 +2001,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ FIELD AGENTS â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ FIELD AGENTS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.get('/api/v1/field-agents', auth, async (req, res) => {
     try {
       const r = await pool.query('SELECT fa.*, dm.district_name FROM field_agents fa LEFT JOIN districts_master dm ON fa.district_id=dm.id ORDER BY fa.created_at DESC');
@@ -2021,7 +2020,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ NOTIFICATIONS LOG â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ NOTIFICATIONS LOG Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.get('/api/v1/notifications', auth, async (req, res) => {
     try {
       const { channel, type, status } = req.query;
@@ -2036,7 +2035,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ ANALYTICS â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ ANALYTICS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.get('/api/v1/analytics/overview', auth, async (req, res) => {
     try {
       const days = req.query.days || 30;
@@ -2116,11 +2115,11 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
   // ADVANCED ANALYTICS ENDPOINTS
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
   
-  // GET /api/v1/analytics/campaigns â€” Campaign performance summary
+  // GET /api/v1/analytics/campaigns Ã¢â‚¬â€ Campaign performance summary
   app.get('/api/v1/analytics/campaigns', auth, async (req, res) => {
     try {
       const { days = 30 } = req.query;
@@ -2173,7 +2172,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // GET /api/v1/analytics/farmers â€” Farmer engagement analytics
+  // GET /api/v1/analytics/farmers Ã¢â‚¬â€ Farmer engagement analytics
   app.get('/api/v1/analytics/farmers', auth, async (req, res) => {
     try {
       const { days = 30 } = req.query;
@@ -2255,7 +2254,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // GET /api/v1/analytics/templates â€” Template performance comparison
+  // GET /api/v1/analytics/templates Ã¢â‚¬â€ Template performance comparison
   app.get('/api/v1/analytics/templates', auth, async (req, res) => {
     try {
       const templates = await pool.query(`
@@ -2285,7 +2284,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // GET /api/v1/analytics/geographic â€” District-level engagement heatmap data
+  // GET /api/v1/analytics/geographic Ã¢â‚¬â€ District-level engagement heatmap data
   app.get('/api/v1/analytics/geographic', auth, async (req, res) => {
     try {
       const geo = await pool.query(`
@@ -2309,7 +2308,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // GET /api/v1/analytics/conversations â€” WhatsApp conversation analytics
+  // GET /api/v1/analytics/conversations Ã¢â‚¬â€ WhatsApp conversation analytics
   app.get('/api/v1/analytics/conversations', auth, async (req, res) => {
     try {
       const { days = 30 } = req.query;
@@ -2364,7 +2363,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // POST /api/v1/analytics/refresh-engagement â€” Recalculate farmer engagement scores
+  // POST /api/v1/analytics/refresh-engagement Ã¢â‚¬â€ Recalculate farmer engagement scores
   app.post('/api/v1/analytics/refresh-engagement', auth, async (req, res) => {
     try {
       await pool.query(`
@@ -2422,7 +2421,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // GET /api/v1/analytics/roi â€” Cost & ROI analytics
+  // GET /api/v1/analytics/roi Ã¢â‚¬â€ Cost & ROI analytics
   app.get('/api/v1/analytics/roi', auth, async (req, res) => {
     try {
       const { days = 30 } = req.query;
@@ -2459,7 +2458,7 @@ module.exports = function setupAdminAPI(app, pool) {
   });
   
   
-  // â”€â”€â”€ DISTRICTS â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ DISTRICTS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.get('/api/v1/districts', auth, async (req, res) => {
     try {
       const { state } = req.query;
@@ -2472,7 +2471,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ AUDIT LOG â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ AUDIT LOG Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.get('/api/v1/audit-log', auth, async (req, res) => {
     try {
       const r = await pool.query('SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 100');
@@ -2480,7 +2479,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ ADMIN USERS â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ ADMIN USERS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   app.get('/api/v1/admin-users', auth, async (req, res) => {
     try {
       const r = await pool.query('SELECT id, email, name, role, status, last_login_at, created_at FROM admin_users ORDER BY created_at');
@@ -2499,7 +2498,7 @@ module.exports = function setupAdminAPI(app, pool) {
       res.json({ user: r.rows[0] });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
-  // â”€â”€â”€ PROXY: Fetch Live Data from Intelligence Service â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ PROXY: Fetch Live Data from Intelligence Service Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const axios = require('axios');
   const INTEL_URL = process.env.INTELLIGENCE_SERVICE_URL || 'https://vartmap-intelligence.onrender.com';
   
@@ -2543,7 +2542,7 @@ module.exports = function setupAdminAPI(app, pool) {
       res.status(500).json({ error: err.response?.data?.error || err.message });
     }
   });
-  // â”€â”€â”€ PRIZE FULFILLMENT (Digicides-style Admin Flow) â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ PRIZE FULFILLMENT (Digicides-style Admin Flow) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   
   // Get all spin results with filters
   app.get('/api/v1/prizes', auth, async (req, res) => {
@@ -2623,11 +2622,11 @@ module.exports = function setupAdminAPI(app, pool) {
         const gatewayUrl = process.env.GATEWAY_URL || 'https://vartmap-whatsapp-gateway.onrender.com';
         let msg = '';
         if (p.prize_type === 'cash') {
-          msg = `âœ… Prize Approved!\n\nHi ${p.farmer_name}, your cash prize of â‚¹${p.prize_value} from the lucky draw has been approved!\n\nPlease reply with your UPI ID (e.g. name@upi) to receive the payment.\n\nRef: ${p.verification_code || p.id.slice(0,8)}\n\nðŸŒ¾ VartMap Krishi Sahayak`;
+          msg = `Ã¢Å“â€¦ Prize Approved!\n\nHi ${p.farmer_name}, your cash prize of Ã¢â€šÂ¹${p.prize_value} from the lucky draw has been approved!\n\nPlease reply with your UPI ID (e.g. name@upi) to receive the payment.\n\nRef: ${p.verification_code || p.id.slice(0,8)}\n\nÃ°Å¸Å’Â¾ VartMap Krishi Sahayak`;
         } else if (p.prize_type === 'discount') {
-          msg = `âœ… Prize Approved!\n\nHi ${p.farmer_name}, you won a ${p.prize_value}% discount!\n\nðŸ·ï¸ Your Coupon Code: *${couponCode}*\n\nShow this code to your nearest dealer to avail the discount.\n\nRef: ${p.verification_code || p.id.slice(0,8)}\n\nðŸŒ¾ VartMap Krishi Sahayak`;
+          msg = `Ã¢Å“â€¦ Prize Approved!\n\nHi ${p.farmer_name}, you won a ${p.prize_value}% discount!\n\nÃ°Å¸ÂÂ·Ã¯Â¸Â Your Coupon Code: *${couponCode}*\n\nShow this code to your nearest dealer to avail the discount.\n\nRef: ${p.verification_code || p.id.slice(0,8)}\n\nÃ°Å¸Å’Â¾ VartMap Krishi Sahayak`;
         } else if (p.prize_type === 'points') {
-          msg = `âœ… Prize Approved!\n\nHi ${p.farmer_name}, ${p.prize_value} loyalty points have been added to your account!\n\nTotal points will be visible in your next interaction.\n\nRef: ${p.verification_code || p.id.slice(0,8)}\n\nðŸŒ¾ VartMap Krishi Sahayak`;
+          msg = `Ã¢Å“â€¦ Prize Approved!\n\nHi ${p.farmer_name}, ${p.prize_value} loyalty points have been added to your account!\n\nTotal points will be visible in your next interaction.\n\nRef: ${p.verification_code || p.id.slice(0,8)}\n\nÃ°Å¸Å’Â¾ VartMap Krishi Sahayak`;
         }
         if (msg) await axios.post(`${gatewayUrl}/api/v1/send-message`, { phone: p.phone, message: msg });
       } catch(e) { console.error('Prize approval WhatsApp failed:', e.message); }
@@ -2654,7 +2653,7 @@ module.exports = function setupAdminAPI(app, pool) {
       try {
         const p = prize.rows[0];
         const gatewayUrl = process.env.GATEWAY_URL || 'https://vartmap-whatsapp-gateway.onrender.com';
-        const msg = `Hi ${p.farmer_name}, unfortunately your prize claim could not be verified.\n\nReason: ${reason}\n\nPlease contact support for help.\n\nðŸŒ¾ VartMap Krishi Sahayak`;
+        const msg = `Hi ${p.farmer_name}, unfortunately your prize claim could not be verified.\n\nReason: ${reason}\n\nPlease contact support for help.\n\nÃ°Å¸Å’Â¾ VartMap Krishi Sahayak`;
         await axios.post(`${gatewayUrl}/api/v1/send-message`, { phone: p.phone, message: msg });
       } catch(e) { console.error('Prize rejection WhatsApp failed:', e.message); }
   
@@ -2688,9 +2687,9 @@ module.exports = function setupAdminAPI(app, pool) {
         const gatewayUrl = process.env.GATEWAY_URL || 'https://vartmap-whatsapp-gateway.onrender.com';
         let msg = '';
         if (p.prize_type === 'cash') {
-          msg = `ðŸ’° Payment Sent!\n\nHi ${p.farmer_name}, â‚¹${p.prize_value} has been sent to your account!\n\nMethod: ${payment_method || 'UPI'}\nRef: ${payment_reference || p.id.slice(0,8)}\n\nThank you for participating! ðŸŒ¾ VartMap Krishi Sahayak`;
+          msg = `Ã°Å¸â€™Â° Payment Sent!\n\nHi ${p.farmer_name}, Ã¢â€šÂ¹${p.prize_value} has been sent to your account!\n\nMethod: ${payment_method || 'UPI'}\nRef: ${payment_reference || p.id.slice(0,8)}\n\nThank you for participating! Ã°Å¸Å’Â¾ VartMap Krishi Sahayak`;
         } else {
-          msg = `ðŸŽ Prize Delivered!\n\nHi ${p.farmer_name}, your prize "${p.prize_label || p.prize_type}" has been marked as delivered.\n\nRef: ${payment_reference || p.id.slice(0,8)}\n\nThank you! ðŸŒ¾ VartMap Krishi Sahayak`;
+          msg = `Ã°Å¸Å½Â Prize Delivered!\n\nHi ${p.farmer_name}, your prize "${p.prize_label || p.prize_type}" has been marked as delivered.\n\nRef: ${payment_reference || p.id.slice(0,8)}\n\nThank you! Ã°Å¸Å’Â¾ VartMap Krishi Sahayak`;
         }
         await axios.post(`${gatewayUrl}/api/v1/send-message`, { phone: p.phone, message: msg });
       } catch(e) { console.error('Prize payment WhatsApp failed:', e.message); }
@@ -2727,7 +2726,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ PUBLIC SPIN WHEEL API (No auth required - Digicides-style flow) â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ PUBLIC SPIN WHEEL API (No auth required - Digicides-style flow) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   
   // Get wheel info (public)
   app.get('/api/v1/public/spin-wheel/:id', async (req, res) => {
@@ -2893,7 +2892,7 @@ module.exports = function setupAdminAPI(app, pool) {
       if (phone && selectedSegment.prize_type !== 'better_luck') {
         try {
           const gatewayUrl = process.env.GATEWAY_URL || 'https://vartmap-whatsapp-gateway.onrender.com';
-          const msg = `ðŸŽ‰ Congratulations! You won "${selectedSegment.label}" in the ${wheel.name} lucky draw!\n\nReference: ${refId}\nPrize will be credited within 24 hours.\n\nðŸŒ¾ VartMap Krishi Sahayak`;
+          const msg = `Ã°Å¸Å½â€° Congratulations! You won "${selectedSegment.label}" in the ${wheel.name} lucky draw!\n\nReference: ${refId}\nPrize will be credited within 24 hours.\n\nÃ°Å¸Å’Â¾ VartMap Krishi Sahayak`;
           await axios.post(`${gatewayUrl}/api/v1/send-message`, { phone, message: msg });
         } catch(e) { console.error('WhatsApp notification failed:', e.message); }
       }
@@ -3045,7 +3044,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ CROP RECOMMENDATIONS â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ CROP RECOMMENDATIONS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   
   app.get('/api/v1/catalog/recommendations', auth, async (req, res) => {
     try {
@@ -3098,7 +3097,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ AI CATALOG ENDPOINT (for WhatsApp bot) â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ AI CATALOG ENDPOINT (for WhatsApp bot) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   
   app.get('/api/v1/catalog/ai-context', async (req, res) => {
     try {
@@ -3490,5 +3489,5 @@ module.exports = function setupAdminAPI(app, pool) {
     catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // â”€â”€â”€ START SERVER â”€â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ START SERVER Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 };
