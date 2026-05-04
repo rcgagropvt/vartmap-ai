@@ -842,25 +842,31 @@ function formatSoilData(soilData, district) {
   if (!soilData.length) return 'Maaf kijiye, "' + (district || 'aapke area') + '" ke liye mitti ki jankari uplabdh nahi hai.';
   const s = soilData[0];
   let msg = '*\uD83C\uDF0D Mitti ki Jankari - ' + (s.district_name || district) + (s.block_name ? ', ' + s.block_name : '') + '*\n';
-  msg += (s.state_name || '') + ' | ' + (s.sample_year || '') + '\n\n';
-  
+  msg += (s.state_name || '') + ' | Cycle: ' + (s.cycle || s.sample_year || '') + '\n';
+  msg += (s.scheme_name ? 'Scheme: ' + s.scheme_name + '\n' : '');
+  msg += '\n';
+
   msg += '\uD83D\uDCCA *Primary Nutrients (Low/Med/High %):*\n';
   msg += '\u2022 *Nitrogen (N):* ' + s.nitrogen_low_pct + '% / ' + s.nitrogen_medium_pct + '% / ' + s.nitrogen_high_pct + '%\n';
   msg += '\u2022 *Phosphorus (P):* ' + s.phosphorus_low_pct + '% / ' + s.phosphorus_medium_pct + '% / ' + s.phosphorus_high_pct + '%\n';
   msg += '\u2022 *Potassium (K):* ' + s.potassium_low_pct + '% / ' + s.potassium_medium_pct + '% / ' + s.potassium_high_pct + '%\n';
   msg += '\u2022 *Organic Carbon:* ' + (s.organic_carbon_low_pct || '-') + '% / ' + (s.organic_carbon_medium_pct || '-') + '% / ' + (s.organic_carbon_high_pct || '-') + '%\n\n';
-  
-  msg += '\uD83E\uDDEA *Micro Nutrients (% Sufficient):*\n';
-  if (s.avg_sulphur != null) msg += '\u2022 *Sulphur (S):* ' + s.avg_sulphur + '% ' + (s.avg_sulphur < 30 ? '\u26A0\uFE0F Deficient' : '\u2705') + '\n';
-  if (s.avg_iron != null) msg += '\u2022 *Iron (Fe):* ' + s.avg_iron + '% ' + (s.avg_iron < 50 ? '\u26A0\uFE0F' : '\u2705') + '\n';
-  if (s.avg_zinc != null) msg += '\u2022 *Zinc (Zn):* ' + s.avg_zinc + '% ' + (s.avg_zinc < 50 ? '\u26A0\uFE0F Deficient' : '\u2705') + '\n';
-  if (s.avg_copper != null) msg += '\u2022 *Copper (Cu):* ' + s.avg_copper + '% ' + (s.avg_copper < 50 ? '\u26A0\uFE0F' : '\u2705') + '\n';
-  if (s.avg_boron != null) msg += '\u2022 *Boron (B):* ' + s.avg_boron + '% ' + (s.avg_boron < 50 ? '\u26A0\uFE0F Deficient' : '\u2705') + '\n';
-  if (s.avg_manganese != null) msg += '\u2022 *Manganese (Mn):* ' + s.avg_manganese + '% ' + (s.avg_manganese < 50 ? '\u26A0\uFE0F' : '\u2705') + '\n';
+
+  msg += '\uD83E\uDDEA *Micro Nutrients (Sufficient/Deficient %):*\n';
+  if (s.sulphur_sufficient_pct != null || s.avg_sulphur != null) msg += '\u2022 *Sulphur (S):* ' + (s.sulphur_sufficient_pct || s.avg_sulphur || 0) + '% suff / ' + (s.sulphur_deficient_pct || (100-(s.avg_sulphur||0))) + '% def ' + ((s.sulphur_deficient_pct||100-(s.avg_sulphur||0)) > 70 ? '\u26A0\uFE0F' : '\u2705') + '\n';
+  if (s.iron_sufficient_pct != null || s.avg_iron != null) msg += '\u2022 *Iron (Fe):* ' + (s.iron_sufficient_pct || s.avg_iron || 0) + '% suff / ' + (s.iron_deficient_pct || (100-(s.avg_iron||0))) + '% def ' + ((s.iron_deficient_pct||100-(s.avg_iron||0)) > 50 ? '\u26A0\uFE0F' : '\u2705') + '\n';
+  if (s.zinc_sufficient_pct != null || s.avg_zinc != null) msg += '\u2022 *Zinc (Zn):* ' + (s.zinc_sufficient_pct || s.avg_zinc || 0) + '% suff / ' + (s.zinc_deficient_pct || (100-(s.avg_zinc||0))) + '% def ' + ((s.zinc_deficient_pct||100-(s.avg_zinc||0)) > 50 ? '\u26A0\uFE0F' : '\u2705') + '\n';
+  if (s.copper_sufficient_pct != null || s.avg_copper != null) msg += '\u2022 *Copper (Cu):* ' + (s.copper_sufficient_pct || s.avg_copper || 0) + '% suff / ' + (s.copper_deficient_pct || (100-(s.avg_copper||0))) + '% def ' + ((s.copper_deficient_pct||100-(s.avg_copper||0)) > 50 ? '\u26A0\uFE0F' : '\u2705') + '\n';
+  if (s.boron_sufficient_pct != null || s.avg_boron != null) msg += '\u2022 *Boron (B):* ' + (s.boron_sufficient_pct || s.avg_boron || 0) + '% suff / ' + (s.boron_deficient_pct || (100-(s.avg_boron||0))) + '% def ' + ((s.boron_deficient_pct||100-(s.avg_boron||0)) > 50 ? '\u26A0\uFE0F' : '\u2705') + '\n';
+  if (s.manganese_sufficient_pct != null || s.avg_manganese != null) msg += '\u2022 *Manganese (Mn):* ' + (s.manganese_sufficient_pct || s.avg_manganese || 0) + '% suff / ' + (s.manganese_deficient_pct || (100-(s.avg_manganese||0))) + '% def ' + ((s.manganese_deficient_pct||100-(s.avg_manganese||0)) > 50 ? '\u26A0\uFE0F' : '\u2705') + '\n';
   msg += '\n';
-  
-  msg += '\uD83C\uDFE0 *pH:* ' + (s.avg_ph || '-') + ' | *Soil:* ' + (s.soil_type || '-') + ' | *Samples:* ' + (s.total_samples || '-') + '\n\n';
-  
+
+  msg += '\u2696\uFE0F *pH & EC:*\n';
+  msg += '\u2022 *pH:* ' + (s.avg_ph || '-') + ' (' + (s.soil_type || '-') + ')\n';
+  if (s.ph_alkaline_pct || s.ph_neutral_pct || s.ph_acidic_pct) msg += '   Alkaline: ' + (s.ph_alkaline_pct||0) + '% | Neutral: ' + (s.ph_neutral_pct||0) + '% | Acidic: ' + (s.ph_acidic_pct||0) + '%\n';
+  if (s.ec_non_saline_pct || s.ec_saline_pct) msg += '\u2022 *EC:* Non-Saline: ' + (s.ec_non_saline_pct||0) + '% | Saline: ' + (s.ec_saline_pct||0) + '%\n';
+  msg += '\u2022 *Samples:* ' + (s.total_samples || '-') + '\n\n';
+
   // Show AI recommendations if available
   const recs = typeof s.recommendations === 'string' ? JSON.parse(s.recommendations || '{}') : (s.recommendations || {});
   const recKeys = Object.keys(recs);
@@ -869,8 +875,8 @@ function formatSoilData(soilData, district) {
     recKeys.forEach(k => { msg += '\u2022 ' + recs[k] + '\n'; });
     msg += '\n';
   }
-  
-  msg += '_\uD83C\uDF3E Mitti test karwayen aur sahi fertilizer chunein. Vartmaan se sampark karein._';
+
+  msg += '_\uD83C\uDF3E Source: soilhealth.dac.gov.in | Mitti test karwayen aur Vartmaan se sampark karein._';
   return msg;
 }
 

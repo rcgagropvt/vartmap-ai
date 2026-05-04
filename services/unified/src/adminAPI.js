@@ -1,4 +1,4 @@
-// VartMap Admin API Routes Module
+﻿// VartMap Admin API Routes Module
 const bcrypt = require('bcryptjs');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
@@ -20,7 +20,7 @@ module.exports = function setupAdminAPI(app, pool) {
   
   
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ AUTH MIDDLEWARE Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ AUTH MIDDLEWARE ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   const auth = (req, res, next) => {
     const token = req.headers.authorization?.replace('Bearer ', '');
     if (!token) return res.status(401).json({ error: 'No token' });
@@ -28,7 +28,7 @@ module.exports = function setupAdminAPI(app, pool) {
     catch { res.status(401).json({ error: 'Invalid token' }); }
   };
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ HEALTH Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ HEALTH ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.get('/health', async (req, res) => {
     try {
       const r = await pool.query('SELECT NOW()');
@@ -36,7 +36,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ status: 'unhealthy', error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ AUTH Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ AUTH ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.post('/api/v1/auth/login', async (req, res) => {
     try {
       const { email, password } = req.body;
@@ -50,7 +50,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ DASHBOARD Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ DASHBOARD ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.get('/api/v1/dashboard', auth, async (req, res) => {
     try {
       const safeCount = async (query) => {
@@ -103,7 +103,7 @@ module.exports = function setupAdminAPI(app, pool) {
   });
   
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ FARMERS (Full CRUD) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ FARMERS (Full CRUD) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.get('/api/v1/farmers', auth, async (req, res) => {
     try {
       const { search, status, district, crop, limit = 50, offset = 0 } = req.query;
@@ -209,7 +209,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ WHATSAPP CHAT (Full CRM) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ WHATSAPP CHAT (Full CRM) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.get('/api/v1/chats', auth, async (req, res) => {
     try {
       const { status, priority, search, limit = 50, offset = 0 } = req.query;
@@ -359,7 +359,7 @@ module.exports = function setupAdminAPI(app, pool) {
   });
   
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ TEMPLATES (Full CRUD) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ TEMPLATES (Full CRUD) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.get('/api/v1/templates', auth, async (req, res) => {
     try {
       const { category, language, status } = req.query;
@@ -405,7 +405,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ META TEMPLATE MANAGEMENT API Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ META TEMPLATE MANAGEMENT API ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   // Submit template to Meta for approval
   app.post('/api/v1/templates/:id/submit-to-meta', auth, async (req, res) => {
     try {
@@ -531,7 +531,7 @@ module.exports = function setupAdminAPI(app, pool) {
     }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ CAMPAIGNS (BROADCAST) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ CAMPAIGNS (BROADCAST) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   
   // Get audience count based on filters (preview before sending)
   app.post('/api/v1/campaigns/audience-count', auth, async (req, res) => {
@@ -677,14 +677,14 @@ module.exports = function setupAdminAPI(app, pool) {
       const criteria = typeof c.target_criteria === 'string' ? JSON.parse(c.target_criteria) : (c.target_criteria || {});
       let farmers;
       if (criteria.farmer_ids && Array.isArray(criteria.farmer_ids)) {
-        // Retarget campaign Ã¢â‚¬â€ use specific farmer IDs
+        // Retarget campaign ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â use specific farmer IDs
         const idPlaceholders = criteria.farmer_ids.map((_, i) => '$' + (i + 1)).join(',');
         farmers = await pool.query(
           `SELECT f.id, f.phone, f.name, f.crops, f.village FROM farmers f WHERE f.id IN (${idPlaceholders}) AND f.status='active' AND f.phone IS NOT NULL`,
           criteria.farmer_ids
         );
       } else {
-        // Normal campaign Ã¢â‚¬â€ use filters
+        // Normal campaign ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â use filters
         let fq = "SELECT f.id, f.phone, f.name, f.crops, f.village FROM farmers f LEFT JOIN districts_master d ON f.district_id=d.id WHERE f.status='active' AND f.phone IS NOT NULL";
         const fp = [];
         if (criteria.state) { fp.push('%' + criteria.state + '%'); fq += ` AND d.state_name ILIKE $${fp.length}`; }
@@ -1037,7 +1037,7 @@ module.exports = function setupAdminAPI(app, pool) {
         if (farmer.rows.length) {
           await axios.post('https://vartmap-whatsapp-gateway.onrender.com/api/v1/send-message', {
             phone: farmer.rows[0].phone,
-            message: `Ã°Å¸Å½â€° Hi ${farmer.rows[0].name}! Your redemption request for "${item.rows[0]?.name}" has been approved! We'll process it shortly. Ref: ${req.params.id.slice(0,8)}`
+            message: `ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â½ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â° Hi ${farmer.rows[0].name}! Your redemption request for "${item.rows[0]?.name}" has been approved! We'll process it shortly. Ref: ${req.params.id.slice(0,8)}`
           });
         }
       } catch (e) { console.log('WhatsApp notification failed:', e.message); }
@@ -1165,7 +1165,7 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ SPIN WHEELS (Digicides-style) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ SPIN WHEELS (Digicides-style) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.get('/api/v1/spin-wheels', auth, async (req, res) => {
     try {
       const r = await pool.query('SELECT * FROM spin_wheels ORDER BY created_at DESC');
@@ -1224,7 +1224,7 @@ module.exports = function setupAdminAPI(app, pool) {
       res.json({ results: r.rows });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ COUPON CODES Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ COUPON CODES ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.get('/api/v1/coupons', auth, async (req, res) => {
     try {
       const r = await pool.query('SELECT * FROM coupon_campaigns ORDER BY created_at DESC');
@@ -1403,7 +1403,7 @@ module.exports = function setupAdminAPI(app, pool) {
       try {
         await axios.post('https://vartmap-whatsapp-gateway.onrender.com/api/v1/send-message', {
           phone: fullPhone,
-          message: `Ã¢Å“â€¦ Coupon ${c.code} redeemed successfully!\n\nÃ°Å¸Å½Â ${c.campaign_name}\nÃ°Å¸â€™Â° ${c.discount_type === 'percentage' ? c.discount_value + '% discount' : c.discount_type === 'points' ? c.discount_value + ' loyalty points' : 'Ã¢â€šÂ¹' + c.discount_value + ' off'}\n\nThank you for your purchase! Ã°Å¸Å’Â¾`
+          message: `ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ Coupon ${c.code} redeemed successfully!\n\nÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â½Ãƒâ€šÃ‚Â ${c.campaign_name}\nÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢Ãƒâ€šÃ‚Â° ${c.discount_type === 'percentage' ? c.discount_value + '% discount' : c.discount_type === 'points' ? c.discount_value + ' loyalty points' : 'ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹' + c.discount_value + ' off'}\n\nThank you for your purchase! ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â¾`
         });
       } catch (e) { console.log('WhatsApp notification failed:', e.message); }
       
@@ -1443,7 +1443,7 @@ module.exports = function setupAdminAPI(app, pool) {
   });
   
   // ==================== QR CODE GENERATION ====================
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ QR CODE GENERATION Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ QR CODE GENERATION ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   const QRCode = require('qrcode');
 const XLSX = require('xlsx');
   
@@ -1509,7 +1509,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ DEALER ASSIGNMENT Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ DEALER ASSIGNMENT ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   
   // POST /api/v1/coupons/:id/assign-dealer - Assign batch of codes to a dealer
   app.post('/api/v1/coupons/:id/assign-dealer', auth, async (req, res) => {
@@ -1547,7 +1547,7 @@ const XLSX = require('xlsx');
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               phone: dealer_phone,
-              message: `Ã°Å¸Å½Â« VartMap Coupon Assignment\n\nDear ${dealer_name},\n${codes_count} coupon codes have been assigned to you.\n\nPlease distribute these to farmers along with product sales.\n\nThank you for your partnership!`
+              message: `ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â½Ãƒâ€šÃ‚Â« VartMap Coupon Assignment\n\nDear ${dealer_name},\n${codes_count} coupon codes have been assigned to you.\n\nPlease distribute these to farmers along with product sales.\n\nThank you for your partnership!`
             })
           });
         } catch (e) { console.log('WhatsApp dealer notification failed:', e.message); }
@@ -1574,7 +1574,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ BULK DISTRIBUTION Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ BULK DISTRIBUTION ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   
   // POST /api/v1/coupons/:id/distribute - Bulk WhatsApp distribution
   app.post('/api/v1/coupons/:id/distribute', auth, async (req, res) => {
@@ -1621,7 +1621,7 @@ const XLSX = require('xlsx');
   
           const msg = message_template
             ? message_template.replace('{name}', f.name || 'Farmer').replace('{code}', code.code).replace('{discount}', discountText)
-            : `Ã°Å¸Å½Â Namaste ${f.name || 'Farmer'}!\n\nYou have a special offer from VartMap:\nÃ°Å¸Å½Â« Code: *${code.code}*\nÃ°Å¸â€™Â° Discount: ${discountText}\nÃ°Å¸â€œÂ¦ Campaign: ${camp.name}\n\nTo redeem, simply reply with your code or show it at your dealer.\n\nHappy farming! Ã°Å¸Å’Â¾`;
+            : `ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â½Ãƒâ€šÃ‚Â Namaste ${f.name || 'Farmer'}!\n\nYou have a special offer from VartMap:\nÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â½Ãƒâ€šÃ‚Â« Code: *${code.code}*\nÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢Ãƒâ€šÃ‚Â° Discount: ${discountText}\nÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒâ€šÃ‚Â¦ Campaign: ${camp.name}\n\nTo redeem, simply reply with your code or show it at your dealer.\n\nHappy farming! ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â¾`;
   
           await fetch(`${whatsappUrl}/api/send`, {
             method: 'POST',
@@ -1641,7 +1641,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ GEO-TRACKED REDEMPTION Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ GEO-TRACKED REDEMPTION ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   
   // POST /api/v1/coupons/redeem-geo - Redeem with location tracking
   app.post('/api/v1/coupons/redeem-geo', async (req, res) => {
@@ -1694,7 +1694,7 @@ const XLSX = require('xlsx');
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             phone,
-            message: `Ã¢Å“â€¦ Coupon Redeemed!\n\nHi ${farmerName}, your code *${code.toUpperCase()}* has been successfully redeemed.\nÃ°Å¸Å½Â Reward: ${discountText}\nÃ°Å¸â€œÂ¦ Campaign: ${c.campaign_name}\n\nThank you for choosing VartMap! Ã°Å¸Å’Â¾`
+            message: `ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ Coupon Redeemed!\n\nHi ${farmerName}, your code *${code.toUpperCase()}* has been successfully redeemed.\nÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â½Ãƒâ€šÃ‚Â Reward: ${discountText}\nÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒâ€šÃ‚Â¦ Campaign: ${c.campaign_name}\n\nThank you for choosing VartMap! ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â¾`
           })
         });
       } catch (e) { console.log('WhatsApp redeem notification failed:', e.message); }
@@ -1740,7 +1740,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ SOIL NUTRIENT DATA Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ SOIL NUTRIENT DATA ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.get('/api/v1/soil-data', auth, async (req, res) => {
     try {
       const { state, district, block, village, soil_type } = req.query;
@@ -1936,6 +1936,24 @@ const XLSX = require('xlsx');
           const avgB = microPct(bSuff, bDef);
           const avgMn = microPct(mnSuff, mnDef);
           
+          // pH breakdown percentages
+          const phAlkPct = phTotal > 0 ? pct(v(row,phAlk), phTotal) : 0;
+          const phAcidPct = phTotal > 0 ? pct(v(row,phAcid), phTotal) : 0;
+          const phNeutPct = phTotal > 0 ? pct(v(row,phNeut), phTotal) : 0;
+          
+          // EC breakdown percentages
+          const ecSalinePct = ecTotal > 0 ? pct(v(row,ecSal), ecTotal) : 0;
+          const ecNonSalinePct = ecTotal > 0 ? pct(v(row,ecNonSal), ecTotal) : 0;
+          
+          // Micronutrient deficient percentages
+          const microDefPct = (suff, def) => { const t = v(row,suff)+v(row,def); return t>0 ? Math.round((v(row,def)/t)*10000)/100 : 0; };
+          const sDefPct = microDefPct(sSuff, sDef);
+          const feDefPct = microDefPct(feSuff, feDef);
+          const znDefPct = microDefPct(znSuff, znDef);
+          const cuDefPct = microDefPct(cuSuff, cuDef);
+          const bDefPct = microDefPct(bSuff, bDef);
+          const mnDefPct = microDefPct(mnSuff, mnDef);
+          
           // Generate recommendations
           const recs = {};
           if (nLP > 60) recs.nitrogen = 'Nitrogen deficiency is severe (' + nLP.toFixed(0) + '% low). Apply Urea or DAP. Use green manuring and include legumes in crop rotation.';
@@ -1970,14 +1988,32 @@ const XLSX = require('xlsx');
              potassium_low_pct, potassium_medium_pct, potassium_high_pct,
              organic_carbon_low_pct, organic_carbon_medium_pct, organic_carbon_high_pct,
              avg_ph, avg_ec, avg_sulphur, avg_iron, avg_zinc, avg_copper, avg_boron, avg_manganese,
-             soil_type, recommendations, source, metadata)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)`,
+             ph_alkaline_pct, ph_acidic_pct, ph_neutral_pct,
+             ec_saline_pct, ec_non_saline_pct,
+             sulphur_sufficient_pct, sulphur_deficient_pct,
+             iron_sufficient_pct, iron_deficient_pct,
+             zinc_sufficient_pct, zinc_deficient_pct,
+             copper_sufficient_pct, copper_deficient_pct,
+             boron_sufficient_pct, boron_deficient_pct,
+             manganese_sufficient_pct, manganese_deficient_pct,
+             soil_type, scheme_name, cycle, recommendations, source, metadata)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46)`,
             [state || 'UTTAR PRADESH', district, block, sampleYear, isPercentage ? 0 : Math.round(totalSamples),
              nLP, nMP, nHP, pLP, pMP, pHP, kLP, kMP, kHP, ocLP, ocMP, ocHP,
              avgPh, avgEc, avgS, avgFe, avgZn, avgCu, avgB, avgMn,
-             soilType, JSON.stringify(recs), 'soilhealth.dac.gov.in',
+             phAlkPct, phAcidPct, phNeutPct,
+             ecSalinePct, ecNonSalinePct,
+             avgS || 0, sDefPct,
+             avgFe || 0, feDefPct,
+             avgZn || 0, znDefPct,
+             avgCu || 0, cuDefPct,
+             avgB || 0, bDefPct,
+             avgMn || 0, mnDefPct,
+             soilType, row[headers.findIndex(h => h.toLowerCase().includes('scheme'))] || 'Soil Health Card RKVY',
+             cycleStr, JSON.stringify(recs), 'soilhealth.dac.gov.in',
              JSON.stringify({ cycle: cycleStr, upload_date: new Date().toISOString(), format: isPercentage ? 'percentage' : 'raw_count' })]
           );
+
           inserted++;
         } catch (rowErr) {
           skipped++;
@@ -2005,7 +2041,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ REWARDS (Points-based) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ REWARDS (Points-based) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.get('/api/v1/rewards', auth, async (req, res) => {
     try {
       const r = await pool.query('SELECT r.*, f.name as farmer_name, f.phone FROM rewards r LEFT JOIN farmers f ON r.farmer_id=f.id ORDER BY r.created_at DESC LIMIT 100');
@@ -2031,7 +2067,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ REFERRALS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ REFERRALS ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.get('/api/v1/referrals', auth, async (req, res) => {
     try {
       const codes = await pool.query('SELECT rc.*, f.name as farmer_name, f.phone FROM referral_codes rc LEFT JOIN farmers f ON rc.farmer_id=f.id ORDER BY rc.created_at DESC');
@@ -2040,7 +2076,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ GOVERNMENT SCHEMES Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ GOVERNMENT SCHEMES ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.get('/api/v1/schemes', auth, async (req, res) => {
     try {
       const { status, level, state } = req.query;
@@ -2082,7 +2118,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ PRODUCTS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ PRODUCTS ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.get('/api/v1/products', auth, async (req, res) => {
     try {
       const { search, category, brand } = req.query;
@@ -2109,7 +2145,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ MANDI PRICES Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ MANDI PRICES ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.get('/api/v1/mandi-prices', auth, async (req, res) => {
     try {
       const { commodity, market, state, date } = req.query;
@@ -2137,7 +2173,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ MODERATION Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ MODERATION ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.get('/api/v1/moderation', auth, async (req, res) => {
     try {
       const { status } = req.query;
@@ -2163,7 +2199,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ ORDERS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ ORDERS ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.get('/api/v1/orders', auth, async (req, res) => {
     try {
       const r = await pool.query(
@@ -2175,7 +2211,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ DEALERS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ DEALERS ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.get('/api/v1/dealers', auth, async (req, res) => {
     try {
       const r = await pool.query('SELECT d.*, dm.district_name FROM dealers d LEFT JOIN districts_master dm ON d.district_id=dm.id ORDER BY d.created_at DESC');
@@ -2194,7 +2230,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ FIELD AGENTS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ FIELD AGENTS ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.get('/api/v1/field-agents', auth, async (req, res) => {
     try {
       const r = await pool.query('SELECT fa.*, dm.district_name FROM field_agents fa LEFT JOIN districts_master dm ON fa.district_id=dm.id ORDER BY fa.created_at DESC');
@@ -2213,7 +2249,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ NOTIFICATIONS LOG Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ NOTIFICATIONS LOG ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.get('/api/v1/notifications', auth, async (req, res) => {
     try {
       const { channel, type, status } = req.query;
@@ -2228,7 +2264,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ ANALYTICS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ ANALYTICS ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.get('/api/v1/analytics/overview', auth, async (req, res) => {
     try {
       const days = req.query.days || 30;
@@ -2308,11 +2344,11 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚Â
   // ADVANCED ANALYTICS ENDPOINTS
-  // Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢Ãƒâ€šÃ‚Â
   
-  // GET /api/v1/analytics/campaigns Ã¢â‚¬â€ Campaign performance summary
+  // GET /api/v1/analytics/campaigns ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Campaign performance summary
   app.get('/api/v1/analytics/campaigns', auth, async (req, res) => {
     try {
       const { days = 30 } = req.query;
@@ -2365,7 +2401,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // GET /api/v1/analytics/farmers Ã¢â‚¬â€ Farmer engagement analytics
+  // GET /api/v1/analytics/farmers ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Farmer engagement analytics
   app.get('/api/v1/analytics/farmers', auth, async (req, res) => {
     try {
       const { days = 30 } = req.query;
@@ -2447,7 +2483,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // GET /api/v1/analytics/templates Ã¢â‚¬â€ Template performance comparison
+  // GET /api/v1/analytics/templates ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Template performance comparison
   app.get('/api/v1/analytics/templates', auth, async (req, res) => {
     try {
       const templates = await pool.query(`
@@ -2477,7 +2513,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // GET /api/v1/analytics/geographic Ã¢â‚¬â€ District-level engagement heatmap data
+  // GET /api/v1/analytics/geographic ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â District-level engagement heatmap data
   app.get('/api/v1/analytics/geographic', auth, async (req, res) => {
     try {
       const geo = await pool.query(`
@@ -2501,7 +2537,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // GET /api/v1/analytics/conversations Ã¢â‚¬â€ WhatsApp conversation analytics
+  // GET /api/v1/analytics/conversations ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â WhatsApp conversation analytics
   app.get('/api/v1/analytics/conversations', auth, async (req, res) => {
     try {
       const { days = 30 } = req.query;
@@ -2556,7 +2592,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // POST /api/v1/analytics/refresh-engagement Ã¢â‚¬â€ Recalculate farmer engagement scores
+  // POST /api/v1/analytics/refresh-engagement ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Recalculate farmer engagement scores
   app.post('/api/v1/analytics/refresh-engagement', auth, async (req, res) => {
     try {
       await pool.query(`
@@ -2614,7 +2650,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // GET /api/v1/analytics/roi Ã¢â‚¬â€ Cost & ROI analytics
+  // GET /api/v1/analytics/roi ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Cost & ROI analytics
   app.get('/api/v1/analytics/roi', auth, async (req, res) => {
     try {
       const { days = 30 } = req.query;
@@ -2651,7 +2687,7 @@ const XLSX = require('xlsx');
   });
   
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ DISTRICTS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ DISTRICTS ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.get('/api/v1/districts', auth, async (req, res) => {
     try {
       const { state } = req.query;
@@ -2664,7 +2700,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ AUDIT LOG Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ AUDIT LOG ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.get('/api/v1/audit-log', auth, async (req, res) => {
     try {
       const r = await pool.query('SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 100');
@@ -2672,7 +2708,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ ADMIN USERS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ ADMIN USERS ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   app.get('/api/v1/admin-users', auth, async (req, res) => {
     try {
       const r = await pool.query('SELECT id, email, name, role, status, last_login_at, created_at FROM admin_users ORDER BY created_at');
@@ -2691,7 +2727,7 @@ const XLSX = require('xlsx');
       res.json({ user: r.rows[0] });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ PROXY: Fetch Live Data from Intelligence Service Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ PROXY: Fetch Live Data from Intelligence Service ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   const axios = require('axios');
   const INTEL_URL = process.env.INTELLIGENCE_SERVICE_URL || 'https://vartmap-intelligence.onrender.com';
   
@@ -2735,7 +2771,7 @@ const XLSX = require('xlsx');
       res.status(500).json({ error: err.response?.data?.error || err.message });
     }
   });
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ PRIZE FULFILLMENT (Digicides-style Admin Flow) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ PRIZE FULFILLMENT (Digicides-style Admin Flow) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   
   // Get all spin results with filters
   app.get('/api/v1/prizes', auth, async (req, res) => {
@@ -2815,11 +2851,11 @@ const XLSX = require('xlsx');
         const gatewayUrl = process.env.GATEWAY_URL || 'https://vartmap-whatsapp-gateway.onrender.com';
         let msg = '';
         if (p.prize_type === 'cash') {
-          msg = `Ã¢Å“â€¦ Prize Approved!\n\nHi ${p.farmer_name}, your cash prize of Ã¢â€šÂ¹${p.prize_value} from the lucky draw has been approved!\n\nPlease reply with your UPI ID (e.g. name@upi) to receive the payment.\n\nRef: ${p.verification_code || p.id.slice(0,8)}\n\nÃ°Å¸Å’Â¾ VartMap Krishi Sahayak`;
+          msg = `ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ Prize Approved!\n\nHi ${p.farmer_name}, your cash prize of ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹${p.prize_value} from the lucky draw has been approved!\n\nPlease reply with your UPI ID (e.g. name@upi) to receive the payment.\n\nRef: ${p.verification_code || p.id.slice(0,8)}\n\nÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â¾ VartMap Krishi Sahayak`;
         } else if (p.prize_type === 'discount') {
-          msg = `Ã¢Å“â€¦ Prize Approved!\n\nHi ${p.farmer_name}, you won a ${p.prize_value}% discount!\n\nÃ°Å¸ÂÂ·Ã¯Â¸Â Your Coupon Code: *${couponCode}*\n\nShow this code to your nearest dealer to avail the discount.\n\nRef: ${p.verification_code || p.id.slice(0,8)}\n\nÃ°Å¸Å’Â¾ VartMap Krishi Sahayak`;
+          msg = `ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ Prize Approved!\n\nHi ${p.farmer_name}, you won a ${p.prize_value}% discount!\n\nÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€šÃ‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â Your Coupon Code: *${couponCode}*\n\nShow this code to your nearest dealer to avail the discount.\n\nRef: ${p.verification_code || p.id.slice(0,8)}\n\nÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â¾ VartMap Krishi Sahayak`;
         } else if (p.prize_type === 'points') {
-          msg = `Ã¢Å“â€¦ Prize Approved!\n\nHi ${p.farmer_name}, ${p.prize_value} loyalty points have been added to your account!\n\nTotal points will be visible in your next interaction.\n\nRef: ${p.verification_code || p.id.slice(0,8)}\n\nÃ°Å¸Å’Â¾ VartMap Krishi Sahayak`;
+          msg = `ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ Prize Approved!\n\nHi ${p.farmer_name}, ${p.prize_value} loyalty points have been added to your account!\n\nTotal points will be visible in your next interaction.\n\nRef: ${p.verification_code || p.id.slice(0,8)}\n\nÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â¾ VartMap Krishi Sahayak`;
         }
         if (msg) await axios.post(`${gatewayUrl}/api/v1/send-message`, { phone: p.phone, message: msg });
       } catch(e) { console.error('Prize approval WhatsApp failed:', e.message); }
@@ -2846,7 +2882,7 @@ const XLSX = require('xlsx');
       try {
         const p = prize.rows[0];
         const gatewayUrl = process.env.GATEWAY_URL || 'https://vartmap-whatsapp-gateway.onrender.com';
-        const msg = `Hi ${p.farmer_name}, unfortunately your prize claim could not be verified.\n\nReason: ${reason}\n\nPlease contact support for help.\n\nÃ°Å¸Å’Â¾ VartMap Krishi Sahayak`;
+        const msg = `Hi ${p.farmer_name}, unfortunately your prize claim could not be verified.\n\nReason: ${reason}\n\nPlease contact support for help.\n\nÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â¾ VartMap Krishi Sahayak`;
         await axios.post(`${gatewayUrl}/api/v1/send-message`, { phone: p.phone, message: msg });
       } catch(e) { console.error('Prize rejection WhatsApp failed:', e.message); }
   
@@ -2880,9 +2916,9 @@ const XLSX = require('xlsx');
         const gatewayUrl = process.env.GATEWAY_URL || 'https://vartmap-whatsapp-gateway.onrender.com';
         let msg = '';
         if (p.prize_type === 'cash') {
-          msg = `Ã°Å¸â€™Â° Payment Sent!\n\nHi ${p.farmer_name}, Ã¢â€šÂ¹${p.prize_value} has been sent to your account!\n\nMethod: ${payment_method || 'UPI'}\nRef: ${payment_reference || p.id.slice(0,8)}\n\nThank you for participating! Ã°Å¸Å’Â¾ VartMap Krishi Sahayak`;
+          msg = `ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢Ãƒâ€šÃ‚Â° Payment Sent!\n\nHi ${p.farmer_name}, ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹${p.prize_value} has been sent to your account!\n\nMethod: ${payment_method || 'UPI'}\nRef: ${payment_reference || p.id.slice(0,8)}\n\nThank you for participating! ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â¾ VartMap Krishi Sahayak`;
         } else {
-          msg = `Ã°Å¸Å½Â Prize Delivered!\n\nHi ${p.farmer_name}, your prize "${p.prize_label || p.prize_type}" has been marked as delivered.\n\nRef: ${payment_reference || p.id.slice(0,8)}\n\nThank you! Ã°Å¸Å’Â¾ VartMap Krishi Sahayak`;
+          msg = `ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â½Ãƒâ€šÃ‚Â Prize Delivered!\n\nHi ${p.farmer_name}, your prize "${p.prize_label || p.prize_type}" has been marked as delivered.\n\nRef: ${payment_reference || p.id.slice(0,8)}\n\nThank you! ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â¾ VartMap Krishi Sahayak`;
         }
         await axios.post(`${gatewayUrl}/api/v1/send-message`, { phone: p.phone, message: msg });
       } catch(e) { console.error('Prize payment WhatsApp failed:', e.message); }
@@ -2919,7 +2955,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ PUBLIC SPIN WHEEL API (No auth required - Digicides-style flow) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ PUBLIC SPIN WHEEL API (No auth required - Digicides-style flow) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   
   // Get wheel info (public)
   app.get('/api/v1/public/spin-wheel/:id', async (req, res) => {
@@ -3085,7 +3121,7 @@ const XLSX = require('xlsx');
       if (phone && selectedSegment.prize_type !== 'better_luck') {
         try {
           const gatewayUrl = process.env.GATEWAY_URL || 'https://vartmap-whatsapp-gateway.onrender.com';
-          const msg = `Ã°Å¸Å½â€° Congratulations! You won "${selectedSegment.label}" in the ${wheel.name} lucky draw!\n\nReference: ${refId}\nPrize will be credited within 24 hours.\n\nÃ°Å¸Å’Â¾ VartMap Krishi Sahayak`;
+          const msg = `ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â½ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â° Congratulations! You won "${selectedSegment.label}" in the ${wheel.name} lucky draw!\n\nReference: ${refId}\nPrize will be credited within 24 hours.\n\nÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã¢â‚¬â„¢Ãƒâ€šÃ‚Â¾ VartMap Krishi Sahayak`;
           await axios.post(`${gatewayUrl}/api/v1/send-message`, { phone, message: msg });
         } catch(e) { console.error('WhatsApp notification failed:', e.message); }
       }
@@ -3237,7 +3273,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ CROP RECOMMENDATIONS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ CROP RECOMMENDATIONS ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   
   app.get('/api/v1/catalog/recommendations', auth, async (req, res) => {
     try {
@@ -3290,7 +3326,7 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ AI CATALOG ENDPOINT (for WhatsApp bot) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ AI CATALOG ENDPOINT (for WhatsApp bot) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
   
   app.get('/api/v1/catalog/ai-context', async (req, res) => {
     try {
@@ -3682,5 +3718,5 @@ const XLSX = require('xlsx');
     catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ START SERVER Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ START SERVER ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
 };
