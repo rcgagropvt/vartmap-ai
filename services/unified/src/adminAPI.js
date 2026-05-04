@@ -1,4 +1,4 @@
-﻿// VartMap Admin API Routes Module
+// VartMap Admin API Routes Module
 const bcrypt = require('bcryptjs');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const QRCode = require('qrcode');
+const XLSX = require('xlsx');
 
 module.exports = function setupAdminAPI(app, pool) {
 
@@ -1444,6 +1445,7 @@ module.exports = function setupAdminAPI(app, pool) {
   // ==================== QR CODE GENERATION ====================
   // Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ QR CODE GENERATION Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   const QRCode = require('qrcode');
+const XLSX = require('xlsx');
   
   // POST /api/v1/coupons/:id/generate-qr - Generate QR codes for all codes in a campaign
   app.post('/api/v1/coupons/:id/generate-qr', auth, async (req, res) => {
@@ -1800,6 +1802,197 @@ module.exports = function setupAdminAPI(app, pool) {
         inserted++;
       }
       res.json({ inserted, total: records.length });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // Upload Excel from soilhealth.dac.gov.in
+  app.post('/api/v1/soil-data/upload-excel', auth, upload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+      
+      const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+      
+      // Find header row (contains 'State' or 'District' or 'Block')
+      let headerIdx = -1;
+      for (let i = 0; i < Math.min(rawData.length, 10); i++) {
+        const row = rawData[i].map(c => String(c).trim().toLowerCase());
+        if (row.includes('state') || row.includes('district') || row.includes('block')) {
+          headerIdx = i;
+          break;
+        }
+      }
+      if (headerIdx === -1) return res.status(400).json({ error: 'Could not find header row. Expected columns: State, District, Block' });
+      
+      const headers = rawData[headerIdx].map(h => String(h).trim());
+      const dataRows = rawData.slice(headerIdx + 1).filter(r => r.some(c => c !== '' && c !== null));
+      
+      // Map column names to indices
+      const col = (name) => headers.findIndex(h => h.toLowerCase().includes(name.toLowerCase()));
+      const stateCol = col('state');
+      const distCol = col('district');
+      const blockCol = col('block');
+      const cycleCol = col('cycle');
+      
+      // Nutrient columns - try exact match first
+      const findCol = (primary, fallback) => {
+        let idx = headers.findIndex(h => h === primary);
+        if (idx === -1 && fallback) idx = headers.findIndex(h => h === fallback);
+        if (idx === -1) idx = headers.findIndex(h => h.toLowerCase().includes(primary.toLowerCase()));
+        return idx;
+      };
+      
+      const nHigh = findCol('N_High');
+      const nMed = findCol('N_Medium');
+      const nLow = findCol('N_Low');
+      const pHigh = findCol('P_High');
+      const pMed = findCol('P_Medium');
+      const pLow = findCol('P_Low');
+      const kHigh = findCol('K_High');
+      const kMed = findCol('K_Medium');
+      const kLow = findCol('K_Low');
+      const ocHigh = findCol('OC_High');
+      const ocMed = findCol('OC_Medium');
+      const ocLow = findCol('OC_Low');
+      const phAlk = findCol('P H_Alkaline', 'PH_Alkaline');
+      const phAcid = findCol('P H_Acidic', 'PH_Acidic');
+      const phNeut = findCol('P H_Neutral', 'PH_Neutral');
+      const ecNonSal = findCol('EC_Non Saline', 'EC_NonSaline');
+      const ecSal = findCol('EC_Saline');
+      const sSuff = findCol('S_Sufficient');
+      const sDef = findCol('S_Deficient');
+      const feSuff = findCol('Fe_Sufficient');
+      const feDef = findCol('Fe_Deficient');
+      const znSuff = findCol('Zn_Sufficient');
+      const znDef = findCol('Zn_Deficient');
+      const cuSuff = findCol('Cu_Sufficient');
+      const cuDef = findCol('Cu_Deficient');
+      const bSuff = findCol('B_Sufficient');
+      const bDef = findCol('B_Deficient');
+      const mnSuff = findCol('Mn_Sufficient');
+      const mnDef = findCol('Mn_Deficient');
+      
+      const v = (row, idx) => idx >= 0 ? (parseFloat(row[idx]) || 0) : 0;
+      const pct = (val, total) => total > 0 ? Math.round((val / total) * 10000) / 100 : 0;
+      
+      // Detect if data is already in percentages (values between 0-100 and sum ~100)
+      let isPercentage = false;
+      if (dataRows.length > 0 && nHigh >= 0 && nMed >= 0 && nLow >= 0) {
+        const testRow = dataRows[0];
+        const sum = v(testRow, nHigh) + v(testRow, nMed) + v(testRow, nLow);
+        if (sum > 90 && sum < 110) isPercentage = true;
+      }
+      
+      let inserted = 0;
+      let skipped = 0;
+      const errors = [];
+      
+      for (const row of dataRows) {
+        try {
+          const state = String(row[stateCol] || '').trim();
+          const district = String(row[distCol] || '').trim();
+          const block = String(row[blockCol] || '').trim();
+          if (!district && !block) { skipped++; continue; }
+          
+          const cycleStr = cycleCol >= 0 ? String(row[cycleCol] || '') : '';
+          const yearMatch = cycleStr.match(/(\d{4})/);
+          const sampleYear = yearMatch ? parseInt(yearMatch[1]) : new Date().getFullYear();
+          
+          // Calculate totals and percentages
+          const nTotal = v(row, nHigh) + v(row, nMed) + v(row, nLow);
+          const pTotal = v(row, pHigh) + v(row, pMed) + v(row, pLow);
+          const kTotal = v(row, kHigh) + v(row, kMed) + v(row, kLow);
+          const ocTotal = v(row, ocHigh) + v(row, ocMed) + v(row, ocLow);
+          const totalSamples = Math.max(nTotal, pTotal, kTotal, ocTotal);
+          
+          let nHP, nMP, nLP, pHP, pMP, pLP, kHP, kMP, kLP, ocHP, ocMP, ocLP;
+          if (isPercentage) {
+            nHP = v(row, nHigh); nMP = v(row, nMed); nLP = v(row, nLow);
+            pHP = v(row, pHigh); pMP = v(row, pMed); pLP = v(row, pLow);
+            kHP = v(row, kHigh); kMP = v(row, kMed); kLP = v(row, kLow);
+            ocHP = v(row, ocHigh); ocMP = v(row, ocMed); ocLP = v(row, ocLow);
+          } else {
+            nHP = pct(v(row,nHigh),nTotal); nMP = pct(v(row,nMed),nTotal); nLP = pct(v(row,nLow),nTotal);
+            pHP = pct(v(row,pHigh),pTotal); pMP = pct(v(row,pMed),pTotal); pLP = pct(v(row,pLow),pTotal);
+            kHP = pct(v(row,kHigh),kTotal); kMP = pct(v(row,kMed),kTotal); kLP = pct(v(row,kLow),kTotal);
+            ocHP = pct(v(row,ocHigh),ocTotal); ocMP = pct(v(row,ocMed),ocTotal); ocLP = pct(v(row,ocLow),ocTotal);
+          }
+          
+          // pH: calculate weighted average (Alkaline=8.5, Neutral=7, Acidic=5.5)
+          const phTotal = v(row,phAlk) + v(row,phAcid) + v(row,phNeut);
+          const avgPh = phTotal > 0 ? Math.round(((v(row,phAlk)*8.5 + v(row,phNeut)*7 + v(row,phAcid)*5.5) / phTotal) * 100) / 100 : null;
+          
+          // EC: % saline
+          const ecTotal = v(row,ecNonSal) + v(row,ecSal);
+          const avgEc = ecTotal > 0 ? Math.round((v(row,ecSal) / ecTotal) * 10000) / 100 : 0;
+          
+          // Micronutrients: % sufficient
+          const microPct = (suff, def) => { const t = v(row,suff)+v(row,def); return t>0 ? Math.round((v(row,suff)/t)*10000)/100 : null; };
+          const avgS = microPct(sSuff, sDef);
+          const avgFe = microPct(feSuff, feDef);
+          const avgZn = microPct(znSuff, znDef);
+          const avgCu = microPct(cuSuff, cuDef);
+          const avgB = microPct(bSuff, bDef);
+          const avgMn = microPct(mnSuff, mnDef);
+          
+          // Generate recommendations
+          const recs = {};
+          if (nLP > 60) recs.nitrogen = 'Nitrogen deficiency is severe (' + nLP.toFixed(0) + '% low). Apply Urea or DAP. Use green manuring and include legumes in crop rotation.';
+          else if (nLP > 40) recs.nitrogen = 'Moderate nitrogen deficiency (' + nLP.toFixed(0) + '% low). Apply balanced NPK fertilizers. Consider vermicompost.';
+          if (pLP > 50) recs.phosphorus = 'Phosphorus is adequate in most areas. Maintain with SSP or DAP application.';
+          if (pHP > 30) recs.phosphorus = 'Good phosphorus levels (' + pHP.toFixed(0) + '% high). Reduce P fertilizer to save costs.';
+          if (kLP > 30) recs.potassium = 'Potassium deficiency detected (' + kLP.toFixed(0) + '% low). Apply MOP (Muriate of Potash).';
+          if (ocLP > 60) recs.organic_carbon = 'Severe organic carbon deficiency (' + ocLP.toFixed(0) + '% low). Add FYM, compost, or crop residues. Avoid burning stubble.';
+          else if (ocLP > 40) recs.organic_carbon = 'Moderate OC deficiency. Incorporate organic matter through green manuring and composting.';
+          if (avgZn !== null && avgZn < 50) recs.zinc = 'Zinc deficiency widespread (' + (100-avgZn).toFixed(0) + '% deficient). Apply ZnSO4 @ 25 kg/ha.';
+          if (avgB !== null && avgB < 50) recs.boron = 'Boron deficiency detected (' + (100-avgB).toFixed(0) + '% deficient). Apply Borax @ 10 kg/ha.';
+          if (avgS !== null && avgS < 30) recs.sulphur = 'Severe sulphur deficiency (' + (100-avgS).toFixed(0) + '% deficient). Use Gypsum or SSP for sulphur.';
+          
+          // Determine soil type from pH
+          let soilType = null;
+          if (avgPh !== null) {
+            if (avgPh > 8) soilType = 'Alkaline';
+            else if (avgPh < 6) soilType = 'Acidic';
+            else soilType = 'Neutral';
+          }
+          
+          // Delete existing record for same district+block+year
+          await pool.query(
+            'DELETE FROM soil_nutrient_data WHERE UPPER(district_name)=$1 AND UPPER(block_name)=$2 AND sample_year=$3',
+            [district.toUpperCase(), block.toUpperCase(), sampleYear]
+          );
+          
+          await pool.query(
+            `INSERT INTO soil_nutrient_data (state_name, district_name, block_name, sample_year, total_samples,
+             nitrogen_low_pct, nitrogen_medium_pct, nitrogen_high_pct,
+             phosphorus_low_pct, phosphorus_medium_pct, phosphorus_high_pct,
+             potassium_low_pct, potassium_medium_pct, potassium_high_pct,
+             organic_carbon_low_pct, organic_carbon_medium_pct, organic_carbon_high_pct,
+             avg_ph, avg_ec, avg_sulphur, avg_iron, avg_zinc, avg_copper, avg_boron, avg_manganese,
+             soil_type, recommendations, source, metadata)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)`,
+            [state || 'UTTAR PRADESH', district, block, sampleYear, isPercentage ? 0 : Math.round(totalSamples),
+             nLP, nMP, nHP, pLP, pMP, pHP, kLP, kMP, kHP, ocLP, ocMP, ocHP,
+             avgPh, avgEc, avgS, avgFe, avgZn, avgCu, avgB, avgMn,
+             soilType, JSON.stringify(recs), 'soilhealth.dac.gov.in',
+             JSON.stringify({ cycle: cycleStr, upload_date: new Date().toISOString(), format: isPercentage ? 'percentage' : 'raw_count' })]
+          );
+          inserted++;
+        } catch (rowErr) {
+          skipped++;
+          errors.push(rowErr.message);
+        }
+      }
+      
+      res.json({ 
+        success: true,
+        inserted, 
+        skipped, 
+        total_rows: dataRows.length,
+        format_detected: isPercentage ? 'percentage' : 'raw_count',
+        errors: errors.slice(0, 5)
+      });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
