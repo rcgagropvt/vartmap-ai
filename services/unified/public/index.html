@@ -380,7 +380,7 @@ async function loadOverview() {
     if (readRate < 30 && d.total_messages_sent > 100) recs.push({icon:'fa-envelope-open',color:'#f39c12',text:'Read rate is '+readRate+'%. Consider sending messages between 9-11 AM when farmers are most active.'});
     if (failRate > 10) recs.push({icon:'fa-exclamation-triangle',color:'#e74c3c',text:'Failure rate is '+failRate+'%. Check phone number validity and WhatsApp opt-in status.'});
     if (d.active_campaigns === 0 && d.total_farmers > 50) recs.push({icon:'fa-bullhorn',color:'#3498db',text:'No active campaigns. With '+d.total_farmers+' farmers, consider launching a seasonal advisory campaign.'});
-    if (d.ai_cost_30d > 1500) recs.push({icon:'fa-rupee-sign',color:'#f39c12',text:'AI spend is â‚¹'+d.ai_cost_30d.toFixed(0)+' this month. Consider setting daily limits per farmer to optimize costs.'});
+    if (d.ai_cost_30d > 1500) recs.push({icon:'fa-rupee-sign',color:'#f39c12',text:'AI spend is Ã¢â€šÂ¹'+d.ai_cost_30d.toFixed(0)+' this month. Consider setting daily limits per farmer to optimize costs.'});
     if (d.open_chats > 10) recs.push({icon:'fa-comments',color:'#3498db',text:d.open_chats+' chats are open. Assign agents or enable auto-close after 24h of inactivity.'});
     if ((d.top_crops||[]).length < 3) recs.push({icon:'fa-seedling',color:'#27ae60',text:'Limited crop data. Encourage farmers to update their crop profiles for better targeting.'});
     if (recs.length === 0) recs.push({icon:'fa-check-circle',color:'#27ae60',text:'Everything looks healthy! Your engagement metrics are on track.'});
@@ -822,7 +822,7 @@ async function viewFarmer(id) {
   } catch(e) { console.log('Chat fetch error:', e); }
 
   const spinHtml = (d.spin_history || []).length > 0 
-    ? d.spin_history.map(s => '<span class="tag" style="margin:2px">' + (s.prize_type === 'better_luck' ? 'Better Luck' : (s.prize_label || s.prize_type)) + ': Ã¢â€šÂ¹' + s.prize_value + '</span>').join('')
+    ? d.spin_history.map(s => '<span class="tag" style="margin:2px">' + (s.prize_type === 'better_luck' ? 'Better Luck' : (s.prize_label || s.prize_type)) + ': ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹' + s.prize_value + '</span>').join('')
     : '<span style="color:var(--text-secondary)">No spins yet</span>';
 
   const profileHtml = `
@@ -927,7 +927,7 @@ async function loadFarmerChat(sessionId, farmerId) {
                          m.message_type === 'audio' ? '<div style="margin-bottom:4px"><i class="fas fa-microphone" style="color:#e91e63"></i> <em>Voice message</em></div>' : '';
         return '<div style="display:flex;justify-content:' + align + ';margin-bottom:8px">' +
           '<div style="max-width:80%;background:' + bgColor + ';padding:8px 12px;border-radius:12px;font-size:13px">' +
-          '<div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;font-size:11px;color:#666">' + icon + ' <strong>' + label + '</strong> Ã‚Â· ' + date + ' ' + time + '</div>' +
+          '<div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;font-size:11px;color:#666">' + icon + ' <strong>' + label + '</strong> Ãƒâ€šÃ‚Â· ' + date + ' ' + time + '</div>' +
           mediaTag +
           '<div style="white-space:pre-wrap;word-break:break-word">' + (m.content || '').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>' +
           '</div></div>';
@@ -1352,7 +1352,7 @@ async function newCampaignModal() {
 
   openModal('New Broadcast Campaign', `
     <div style="background:#e8f5e9;padding:12px;border-radius:8px;margin-bottom:16px;font-size:13px">
-      <i class="fas fa-satellite-dish"></i> Create a targeted broadcast Ã¢â‚¬â€ select audience filters, choose an approved template, and launch. Messages are sent via WhatsApp Business API.
+      <i class="fas fa-satellite-dish"></i> Create a targeted broadcast ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â select audience filters, choose an approved template, and launch. Messages are sent via WhatsApp Business API.
     </div>
     <div class="form-group"><label>Campaign Name</label><input id="cName" placeholder="e.g. Kharif Season Mandi Alert"></div>
     <div class="form-group"><label>Template (must be Meta-approved)</label><select id="cTemplate">${tmplOpts}</select><div id="cTemplatePreview" style="font-size:12px;color:#666;margin-top:4px"></div></div>
@@ -1382,7 +1382,7 @@ async function newCampaignModal() {
 
     <div style="background:#f0f7ff;padding:16px;border-radius:8px;margin-top:12px;text-align:center">
       <button class="btn btn-outline btn-sm" onclick="previewAudience()" style="margin-bottom:8px"><i class="fas fa-users"></i> Preview Audience Count</button>
-      <div id="cAudienceCount" style="font-size:24px;font-weight:700;color:#2563eb">Ã¢â‚¬â€</div>
+      <div id="cAudienceCount" style="font-size:24px;font-weight:700;color:#2563eb">ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â</div>
       <div style="font-size:12px;color:#666">farmers matching your filters</div>
     </div>
   `, `<button class="btn btn-outline" onclick="createCampaign(false)"><i class="fas fa-save"></i> Save Draft</button> <button class="btn btn-primary" onclick="createCampaign(true)"><i class="fas fa-rocket"></i> Save & Launch Now</button>`);
@@ -1608,9 +1608,9 @@ async function deleteCampaign(id) {
 async function updateCampaignStatus(id, status) { await api('/api/v1/campaigns/' + id, { method: 'PUT', body: JSON.stringify({ status: status }) }); loadCampaigns(); }
 
 // ------
-// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
+// ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
 // ANALYTICS DASHBOARD
-// Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â
+// ÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â
 
 async function loadAnalytics() {
   const el = document.getElementById('pageContent');
@@ -1699,15 +1699,15 @@ async function loadAnalytics() {
           <div style="font-size:12px;color:#666">Active Farmers</div>
         </div>
         <div style="background:#fefce8;padding:16px;border-radius:10px;text-align:center">
-          <div style="font-size:28px;font-weight:700;color:#ca8a04">Ã¢â€šÂ¹${roi.estimated_cost_inr||'0.00'}</div>
+          <div style="font-size:28px;font-weight:700;color:#ca8a04">ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹${roi.estimated_cost_inr||'0.00'}</div>
           <div style="font-size:12px;color:#666">Est. Cost (30d)</div>
         </div>
         <div style="background:#f0fdf4;padding:16px;border-radius:10px;text-align:center">
-          <div style="font-size:28px;font-weight:700;color:#16a34a">Ã¢â€šÂ¹${roi.cost_per_read_inr||'0.00'}</div>
+          <div style="font-size:28px;font-weight:700;color:#16a34a">ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹${roi.cost_per_read_inr||'0.00'}</div>
           <div style="font-size:12px;color:#666">Cost per Read</div>
         </div>
         <div style="background:#eff6ff;padding:16px;border-radius:10px;text-align:center">
-          <div style="font-size:28px;font-weight:700;color:#2563eb">Ã¢â€šÂ¹${roi.cost_per_farmer_reached_inr||'0.00'}</div>
+          <div style="font-size:28px;font-weight:700;color:#2563eb">ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹${roi.cost_per_farmer_reached_inr||'0.00'}</div>
           <div style="font-size:12px;color:#666">Cost per Farmer</div>
         </div>
       </div>
@@ -1850,12 +1850,12 @@ async function loadAnalytics() {
       <h4 style="margin:20px 0 10px;color:#666;font-size:13px;text-transform:uppercase;letter-spacing:1px">AI Budget & Usage (30 days)</h4>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:16px">
         <div style="background:#f0f9ff;padding:16px;border-radius:10px;text-align:center">
-          <div style="font-size:28px;font-weight:700;color:#0369a1">â‚¹${totalAiCost.toFixed(2)}</div>
+          <div style="font-size:28px;font-weight:700;color:#0369a1">Ã¢â€šÂ¹${totalAiCost.toFixed(2)}</div>
           <div style="font-size:12px;color:#666">AI Spend (30d)</div>
         </div>
         <div style="background:${parseFloat(budgetPct)>80?'#fef2f2':'#f0fdf4'};padding:16px;border-radius:10px;text-align:center">
           <div style="font-size:28px;font-weight:700;color:${parseFloat(budgetPct)>80?'#dc2626':'#16a34a'}">${budgetPct}%</div>
-          <div style="font-size:12px;color:#666">of â‚¹${monthlyBudget} Budget</div>
+          <div style="font-size:12px;color:#666">of Ã¢â€šÂ¹${monthlyBudget} Budget</div>
         </div>
         <div style="background:#faf5ff;padding:16px;border-radius:10px;text-align:center">
           <div style="font-size:28px;font-weight:700;color:#7c3aed">${(aiUs.daily||[]).reduce((s,d)=>s+parseInt(d.count||0),0)}</div>
@@ -1877,7 +1877,7 @@ async function loadAnalytics() {
           ${(aiUs.by_feature||[]).map(f => {
             const maxF = Math.max(...(aiUs.by_feature||[]).map(x=>parseInt(x.count)||1));
             const pct = ((parseInt(f.count)/maxF)*100).toFixed(0);
-            return '<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px"><span>'+f.feature+'</span><span style="font-weight:600">'+f.count+' calls Â· â‚¹'+parseFloat(f.total_cost||0).toFixed(2)+'</span></div><div style="background:#e5e7eb;border-radius:4px;height:8px"><div style="background:#7c3aed;height:100%;border-radius:4px;width:'+pct+'%"></div></div></div>';
+            return '<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px"><span>'+f.feature+'</span><span style="font-weight:600">'+f.count+' calls Ã‚Â· Ã¢â€šÂ¹'+parseFloat(f.total_cost||0).toFixed(2)+'</span></div><div style="background:#e5e7eb;border-radius:4px;height:8px"><div style="background:#7c3aed;height:100%;border-radius:4px;width:'+pct+'%"></div></div></div>';
           }).join('')}
         </div>
         <div style="background:#fff;padding:16px;border-radius:10px;border:1px solid #eee">
@@ -1886,7 +1886,7 @@ async function loadAnalytics() {
             ${(aiUs.costs||[]).map(d => {
               const maxC = Math.max(...(aiUs.costs||[]).map(x=>parseFloat(x.cost)||0.01));
               const h = Math.max(4, (parseFloat(d.cost)/maxC)*100);
-              return '<div style="flex:1;background:#0369a1;height:'+h+'%;border-radius:2px 2px 0 0;min-height:2px" title="'+(d.date||'')+': â‚¹'+parseFloat(d.cost||0).toFixed(2)+'"></div>';
+              return '<div style="flex:1;background:#0369a1;height:'+h+'%;border-radius:2px 2px 0 0;min-height:2px" title="'+(d.date||'')+': Ã¢â€šÂ¹'+parseFloat(d.cost||0).toFixed(2)+'"></div>';
             }).join('')}
           </div>
           <div style="display:flex;justify-content:space-between;font-size:9px;color:#999;margin-top:4px">
@@ -1946,7 +1946,7 @@ async function loadSpinWheels() {
       <div class="stat-card"><div class="stat-icon"><i class="fas fa-dharmachakra"></i></div><div class="stat-value">${d.wheels.length}</div><div class="stat-label">Total Wheels</div></div>
       <div class="stat-card accent"><div class="stat-icon"><i class="fas fa-play-circle" style="color:var(--accent)"></i></div><div class="stat-value">${d.wheels.filter(w=>w.status==='active').length}</div><div class="stat-label">Active Wheels</div></div>
       <div class="stat-card info"><div class="stat-icon"><i class="fas fa-trophy" style="color:var(--info)"></i></div><div class="stat-value">${d.wheels.reduce((a,w)=>a+(w.stats?.winners||0),0)}</div><div class="stat-label">Total Winners</div></div>
-      <div class="stat-card danger"><div class="stat-icon"><i class="fas fa-rupee-sign" style="color:var(--danger)"></i></div><div class="stat-value">ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹${d.wheels.reduce((a,w)=>a+(w.spent_budget||0),0)}</div><div class="stat-label">Total Spent</div></div>
+      <div class="stat-card danger"><div class="stat-icon"><i class="fas fa-rupee-sign" style="color:var(--danger)"></i></div><div class="stat-value">ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹${d.wheels.reduce((a,w)=>a+(w.spent_budget||0),0)}</div><div class="stat-label">Total Spent</div></div>
     </div>
     <div class="flex justify-between items-center mb-16">
       <h3>Spin Wheels & Lucky Draw</h3>
@@ -1961,7 +1961,7 @@ async function loadSpinWheels() {
             <p style="font-size:13px;color:var(--text-light)">${w.description || ''}</p>
             <div style="font-size:12px;color:var(--text-light);margin-top:6px">
               <i class="fas fa-calendar"></i> ${fmtDate(w.start_date)} - ${fmtDate(w.end_date)} |
-              <i class="fas fa-sync"></i> Max ${w.max_spins_per_farmer} spin/farmer Ãƒâ€šÃ‚Â· 
+              <i class="fas fa-sync"></i> Max ${w.max_spins_per_farmer} spin/farmer ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· 
               <i class="fas fa-wallet"></i> Budget: Rs.${w.total_budget} (Spent: Rs.${w.spent_budget || 0})
             </div>
           </div>
@@ -1992,7 +1992,7 @@ async function loadSpinWheels() {
                     <small>${s.prize_type} | Rs.${s.prize_value} | Prob: ${(s.probability * 100).toFixed(1)}%</small>
                   </div>
                   <div style="text-align:right;font-size:12px">
-                    <div style="font-weight:700;color:${s.current_winners >= (s.max_winners||9999) ? 'var(--danger)' : 'var(--primary)'}">${s.current_winners}/${s.max_winners || 'ÃƒÂ¢Ã‹â€ Ã…Â¾'}</div>
+                    <div style="font-weight:700;color:${s.current_winners >= (s.max_winners||9999) ? 'var(--danger)' : 'var(--primary)'}">${s.current_winners}/${s.max_winners || 'ÃƒÆ’Ã‚Â¢Ãƒâ€¹Ã¢â‚¬Â Ãƒâ€¦Ã‚Â¾'}</div>
                     <small>winners</small>
                   </div>
                 </div>
@@ -2002,7 +2002,7 @@ async function loadSpinWheels() {
               <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;text-align:center">
                 <div><div style="font-size:22px;font-weight:700;color:var(--primary)">${w.stats?.total_spins || 0}</div><div style="font-size:11px;color:var(--text-light)">Total Spins</div></div>
                 <div><div style="font-size:22px;font-weight:700;color:var(--accent)">${w.stats?.winners || 0}</div><div style="font-size:11px;color:var(--text-light)">Winners</div></div>
-                <div><div style="font-size:22px;font-weight:700;color:var(--info)">ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹${w.spent_budget || 0}</div><div style="font-size:11px;color:var(--text-light)">Spent</div></div>
+                <div><div style="font-size:22px;font-weight:700;color:var(--info)">ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹${w.spent_budget || 0}</div><div style="font-size:11px;color:var(--text-light)">Spent</div></div>
               </div>
               <div style="margin-top:10px">
                 <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px"><span>Budget Used</span><span>${w.total_budget ? Math.round(((w.spent_budget||0)/w.total_budget)*100) : 0}%</span></div>
@@ -2206,10 +2206,10 @@ function shareWheelLink(wheelId) {
          <strong>Kisan Lucky Draw!</strong><br><br>
         Spin the wheel and win exciting prizes!<br>
          Cash prizes up to Rs.500<br>
-        Ã¯Â¿Â½ Loyalty points<br>
-        ÃƒÂ°Ã…Â¸Ã‚ÂÃ‚Â·ÃƒÂ¯Ã‚Â¸Ã‚Â Discount coupons<br><br>
-        ÃƒÂ°Ã…Â¸Ã¢â‚¬ËœÃ¢â‚¬Â° Spin now: ${link}<br><br>
-        ÃƒÂ°Ã…Â¸Ã¢â€žÂ¢Ã‚Â VartMap Krishi Sahayak
+        ÃƒÂ¯Ã‚Â¿Ã‚Â½ Loyalty points<br>
+        ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€šÃ‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â Discount coupons<br><br>
+        ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â° Spin now: ${link}<br><br>
+        ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢Ãƒâ€šÃ‚Â VartMap Krishi Sahayak
       </div>
     </div>
   `, `<button class="btn btn-primary" onclick="navigator.clipboard.writeText('${link}');alert('Link copied!')"><i class="fas fa-copy"></i> Copy Link</button>`);
@@ -2366,8 +2366,8 @@ function showLoyaltyTab(tab) {
           </tr></thead>
           <tbody>
             ${leaderboard.map((f, i) => `<tr style="border-top:1px solid #f1f5f9">
-              <td style="padding:12px;text-align:center;font-weight:700;font-size:18px">${i < 3 ? ['ÃƒÂ°Ã…Â¸Ã‚Â¥Ã¢â‚¬Â¡','ÃƒÂ°Ã…Â¸Ã‚Â¥Ã‹â€ ','ÃƒÂ°Ã…Â¸Ã‚Â¥Ã¢â‚¬Â°'][i] : i+1}</td>
-              <td style="padding:12px"><strong>${f.name}</strong><br><small style="color:#6b7280">${f.phone} Ãƒâ€šÃ‚Â· ${f.district || 'N/A'}</small></td>
+              <td style="padding:12px;text-align:center;font-weight:700;font-size:18px">${i < 3 ? ['ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€šÃ‚Â¥ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡','ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€šÃ‚Â¥Ãƒâ€¹Ã¢â‚¬Â ','ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€šÃ‚Â¥ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°'][i] : i+1}</td>
+              <td style="padding:12px"><strong>${f.name}</strong><br><small style="color:#6b7280">${f.phone} ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${f.district || 'N/A'}</small></td>
               <td style="padding:12px;text-align:center"><span style="color:${f.tier_color || '#666'}">${f.tier_icon || ''} ${f.tier_name || 'None'}</span></td>
               <td style="padding:12px;text-align:center;font-weight:600;color:#f59e0b">${(f.loyalty_points||0).toLocaleString()}</td>
               <td style="padding:12px;text-align:center;color:#6b7280">${(f.lifetime_points||0).toLocaleString()}</td>
@@ -2576,7 +2576,7 @@ async function viewWheelResults(wheelId, wheelName) {
     el.innerHTML = `
     <div class="flex justify-between items-center mb-16">
       <div>
-        <h3><i class="fas fa-trophy"></i> Prize Fulfillment ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â ${wheelName || 'All Wheels'}</h3>
+        <h3><i class="fas fa-trophy"></i> Prize Fulfillment ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ${wheelName || 'All Wheels'}</h3>
         <p style="font-size:13px;color:var(--text-light)">Approve, reject, and track prize delivery</p>
       </div>
       <button class="btn btn-outline" onclick="loadSpinWheels()"><i class="fas fa-arrow-left"></i> Back to Wheels</button>
@@ -2585,17 +2585,17 @@ async function viewWheelResults(wheelId, wheelName) {
     <div class="stats-grid mb-24">
       <div class="stat-card accent"><div class="stat-icon"><i class="fas fa-clock" style="color:var(--accent)"></i></div><div class="stat-value">${s.pending_approval || 0}</div><div class="stat-label">Pending Approval</div></div>
       <div class="stat-card info"><div class="stat-icon"><i class="fas fa-check-circle" style="color:var(--info)"></i></div><div class="stat-value">${s.verified || 0}</div><div class="stat-label">Verified</div></div>
-      <div class="stat-card"><div class="stat-icon"><i class="fas fa-rupee-sign"></i></div><div class="stat-value">ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹${s.total_paid || 0}</div><div class="stat-label">Total Paid</div></div>
+      <div class="stat-card"><div class="stat-icon"><i class="fas fa-rupee-sign"></i></div><div class="stat-value">ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹${s.total_paid || 0}</div><div class="stat-label">Total Paid</div></div>
       <div class="stat-card danger"><div class="stat-icon"><i class="fas fa-times-circle" style="color:var(--danger)"></i></div><div class="stat-value">${s.rejected || 0}</div><div class="stat-label">Rejected</div></div>
     </div>
 
     <div class="flex gap-10 mb-16 flex-wrap">
       <button class="btn btn-sm ${!currentPrizeFilter ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','')">All</button>
-      <button class="btn btn-sm ${currentPrizeFilter==='won' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','won')">ÃƒÂ¢Ã‚ÂÃ‚Â³ Pending</button>
-      <button class="btn btn-sm ${currentPrizeFilter==='verified' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','verified')">ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Verified</button>
-      <button class="btn btn-sm ${currentPrizeFilter==='paid' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','paid')">ÃƒÂ°Ã…Â¸Ã¢â‚¬â„¢Ã‚Â° Paid</button>
-      <button class="btn btn-sm ${currentPrizeFilter==='delivered' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','delivered')">ÃƒÂ°Ã…Â¸Ã…Â½Ã‚Â Delivered</button>
-      <button class="btn btn-sm ${currentPrizeFilter==='rejected' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','rejected')">ÃƒÂ¢Ã‚ÂÃ…â€™ Rejected</button>
+      <button class="btn btn-sm ${currentPrizeFilter==='won' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','won')">ÃƒÆ’Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒâ€šÃ‚Â³ Pending</button>
+      <button class="btn btn-sm ${currentPrizeFilter==='verified' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','verified')">ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ Verified</button>
+      <button class="btn btn-sm ${currentPrizeFilter==='paid' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','paid')">ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢Ãƒâ€šÃ‚Â° Paid</button>
+      <button class="btn btn-sm ${currentPrizeFilter==='delivered' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','delivered')">ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€¦Ã‚Â½Ãƒâ€šÃ‚Â Delivered</button>
+      <button class="btn btn-sm ${currentPrizeFilter==='rejected' ? 'btn-primary' : 'btn-outline'}" onclick="filterPrizes('${wheelId}','${wheelName}','rejected')">ÃƒÆ’Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒâ€¦Ã¢â‚¬â„¢ Rejected</button>
     </div>
 
     <div class="table-wrap">
@@ -2608,16 +2608,16 @@ async function viewWheelResults(wheelId, wheelName) {
           <tr>
             <td>
               <strong>${p.farmer_name || 'Unknown'}</strong><br>
-              <small style="color:var(--text-light)">${p.farmer_phone} ${p.village ? 'Ãƒâ€šÃ‚Â· ' + p.village : ''}</small>
+              <small style="color:var(--text-light)">${p.farmer_phone} ${p.village ? 'ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ' + p.village : ''}</small>
             </td>
             <td>
               <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${p.segment_color || '#999'};margin-right:6px"></span>
               ${p.segment_label || p.prize_type}
             </td>
-            <td><strong>${p.prize_type === 'cash' ? 'ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹' + p.prize_value : p.prize_type === 'points' ? p.prize_value + ' pts' : p.prize_type === 'discount' ? p.prize_value + '%' : '-'}</strong></td>
+            <td><strong>${p.prize_type === 'cash' ? 'ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹' + p.prize_value : p.prize_type === 'points' ? p.prize_value + ' pts' : p.prize_type === 'discount' ? p.prize_value + '%' : '-'}</strong></td>
             <td><span class="status ${p.status === 'won' ? 'pending' : p.status === 'verified' ? 'active' : p.status === 'paid' || p.status === 'delivered' ? 'completed' : p.status === 'rejected' ? 'failed' : ''}">${p.status}</span>
-              ${p.coupon_code ? '<br><small style="color:var(--primary)">ÃƒÂ°Ã…Â¸Ã‚ÂÃ‚Â·ÃƒÂ¯Ã‚Â¸Ã‚Â ' + p.coupon_code + '</small>' : ''}
-              ${p.payment_reference ? '<br><small style="color:var(--info)">ÃƒÂ°Ã…Â¸Ã¢â‚¬â„¢Ã‚Â³ ' + p.payment_reference + '</small>' : ''}
+              ${p.coupon_code ? '<br><small style="color:var(--primary)">ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€šÃ‚ÂÃƒâ€šÃ‚Â·ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â ' + p.coupon_code + '</small>' : ''}
+              ${p.payment_reference ? '<br><small style="color:var(--info)">ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢Ãƒâ€šÃ‚Â³ ' + p.payment_reference + '</small>' : ''}
             </td>
             <td><small>${fmtDate(p.created_at)}</small>${p.paid_at ? '<br><small style="color:var(--primary)">Paid: ' + fmtDate(p.paid_at) + '</small>' : ''}</td>
             <td>
@@ -2629,7 +2629,7 @@ async function viewWheelResults(wheelId, wheelName) {
                 <button class="btn btn-sm btn-primary" onclick="markPrizePaid('${p.id}','${p.prize_type}','${p.prize_value}','${p.farmer_name}')"><i class="fas fa-rupee-sign"></i> Mark Paid</button>
               ` : ''}
               ${p.status === 'paid' || p.status === 'delivered' ? '<span style="color:var(--primary)"><i class="fas fa-check-double"></i> Done</span>' : ''}
-              ${p.status === 'no_prize' ? '<span style="color:var(--text-light)">ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â</span>' : ''}
+              ${p.status === 'no_prize' ? '<span style="color:var(--text-light)">ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â</span>' : ''}
               ${p.status === 'rejected' ? '<span style="color:var(--danger)" title="' + (p.rejection_reason || '') + '"><i class="fas fa-ban"></i> Rejected</span>' : ''}
             </td>
           </tr>
@@ -2653,8 +2653,8 @@ async function approvePrize(prizeId) {
       method: 'PUT',
       body: JSON.stringify({ notes: notes || '' })
     });
-    if (r.coupon_code) alert('ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Approved! Coupon generated: ' + r.coupon_code + '\nWhatsApp notification sent to farmer.');
-    else alert('ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Approved! WhatsApp notification sent to farmer.');
+    if (r.coupon_code) alert('ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ Approved! Coupon generated: ' + r.coupon_code + '\nWhatsApp notification sent to farmer.');
+    else alert('ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ Approved! WhatsApp notification sent to farmer.');
     viewWheelResults('', 'All Wheels');
   } catch (e) { alert('Error: ' + (e.message || 'Failed to approve')); }
 }
@@ -2667,13 +2667,13 @@ async function rejectPrize(prizeId) {
       method: 'PUT',
       body: JSON.stringify({ reason })
     });
-    alert('ÃƒÂ¢Ã‚ÂÃ…â€™ Rejected. Farmer has been notified via WhatsApp.');
+    alert('ÃƒÆ’Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒâ€¦Ã¢â‚¬â„¢ Rejected. Farmer has been notified via WhatsApp.');
     viewWheelResults('', 'All Wheels');
   } catch (e) { alert('Error: ' + (e.message || 'Failed to reject')); }
 }
 
 async function markPrizePaid(prizeId, prizeType, value, farmerName) {
-  const method = prompt(`Payment method for ${farmerName} (ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹${value}):\n\nOptions: UPI, Paytm, Bank Transfer, Cash, Coupon\n\nEnter method:`, 'UPI');
+  const method = prompt(`Payment method for ${farmerName} (ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹${value}):\n\nOptions: UPI, Paytm, Bank Transfer, Cash, Coupon\n\nEnter method:`, 'UPI');
   if (!method) return;
   const reference = prompt('Payment reference / Transaction ID:', '');
   try {
@@ -2681,7 +2681,7 @@ async function markPrizePaid(prizeId, prizeType, value, farmerName) {
       method: 'PUT',
       body: JSON.stringify({ payment_method: method, payment_reference: reference || '' })
     });
-    alert('ÃƒÂ°Ã…Â¸Ã¢â‚¬â„¢Ã‚Â° Marked as ' + (prizeType === 'cash' ? 'Paid' : 'Delivered') + '! Farmer notified via WhatsApp.');
+    alert('ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢Ãƒâ€šÃ‚Â° Marked as ' + (prizeType === 'cash' ? 'Paid' : 'Delivered') + '! Farmer notified via WhatsApp.');
     viewWheelResults('', 'All Wheels');
   } catch (e) { alert('Error: ' + (e.message || 'Failed to update')); }
 }
@@ -2699,13 +2699,13 @@ function newSpinWheelModal() {
       <div class="form-group"><label>Start Date</label><input id="swStart" type="datetime-local"></div>
       <div class="form-group"><label>End Date</label><input id="swEnd" type="datetime-local"></div>
     </div>
-    <div class="form-group"><label>Total Budget (ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹)</label><input id="swBudget" type="number" value="10000"></div>
+    <div class="form-group"><label>Total Budget (ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹)</label><input id="swBudget" type="number" value="10000"></div>
     <h4 style="margin:16px 0 8px">Segments (Prizes)</h4>
     <div id="segmentsList">
       <div class="segment-row" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
         <input placeholder="Label" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-label">
         <select style="padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-type"><option value="cash">Cash</option><option value="discount">Discount</option><option value="points">Points</option><option value="product">Product</option><option value="better_luck">Better Luck</option></select>
-        <input placeholder="Value ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹" type="number" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-value">
+        <input placeholder="Value ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹" type="number" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-value">
         <input placeholder="Prob (0-1)" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-prob" value="0.2">
         <input type="color" value="#4CAF50" class="seg-color" style="width:40px;height:36px;border:none;cursor:pointer">
       </div>
@@ -2719,7 +2719,7 @@ function addSegmentRow() {
     <div class="segment-row" style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
       <input placeholder="Label" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-label">
       <select style="padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-type"><option value="cash">Cash</option><option value="discount">Discount</option><option value="points">Points</option><option value="product">Product</option><option value="better_luck">Better Luck</option></select>
-      <input placeholder="Value ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹" type="number" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-value">
+      <input placeholder="Value ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹" type="number" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-value">
       <input placeholder="Prob" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px" class="seg-prob" value="0.1">
       <input type="color" value="#FF9800" class="seg-color" style="width:40px;height:36px;border:none;cursor:pointer">
     </div>`;
@@ -3391,11 +3391,11 @@ async function showAddRecoModal(presetProductId) {
     <div style="display:grid;gap:12px">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div><label style="font-size:12px;font-weight:600">Crop Name (English) *</label><input id="rcCrop" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. Wheat"></div>
-        <div><label style="font-size:12px;font-weight:600">Crop Name (Hindi)</label><input id="rcCropHi" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. Ã Â¤â€”Ã Â¥â€¡Ã Â¤Â¹Ã Â¥â€šÃ Â¤â€š"></div>
+        <div><label style="font-size:12px;font-weight:600">Crop Name (Hindi)</label><input id="rcCropHi" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. ÃƒÂ Ã‚Â¤Ã¢â‚¬â€ÃƒÂ Ã‚Â¥Ã¢â‚¬Â¡ÃƒÂ Ã‚Â¤Ã‚Â¹ÃƒÂ Ã‚Â¥Ã¢â‚¬Å¡ÃƒÂ Ã‚Â¤Ã¢â‚¬Å¡"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div><label style="font-size:12px;font-weight:600">Growth Stage *</label><input id="rcStage" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. Sowing, Tillering, Flowering"></div>
-        <div><label style="font-size:12px;font-weight:600">Growth Stage (Hindi)</label><input id="rcStageHi" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. Ã Â¤Â¬Ã Â¥ÂÃ Â¤ÂµÃ Â¤Â¾Ã Â¤Ë†, Ã Â¤â€¢Ã Â¤Â²Ã Â¥ÂÃ Â¤Â²Ã Â¥â€¡ Ã Â¤Â¨Ã Â¤Â¿Ã Â¤â€¢Ã Â¤Â²Ã Â¤Â¨Ã Â¤Â¾"></div>
+        <div><label style="font-size:12px;font-weight:600">Growth Stage (Hindi)</label><input id="rcStageHi" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. ÃƒÂ Ã‚Â¤Ã‚Â¬ÃƒÂ Ã‚Â¥Ã‚ÂÃƒÂ Ã‚Â¤Ã‚ÂµÃƒÂ Ã‚Â¤Ã‚Â¾ÃƒÂ Ã‚Â¤Ã‹â€ , ÃƒÂ Ã‚Â¤Ã¢â‚¬Â¢ÃƒÂ Ã‚Â¤Ã‚Â²ÃƒÂ Ã‚Â¥Ã‚ÂÃƒÂ Ã‚Â¤Ã‚Â²ÃƒÂ Ã‚Â¥Ã¢â‚¬Â¡ ÃƒÂ Ã‚Â¤Ã‚Â¨ÃƒÂ Ã‚Â¤Ã‚Â¿ÃƒÂ Ã‚Â¤Ã¢â‚¬Â¢ÃƒÂ Ã‚Â¤Ã‚Â²ÃƒÂ Ã‚Â¤Ã‚Â¨ÃƒÂ Ã‚Â¤Ã‚Â¾"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div><label style="font-size:12px;font-weight:600">Days Range</label><input id="rcDays" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. 20-30 days"></div>
@@ -3407,7 +3407,7 @@ async function showAddRecoModal(presetProductId) {
       <div><label style="font-size:12px;font-weight:600">Dosage *</label><input id="rcDosage" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. 10 kg/acre mixed with soil"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div><label style="font-size:12px;font-weight:600">Application Method</label><input id="rcMethod" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. Soil application, Foliar spray"></div>
-        <div><label style="font-size:12px;font-weight:600">Application Method (Hindi)</label><input id="rcMethodHi" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. Ã Â¤Â®Ã Â¤Â¿Ã Â¤Å¸Ã Â¥ÂÃ Â¤Å¸Ã Â¥â‚¬ Ã Â¤Â®Ã Â¥â€¡Ã Â¤â€š Ã Â¤Â®Ã Â¤Â¿Ã Â¤Â²Ã Â¤Â¾Ã Â¤ÂÃ Â¤â€š"></div>
+        <div><label style="font-size:12px;font-weight:600">Application Method (Hindi)</label><input id="rcMethodHi" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. ÃƒÂ Ã‚Â¤Ã‚Â®ÃƒÂ Ã‚Â¤Ã‚Â¿ÃƒÂ Ã‚Â¤Ã…Â¸ÃƒÂ Ã‚Â¥Ã‚ÂÃƒÂ Ã‚Â¤Ã…Â¸ÃƒÂ Ã‚Â¥Ã¢â€šÂ¬ ÃƒÂ Ã‚Â¤Ã‚Â®ÃƒÂ Ã‚Â¥Ã¢â‚¬Â¡ÃƒÂ Ã‚Â¤Ã¢â‚¬Å¡ ÃƒÂ Ã‚Â¤Ã‚Â®ÃƒÂ Ã‚Â¤Ã‚Â¿ÃƒÂ Ã‚Â¤Ã‚Â²ÃƒÂ Ã‚Â¤Ã‚Â¾ÃƒÂ Ã‚Â¤Ã‚ÂÃƒÂ Ã‚Â¤Ã¢â‚¬Å¡"></div>
       </div>
       <div><label style="font-size:12px;font-weight:600">Notes</label><textarea id="rcNotes" rows="2" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="Additional notes"></textarea></div>
       <button onclick="submitReco()" style="padding:10px 20px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">Save Recommendation</button>
@@ -4186,33 +4186,45 @@ async function loadSoilData() {
       <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead><tr style="border-bottom:2px solid #eee;text-align:left">
-          <th style="padding:10px 8px">State</th><th style="padding:10px 8px">District</th><th style="padding:10px 8px">Block</th>
-          <th style="padding:10px 8px;text-align:center">N (L/M/H)</th><th style="padding:10px 8px;text-align:center">P (L/M/H)</th>
-          <th style="padding:10px 8px;text-align:center">K (L/M/H)</th><th style="padding:10px 8px;text-align:center">OC (L/M/H)</th>
-          <th style="padding:10px 6px;text-align:center">pH</th><th style="padding:10px 6px;text-align:center">Zn%</th><th style="padding:10px 6px;text-align:center">S%</th>
-          <th style="padding:10px 6px;text-align:center">B%</th><th style="padding:10px 8px">Type</th><th style="padding:10px 6px;text-align:center">Samples</th>
-          <th style="padding:10px 8px">Actions</th>
+          <th style="padding:8px 6px;font-size:12px">District</th><th style="padding:8px 6px;font-size:12px">Block</th>
+          <th style="padding:8px 4px;text-align:center;font-size:11px" title="Nitrogen: Low/Med/High %">N</th>
+          <th style="padding:8px 4px;text-align:center;font-size:11px" title="Phosphorus: Low/Med/High %">P</th>
+          <th style="padding:8px 4px;text-align:center;font-size:11px" title="Potassium: Low/Med/High %">K</th>
+          <th style="padding:8px 4px;text-align:center;font-size:11px" title="Organic Carbon: Low/Med/High %">OC</th>
+          <th style="padding:8px 4px;text-align:center;font-size:11px">pH</th>
+          <th style="padding:8px 4px;text-align:center;font-size:11px" title="Sulphur: % Sufficient">S</th>
+          <th style="padding:8px 4px;text-align:center;font-size:11px" title="Iron: % Sufficient">Fe</th>
+          <th style="padding:8px 4px;text-align:center;font-size:11px" title="Zinc: % Sufficient">Zn</th>
+          <th style="padding:8px 4px;text-align:center;font-size:11px" title="Copper: % Sufficient">Cu</th>
+          <th style="padding:8px 4px;text-align:center;font-size:11px" title="Boron: % Sufficient">B</th>
+          <th style="padding:8px 4px;text-align:center;font-size:11px" title="Manganese: % Sufficient">Mn</th>
+          <th style="padding:8px 4px;text-align:center;font-size:11px">Type</th>
+          <th style="padding:8px 4px;text-align:center;font-size:11px">Samples</th>
+          <th style="padding:8px 4px;font-size:11px">View</th>
         </tr></thead>
         <tbody>
           ${records.length ? records.map(d => {
-            const nBar = (l,m,h) => '<div style="display:flex;height:6px;border-radius:3px;overflow:hidden;width:100px;margin:2px auto 0"><div style="width:'+l+'%;background:#E53935"></div><div style="width:'+m+'%;background:#FF9800"></div><div style="width:'+h+'%;background:#4CAF50"></div></div>';
+            const nBar = (l,m,h) => '<div style="display:flex;height:5px;border-radius:3px;overflow:hidden;width:70px;margin:2px auto 0"><div style="width:'+l+'%;background:#E53935"></div><div style="width:'+m+'%;background:#FF9800"></div><div style="width:'+h+'%;background:#4CAF50"></div></div>';
+            const micro = (val,thresh) => { const v=parseFloat(val); if(isNaN(v)||val==null) return '<td style="padding:4px;text-align:center;color:#ccc;font-size:11px">-</td>'; const c=v<thresh?'#E53935':v<(thresh+20)?'#FF9800':'#4CAF50'; return '<td style="padding:4px;text-align:center;font-size:11px"><span style="color:'+c+';font-weight:600">'+v+'%</span></td>'; };
             return '<tr style="border-bottom:1px solid #f5f5f5">' +
-              '<td style="padding:8px">'+(d.state_name||'-')+'</td>' +
-              '<td style="padding:8px;font-weight:500">'+(d.district_name||'-')+'</td>' +
-              '<td style="padding:8px">'+(d.block_name||'-')+'</td>' +
-              '<td style="padding:8px;text-align:center"><span style="color:#E53935">'+d.nitrogen_low_pct+'</span>/<span style="color:#FF9800">'+d.nitrogen_medium_pct+'</span>/<span style="color:#4CAF50">'+d.nitrogen_high_pct+'</span>'+nBar(d.nitrogen_low_pct,d.nitrogen_medium_pct,d.nitrogen_high_pct)+'</td>' +
-              '<td style="padding:8px;text-align:center"><span style="color:#E53935">'+d.phosphorus_low_pct+'</span>/<span style="color:#FF9800">'+d.phosphorus_medium_pct+'</span>/<span style="color:#4CAF50">'+d.phosphorus_high_pct+'</span>'+nBar(d.phosphorus_low_pct,d.phosphorus_medium_pct,d.phosphorus_high_pct)+'</td>' +
-              '<td style="padding:8px;text-align:center"><span style="color:#E53935">'+d.potassium_low_pct+'</span>/<span style="color:#FF9800">'+d.potassium_medium_pct+'</span>/<span style="color:#4CAF50">'+d.potassium_high_pct+'</span>'+nBar(d.potassium_low_pct,d.potassium_medium_pct,d.potassium_high_pct)+'</td>' +
-              '<td style="padding:8px;text-align:center"><span style="color:#E53935">'+d.organic_carbon_low_pct+'</span>/<span style="color:#FF9800">'+d.organic_carbon_medium_pct+'</span>/<span style="color:#4CAF50">'+d.organic_carbon_high_pct+'</span>'+nBar(d.organic_carbon_low_pct,d.organic_carbon_medium_pct,d.organic_carbon_high_pct)+'</td>' +
-              '<td style="padding:8px;text-align:center">'+(d.avg_ph||'-')+'</td>' +
-              '<td style="padding:8px;text-align:center;color:'+(d.avg_zinc&&d.avg_zinc<50?'#E53935':'#4CAF50')+'">'+(d.avg_zinc!=null?d.avg_zinc+'%':'-')+'</td>' +
-              '<td style="padding:8px;text-align:center;color:'+(d.avg_sulphur&&d.avg_sulphur<30?'#E53935':'#4CAF50')+'">'+(d.avg_sulphur!=null?d.avg_sulphur+'%':'-')+'</td>' +
-              '<td style="padding:8px;text-align:center;color:'+(d.avg_boron&&d.avg_boron<50?'#E53935':'#4CAF50')+'">'+(d.avg_boron!=null?d.avg_boron+'%':'-')+'</td>' +
-              '<td style="padding:8px">'+(d.soil_type||'-')+'</td>' +
-              '<td style="padding:8px;text-align:center">'+(d.total_samples||0)+'</td>' +
-              '<td style="padding:8px"><button class="btn btn-sm btn-outline" onclick="viewSoilDetail(\''+d.id+'\')" title="View Details"><i class="fas fa-eye"></i></button></td>' +
+              '<td style="padding:6px;font-weight:500;font-size:12px">'+(d.district_name||'-')+'</td>' +
+              '<td style="padding:6px;font-size:12px">'+(d.block_name||'-')+'</td>' +
+              '<td style="padding:4px;text-align:center;font-size:10px"><span style="color:#E53935">'+d.nitrogen_low_pct+'</span>/<span style="color:#FF9800">'+d.nitrogen_medium_pct+'</span>/<span style="color:#4CAF50">'+d.nitrogen_high_pct+'</span>'+nBar(d.nitrogen_low_pct,d.nitrogen_medium_pct,d.nitrogen_high_pct)+'</td>' +
+              '<td style="padding:4px;text-align:center;font-size:10px"><span style="color:#E53935">'+d.phosphorus_low_pct+'</span>/<span style="color:#FF9800">'+d.phosphorus_medium_pct+'</span>/<span style="color:#4CAF50">'+d.phosphorus_high_pct+'</span>'+nBar(d.phosphorus_low_pct,d.phosphorus_medium_pct,d.phosphorus_high_pct)+'</td>' +
+              '<td style="padding:4px;text-align:center;font-size:10px"><span style="color:#E53935">'+d.potassium_low_pct+'</span>/<span style="color:#FF9800">'+d.potassium_medium_pct+'</span>/<span style="color:#4CAF50">'+d.potassium_high_pct+'</span>'+nBar(d.potassium_low_pct,d.potassium_medium_pct,d.potassium_high_pct)+'</td>' +
+              '<td style="padding:4px;text-align:center;font-size:10px"><span style="color:#E53935">'+d.organic_carbon_low_pct+'</span>/<span style="color:#FF9800">'+d.organic_carbon_medium_pct+'</span>/<span style="color:#4CAF50">'+d.organic_carbon_high_pct+'</span>'+nBar(d.organic_carbon_low_pct,d.organic_carbon_medium_pct,d.organic_carbon_high_pct)+'</td>' +
+              '<td style="padding:4px;text-align:center;font-size:11px">'+(d.avg_ph||'-')+'</td>' +
+              micro(d.avg_sulphur, 30) +
+              micro(d.avg_iron, 50) +
+              micro(d.avg_zinc, 50) +
+              micro(d.avg_copper, 50) +
+              micro(d.avg_boron, 50) +
+              micro(d.avg_manganese, 50) +
+              '<td style="padding:4px;text-align:center;font-size:11px">'+(d.soil_type||'-')+'</td>' +
+              '<td style="padding:4px;text-align:center;font-size:11px">'+(d.total_samples||0)+'</td>' +
+              '<td style="padding:4px"><button class="btn btn-sm btn-outline" onclick="viewSoilDetail(\''+d.id+'\')" title="View Details"><i class="fas fa-eye"></i></button></td>' +
             '</tr>';
-          }).join('') : '<tr><td colspan="14" style="text-align:center;padding:40px;color:#999">No soil data yet. Upload an Excel file from soilhealth.dac.gov.in</td></tr>'}
+          }).join('') : '<tr><td colspan="16" style="text-align:center;padding:40px;color:#999">No soil data yet. Upload an Excel file from soilhealth.dac.gov.in</td></tr>'}
         </tbody>
       </table></div>
     </div>
@@ -4515,8 +4527,8 @@ async function loadMandi() {
         <div class="table-actions"><div class="search-box"><i class="fas fa-search"></i><input id="mandiSearch" placeholder="Search commodity..." onkeydown="if(event.key==='Enter')filterMandiTable(this.value)"></div><button class="btn btn-primary btn-sm" onclick="newMandiModal()"><i class="fas fa-plus"></i> Add Price</button></div>
       </div>
       <div style="overflow-x:auto">
-      <table id="mandiTable"><tr><th>Commodity</th><th>Variety</th><th>Market</th><th>District</th><th>State</th><th>Min ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹</th><th>Max ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹</th><th>Modal ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹</th><th>Date</th></tr>
-      ${d.prices.map(p => `<tr><td><strong>${p.commodity}</strong></td><td>${p.variety || '-'}</td><td>${p.market_name || '-'}</td><td>${p.district || '-'}</td><td>${p.state || '-'}</td><td>${p.min_price || '-'}</td><td>${p.max_price || '-'}</td><td><strong>ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹${p.modal_price || '-'}</strong></td><td>${fmtDate(p.price_date)}</td></tr>`).join('')}
+      <table id="mandiTable"><tr><th>Commodity</th><th>Variety</th><th>Market</th><th>District</th><th>State</th><th>Min ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹</th><th>Max ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹</th><th>Modal ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹</th><th>Date</th></tr>
+      ${d.prices.map(p => `<tr><td><strong>${p.commodity}</strong></td><td>${p.variety || '-'}</td><td>${p.market_name || '-'}</td><td>${p.district || '-'}</td><td>${p.state || '-'}</td><td>${p.min_price || '-'}</td><td>${p.max_price || '-'}</td><td><strong>ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹${p.modal_price || '-'}</strong></td><td>${fmtDate(p.price_date)}</td></tr>`).join('')}
       </table></div>
     </div>`;
   } catch (e) { el.innerHTML = '<div class="empty"><p>Error loading mandi prices</p></div>'; }
@@ -4533,8 +4545,8 @@ async function fetchMandiLive(state, commodity, limit) {
     if (resultEl) {
       resultEl.innerHTML = `<div style="padding:12px;background:#E8F5E9;border-radius:8px;font-size:13px">
         <strong><i class="fas fa-check-circle" style="color:#2E7D32"></i> ${r.message}</strong><br>
-        Fetched: ${r.fetched} Ãƒâ€šÃ‚Â· Inserted: ${r.inserted} into database
-        ${r.sample && r.sample.length ? '<br>Sample: ' + r.sample.map(s => s.commodity + ' ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹' + s.modal_price + ' (' + s.market + ')').join(', ') : ''}
+        Fetched: ${r.fetched} ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· Inserted: ${r.inserted} into database
+        ${r.sample && r.sample.length ? '<br>Sample: ' + r.sample.map(s => s.commodity + ' ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹' + s.modal_price + ' (' + s.market + ')').join(', ') : ''}
       </div>`;
     }
     setTimeout(() => loadMandi(), 2000);
@@ -4563,8 +4575,8 @@ function newMandiModal() {
     <div class="form-row"><div class="form-group"><label>Commodity</label><input id="mpComm"></div><div class="form-group"><label>Variety</label><input id="mpVar"></div></div>
     <div class="form-row"><div class="form-group"><label>Market Name</label><input id="mpMarket"></div><div class="form-group"><label>District</label><input id="mpDist"></div></div>
     <div class="form-row"><div class="form-group"><label>State</label><input id="mpState"></div><div class="form-group"><label>Price Date</label><input id="mpDate" type="date"></div></div>
-    <div class="form-row"><div class="form-group"><label>Min ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹/qtl</label><input id="mpMin" type="number"></div><div class="form-group"><label>Max ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹/qtl</label><input id="mpMax" type="number"></div></div>
-    <div class="form-group"><label>Modal ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹/qtl</label><input id="mpModal" type="number"></div>
+    <div class="form-row"><div class="form-group"><label>Min ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹/qtl</label><input id="mpMin" type="number"></div><div class="form-group"><label>Max ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹/qtl</label><input id="mpMax" type="number"></div></div>
+    <div class="form-group"><label>Modal ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹/qtl</label><input id="mpModal" type="number"></div>
   `, `<button class="btn btn-primary" onclick="createMandiPrice()"><i class="fas fa-save"></i> Save</button>`);
 }
 
@@ -4588,7 +4600,7 @@ async function loadDealers() {
     <div class="table-wrap">
       <div class="table-header"><h3>Dealers (${d.dealers.length})</h3><button class="btn btn-primary btn-sm" onclick="newDealerModal()"><i class="fas fa-plus"></i> Add Dealer</button></div>
       <table><tr><th>Name</th><th>Phone</th><th>District</th><th>License</th><th>Verified</th><th>Status</th></tr>
-      ${d.dealers.map(d => `<tr><td><strong>${d.name}</strong></td><td>${d.phone}</td><td>${d.district_name || '-'}</td><td>${d.license_number || '-'}</td><td>${d.verified ? 'ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦' : 'ÃƒÂ¢Ã‚ÂÃ…â€™'}</td><td><span class="status ${d.status}">${d.status}</span></td></tr>`).join('')}
+      ${d.dealers.map(d => `<tr><td><strong>${d.name}</strong></td><td>${d.phone}</td><td>${d.district_name || '-'}</td><td>${d.license_number || '-'}</td><td>${d.verified ? 'ÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦' : 'ÃƒÆ’Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒâ€¦Ã¢â‚¬â„¢'}</td><td><span class="status ${d.status}">${d.status}</span></td></tr>`).join('')}
       </table>
     </div>`;
   } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
@@ -4648,7 +4660,7 @@ async function loadOrders() {
     <div class="table-wrap">
       <div class="table-header"><h3>Orders (${d.orders.length})</h3></div>
       <table><tr><th>Farmer</th><th>Product</th><th>Dealer</th><th>Qty</th><th>Amount</th><th>Status</th><th>Payment</th><th>Date</th></tr>
-      ${d.orders.map(o => `<tr><td>${o.farmer_name || '-'}</td><td>${o.product_name || '-'}</td><td>${o.dealer_name || '-'}</td><td>${o.quantity}</td><td>ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹${o.total_amount || 0}</td><td><span class="status ${o.status}">${o.status}</span></td><td><span class="status ${o.payment_status}">${o.payment_status}</span></td><td>${fmtDate(o.created_at)}</td></tr>`).join('')}
+      ${d.orders.map(o => `<tr><td>${o.farmer_name || '-'}</td><td>${o.product_name || '-'}</td><td>${o.dealer_name || '-'}</td><td>${o.quantity}</td><td>ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¹${o.total_amount || 0}</td><td><span class="status ${o.status}">${o.status}</span></td><td><span class="status ${o.payment_status}">${o.payment_status}</span></td><td>${fmtDate(o.created_at)}</td></tr>`).join('')}
       </table>
     </div>`;
   } catch (e) { el.innerHTML = '<div class="empty"><p>Error</p></div>'; }
@@ -4850,7 +4862,7 @@ async function loadServices() {
       const r = await fetch(s.url).then(r => r.json());
       const card = document.getElementById('svc-' + s.name.replace(/\s/g, ''));
       card.className = 'stat-card' + (r.status === 'healthy' ? '' : ' danger');
-      card.innerHTML = `<div class="stat-icon"><i class="fas ${r.status === 'healthy' ? 'fa-check-circle' : 'fa-times-circle'}" style="color:${r.status === 'healthy' ? '#4CAF50' : '#E53935'}"></i></div><div class="stat-value">${s.name}</div><div class="stat-label"><span class="status ${r.status === 'healthy' ? 'healthy' : 'unhealthy'}">${r.status}</span> Ãƒâ€šÃ‚Â· DB: ${r.database || '?'} Ãƒâ€šÃ‚Â· Redis: ${r.redis || '?'}</div>`;
+      card.innerHTML = `<div class="stat-icon"><i class="fas ${r.status === 'healthy' ? 'fa-check-circle' : 'fa-times-circle'}" style="color:${r.status === 'healthy' ? '#4CAF50' : '#E53935'}"></i></div><div class="stat-value">${s.name}</div><div class="stat-label"><span class="status ${r.status === 'healthy' ? 'healthy' : 'unhealthy'}">${r.status}</span> ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· DB: ${r.database || '?'} ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· Redis: ${r.redis || '?'}</div>`;
     } catch (e) {
       const card = document.getElementById('svc-' + s.name.replace(/\s/g, ''));
       card.className = 'stat-card danger';
