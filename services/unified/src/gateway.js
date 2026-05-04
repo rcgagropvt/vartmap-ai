@@ -841,15 +841,36 @@ async function getSoilData(state, district) {
 function formatSoilData(soilData, district) {
   if (!soilData.length) return 'Maaf kijiye, "' + (district || 'aapke area') + '" ke liye mitti ki jankari uplabdh nahi hai.';
   const s = soilData[0];
-  let msg = '*🌍 Mitti ki Jankari - ' + (s.district_name || district) + ', ' + (s.state_name || '') + '*\n\n';
-  msg += '📊 *Nitrogen (N):*\n   Low: ' + s.nitrogen_low_pct + '% | Medium: ' + s.nitrogen_medium_pct + '% | High: ' + s.nitrogen_high_pct + '%\n\n';
-  msg += '📊 *Phosphorus (P):*\n   Low: ' + s.phosphorus_low_pct + '% | Medium: ' + s.phosphorus_medium_pct + '% | High: ' + s.phosphorus_high_pct + '%\n\n';
-  msg += '📊 *Potassium (K):*\n   Low: ' + s.potassium_low_pct + '% | Medium: ' + s.potassium_medium_pct + '% | High: ' + s.potassium_high_pct + '%\n\n';
-  msg += '📊 *Organic Carbon:*\n   Low: ' + (s.oc_low_pct || '-') + '% | Medium: ' + (s.oc_medium_pct || '-') + '% | High: ' + (s.oc_high_pct || '-') + '%\n\n';
-  msg += '🧪 *pH:* ' + (s.avg_ph || '-') + '\n';
-  msg += '🏷️ *Soil Type:* ' + (s.soil_type || '-') + '\n';
-  msg += '📝 *Samples:* ' + (s.total_samples || '-') + '\n\n';
-  msg += '_Mitti test karwayen aur Vartmaan fertilizers se sahi poshak tatva dein._';
+  let msg = '*\uD83C\uDF0D Mitti ki Jankari - ' + (s.district_name || district) + (s.block_name ? ', ' + s.block_name : '') + '*\n';
+  msg += (s.state_name || '') + ' | ' + (s.sample_year || '') + '\n\n';
+  
+  msg += '\uD83D\uDCCA *Primary Nutrients (Low/Med/High %):*\n';
+  msg += '\u2022 *Nitrogen (N):* ' + s.nitrogen_low_pct + '% / ' + s.nitrogen_medium_pct + '% / ' + s.nitrogen_high_pct + '%\n';
+  msg += '\u2022 *Phosphorus (P):* ' + s.phosphorus_low_pct + '% / ' + s.phosphorus_medium_pct + '% / ' + s.phosphorus_high_pct + '%\n';
+  msg += '\u2022 *Potassium (K):* ' + s.potassium_low_pct + '% / ' + s.potassium_medium_pct + '% / ' + s.potassium_high_pct + '%\n';
+  msg += '\u2022 *Organic Carbon:* ' + (s.organic_carbon_low_pct || '-') + '% / ' + (s.organic_carbon_medium_pct || '-') + '% / ' + (s.organic_carbon_high_pct || '-') + '%\n\n';
+  
+  msg += '\uD83E\uDDEA *Micro Nutrients (% Sufficient):*\n';
+  if (s.avg_sulphur != null) msg += '\u2022 *Sulphur (S):* ' + s.avg_sulphur + '% ' + (s.avg_sulphur < 30 ? '\u26A0\uFE0F Deficient' : '\u2705') + '\n';
+  if (s.avg_iron != null) msg += '\u2022 *Iron (Fe):* ' + s.avg_iron + '% ' + (s.avg_iron < 50 ? '\u26A0\uFE0F' : '\u2705') + '\n';
+  if (s.avg_zinc != null) msg += '\u2022 *Zinc (Zn):* ' + s.avg_zinc + '% ' + (s.avg_zinc < 50 ? '\u26A0\uFE0F Deficient' : '\u2705') + '\n';
+  if (s.avg_copper != null) msg += '\u2022 *Copper (Cu):* ' + s.avg_copper + '% ' + (s.avg_copper < 50 ? '\u26A0\uFE0F' : '\u2705') + '\n';
+  if (s.avg_boron != null) msg += '\u2022 *Boron (B):* ' + s.avg_boron + '% ' + (s.avg_boron < 50 ? '\u26A0\uFE0F Deficient' : '\u2705') + '\n';
+  if (s.avg_manganese != null) msg += '\u2022 *Manganese (Mn):* ' + s.avg_manganese + '% ' + (s.avg_manganese < 50 ? '\u26A0\uFE0F' : '\u2705') + '\n';
+  msg += '\n';
+  
+  msg += '\uD83C\uDFE0 *pH:* ' + (s.avg_ph || '-') + ' | *Soil:* ' + (s.soil_type || '-') + ' | *Samples:* ' + (s.total_samples || '-') + '\n\n';
+  
+  // Show AI recommendations if available
+  const recs = typeof s.recommendations === 'string' ? JSON.parse(s.recommendations || '{}') : (s.recommendations || {});
+  const recKeys = Object.keys(recs);
+  if (recKeys.length) {
+    msg += '\uD83D\uDCA1 *Salah (Recommendations):*\n';
+    recKeys.forEach(k => { msg += '\u2022 ' + recs[k] + '\n'; });
+    msg += '\n';
+  }
+  
+  msg += '_\uD83C\uDF3E Mitti test karwayen aur sahi fertilizer chunein. Vartmaan se sampark karein._';
   return msg;
 }
 
