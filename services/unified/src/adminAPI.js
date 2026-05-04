@@ -1,4 +1,4 @@
-﻿// VartMap Admin API Routes Module
+// VartMap Admin API Routes Module
 const bcrypt = require('bcryptjs');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
@@ -2027,7 +2027,14 @@ const XLSX = require('xlsx');
         skipped, 
         total_rows: dataRows.length,
         format_detected: isPercentage ? 'percentage' : 'raw_count',
-        errors: errors.slice(0, 5)
+        errors: errors.slice(0, 10),
+        debug: {
+          headerIdx,
+          headers: headers.slice(0, 10),
+          columns: { stateCol, distCol, blockCol, cycleCol, nHigh, nMed, nLow, pHigh, pMed, pLow },
+          first_data_row: dataRows.length ? dataRows[0].slice(0, 10).map(c => String(c)) : [],
+          raw_rows_count: rawData.length
+        }
       });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
