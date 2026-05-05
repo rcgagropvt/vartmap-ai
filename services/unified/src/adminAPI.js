@@ -3598,6 +3598,30 @@ const XLSX = require('xlsx');
       res.json({ message: 'Step deleted' });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
+
+  // Reorder flow steps
+  app.put('/api/v1/bot/flows/:flowId/reorder', auth, async (req, res) => {
+    try {
+      const { steps } = req.body;
+      if (!Array.isArray(steps)) return res.status(400).json({ error: 'steps array required' });
+      for (const s of steps) {
+        await pool.query('UPDATE bot_flow_steps SET step_order=$1, updated_at=NOW() WHERE id=$2 AND flow_id=$3', [s.step_order, s.id, req.params.flowId]);
+      }
+      res.json({ message: 'Reordered', count: steps.length });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // Reorder flow steps
+  app.put('/api/v1/bot/flows/:flowId/reorder', auth, async (req, res) => {
+    try {
+      const { steps } = req.body; // [{id, step_order}, ...]
+      if (!Array.isArray(steps)) return res.status(400).json({ error: 'steps array required' });
+      for (const s of steps) {
+        await pool.query('UPDATE bot_flow_steps SET step_order=$1, updated_at=NOW() WHERE id=$2 AND flow_id=$3', [s.step_order, s.id, req.params.flowId]);
+      }
+      res.json({ message: 'Reordered', count: steps.length });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
   
   // --- KNOWLEDGE BASE ---
   

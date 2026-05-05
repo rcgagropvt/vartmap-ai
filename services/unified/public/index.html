@@ -3654,8 +3654,8 @@ async function loadBotFlows() {
     var flows = d.flows || [];
     el.innerHTML =
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
-        '<div><strong>' + flows.length + '</strong> flows</div>' +
-        '<button onclick="showAddFlow()" style="padding:8px 16px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">+ Create Flow</button>' +
+        '<div><strong>' + flows.length + '</strong> flows configured</div>' +
+        '<button onclick="showAddFlow()" style="padding:8px 16px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600"><i class="fas fa-plus" style="margin-right:6px"></i>Create Flow</button>' +
       '</div>' +
       '<div style="display:grid;gap:12px">' +
       flows.map(function(f){return (
@@ -3664,11 +3664,11 @@ async function loadBotFlows() {
             '<div>' +
               '<div style="font-weight:700;font-size:15px;color:#1e293b">' + f.name + ' <span style="font-size:11px;padding:2px 8px;border-radius:4px;background:'+(f.is_active?'#d1fae5':'#fee2e2')+';color:'+(f.is_active?'#065f46':'#991b1b')+'">'+(f.is_active?'Active':'Inactive')+'</span></div>' +
               '<div style="font-size:12px;color:#6b7280;margin-top:4px">' + (f.description||'No description') + '</div>' +
-              '<div style="font-size:11px;color:#9ca3af;margin-top:4px">' + (f.step_count||0) + ' steps | Triggers: ' + ((f.trigger_keywords||[]).join(', ')||'none') + '</div>' +
+              '<div style="font-size:11px;color:#9ca3af;margin-top:4px"><i class="fas fa-layer-group"></i> ' + (f.step_count||0) + ' steps | <i class="fas fa-key"></i> Triggers: ' + ((f.trigger_keywords||[]).join(', ')||'none') + (f.trigger_menu_key ? ' | Menu: '+f.trigger_menu_key : '') + '</div>' +
             '</div>' +
             '<div style="display:flex;gap:6px">' +
-              '<button onclick="viewFlowSteps(\''+f.id+'\',\''+f.name.replace(/'/g,'')+'\')" style="padding:6px 12px;font-size:12px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer">Edit Steps</button>' +
-              '<button onclick="deleteFlow(\''+f.id+'\')" style="padding:6px 12px;font-size:12px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer">Delete</button>' +
+              '<button onclick="openFlowEditor(\''+f.id+'\',\''+f.name.replace(/'/g,'')+'\')" style="padding:6px 12px;font-size:12px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer"><i class="fas fa-edit"></i> Edit</button>' +
+              '<button onclick="deleteFlow(\''+f.id+'\')" style="padding:6px 12px;font-size:12px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer"><i class="fas fa-trash"></i></button>' +
             '</div>' +
           '</div>' +
         '</div>'
@@ -3704,72 +3704,251 @@ async function deleteFlow(id) {
   catch(e){alert('Error: '+e.message);}
 }
 
-async function viewFlowSteps(flowId, flowName) {
+// --- ENHANCED FLOW STEP EDITOR ---
+var _flowEditorSteps = [];
+var _flowEditorId = '';
+var _flowEditorName = '';
+
+var _stepTypeConfig = {
+  free_text: {icon:'fa-keyboard', color:'#3b82f6', label:'Free Text'},
+  buttons: {icon:'fa-th-large', color:'#8b5cf6', label:'Buttons'},
+  interactive_list: {icon:'fa-list-ul', color:'#06b6d4', label:'Interactive List'},
+  location_request: {icon:'fa-map-marker-alt', color:'#ef4444', label:'Location Request'},
+  media: {icon:'fa-image', color:'#f59e0b', label:'Media/Image'},
+  image: {icon:'fa-image', color:'#f59e0b', label:'Image'},
+  ai_query: {icon:'fa-brain', color:'#8b5cf6', label:'AI Query'},
+  none: {icon:'fa-info-circle', color:'#6b7280', label:'Info Only'}
+};
+
+async function openFlowEditor(flowId, flowName) {
+  _flowEditorId = flowId;
+  _flowEditorName = flowName;
   try {
     var d = await api('/api/v1/bot/flows/'+flowId);
-    var steps = d.steps || [];
-    var html =
-      '<div style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">' +
-        '<div style="font-size:14px;color:#6b7280">Steps execute in order. Each step sends a message and waits for a response.</div>' +
-        '<button onclick="showAddStep(\''+flowId+'\','+(steps.length+1)+')" style="padding:6px 14px;background:#10b981;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">+ Add Step</button>' +
-      '</div>';
-    if(steps.length) {
-      html += '<div style="display:grid;gap:12px">';
-      steps.forEach(function(s,i){
-        html += '<div style="background:#f8fafc;border-radius:10px;padding:16px;border:1px solid #e2e8f0">' +
-          '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">' +
-            '<div style="font-weight:700;color:#6366f1">Step '+(i+1)+'</div>' +
-            '<div style="display:flex;gap:6px">' +
-              '<button onclick="deleteFlowStep(\''+s.id+'\',\''+flowId+'\',\''+flowName.replace(/'/g,'')+'\')" style="padding:2px 8px;font-size:11px;background:#ef4444;color:#fff;border:none;border-radius:4px;cursor:pointer">Delete</button>' +
+    _flowEditorSteps = (d.steps || []).sort(function(a,b){return (a.step_order||0)-(b.step_order||0);});
+    renderFlowEditor();
+  } catch(e){alert('Error loading flow: '+e.message);}
+}
+
+function renderFlowEditor() {
+  var steps = _flowEditorSteps;
+  var html =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
+      '<div style="font-size:13px;color:#6b7280"><i class="fas fa-info-circle"></i> Drag steps to reorder. Changes save automatically.</div>' +
+      '<button onclick="showAddStepEnhanced()" style="padding:8px 16px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600"><i class="fas fa-plus"></i> Add Step</button>' +
+    '</div>';
+
+  if(steps.length) {
+    html += '<div id="flowStepsList" style="display:grid;gap:10px">';
+    steps.forEach(function(s, i){
+      var cfg = _stepTypeConfig[s.response_type] || _stepTypeConfig['none'];
+      var msgPreview = (s.message_hi || s.message_en || 'No message').substring(0,80);
+      if(msgPreview.length >= 80) msgPreview += '...';
+      var optionsInfo = '';
+      if(s.response_type === 'buttons' && s.options) {
+        try { var opts = typeof s.options === 'string' ? JSON.parse(s.options) : s.options; optionsInfo = ' | ' + opts.length + ' buttons'; } catch(e){}
+      }
+      if(s.response_type === 'interactive_list' && s.options) {
+        try { var opts2 = typeof s.options === 'string' ? JSON.parse(s.options) : s.options; optionsInfo = ' | ' + opts2.length + ' items'; } catch(e){}
+      }
+      html +=
+        '<div draggable="true" data-step-idx="'+i+'" ondragstart="flowDragStart(event,'+i+')" ondragover="flowDragOver(event)" ondrop="flowDrop(event,'+i+')" ' +
+          'style="background:#fff;border-radius:10px;padding:14px 16px;border:1px solid #e2e8f0;cursor:grab;transition:all 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.05)" ' +
+          'onmouseenter="this.style.boxShadow=\'0 4px 12px rgba(0,0,0,0.1)\'" onmouseleave="this.style.boxShadow=\'0 1px 3px rgba(0,0,0,0.05)\'">' +
+          '<div style="display:flex;align-items:start;gap:12px">' +
+            '<div style="display:flex;flex-direction:column;align-items:center;gap:4px;min-width:36px">' +
+              '<div style="width:28px;height:28px;border-radius:50%;background:'+cfg.color+'15;display:flex;align-items:center;justify-content:center"><i class="fas '+cfg.icon+'" style="font-size:12px;color:'+cfg.color+'"></i></div>' +
+              '<span style="font-size:10px;font-weight:700;color:#9ca3af">#'+(i+1)+'</span>' +
+            '</div>' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">' +
+                '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:'+cfg.color+'15;color:'+cfg.color+';font-weight:600">'+cfg.label+'</span>' +
+                (s.save_response_as ? '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#fef3c7;color:#92400e"><i class="fas fa-save"></i> '+s.save_response_as+'</span>' : '') +
+                (s.trigger_ai ? '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#ede9fe;color:#5b21b6"><i class="fas fa-brain"></i> AI</span>' : '') +
+                optionsInfo +
+              '</div>' +
+              '<div style="font-size:13px;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+msgPreview+'</div>' +
+            '</div>' +
+            '<div style="display:flex;gap:4px;flex-shrink:0">' +
+              '<button onclick="editFlowStep('+i+')" style="padding:4px 8px;font-size:11px;background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;border-radius:4px;cursor:pointer" title="Edit"><i class="fas fa-pen"></i></button>' +
+              '<button onclick="duplicateFlowStep('+i+')" style="padding:4px 8px;font-size:11px;background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;border-radius:4px;cursor:pointer" title="Duplicate"><i class="fas fa-copy"></i></button>' +
+              '<button onclick="deleteFlowStepEnhanced('+i+')" style="padding:4px 8px;font-size:11px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:4px;cursor:pointer" title="Delete"><i class="fas fa-trash"></i></button>' +
             '</div>' +
           '</div>' +
-          '<div style="font-size:13px;color:#1e293b;margin-bottom:4px;white-space:pre-wrap">' + (s.message_hi||s.message_en||'No message') + '</div>' +
-          '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">' +
-            '<span style="font-size:11px;padding:2px 8px;background:#e0f2fe;color:#0369a1;border-radius:4px">Type: '+s.response_type+'</span>' +
-            (s.save_response_as ? '<span style="font-size:11px;padding:2px 8px;background:#fef3c7;color:#92400e;border-radius:4px">Saves as: '+s.save_response_as+'</span>' : '') +
-            (s.trigger_ai ? '<span style="font-size:11px;padding:2px 8px;background:#ede9fe;color:#5b21b6;border-radius:4px">Triggers AI</span>' : '') +
-          '</div>' +
         '</div>';
-      });
-      html += '</div>';
-    } else {
-      html += '<div style="padding:30px;text-align:center;color:#9ca3af">No steps yet. Add your first step to build the flow.</div>';
-    }
-    openModal('Flow: ' + flowName, html);
-  } catch(e){alert('Error: '+e.message);}
+    });
+    html += '</div>';
+  } else {
+    html += '<div style="padding:40px;text-align:center;color:#9ca3af;background:#f8fafc;border-radius:12px;border:2px dashed #e2e8f0">' +
+      '<i class="fas fa-layer-group" style="font-size:32px;margin-bottom:12px;display:block"></i>' +
+      'No steps yet. Add your first step to build the conversation flow.</div>';
+  }
+
+  // Live preview panel
+  html += '<div style="margin-top:24px;padding:16px;background:#f0fdf4;border-radius:12px;border:1px solid #bbf7d0">' +
+    '<div style="font-weight:700;color:#166534;margin-bottom:8px"><i class="fas fa-mobile-alt" style="margin-right:6px"></i>Flow Preview (WhatsApp simulation)</div>' +
+    '<div style="background:#e5ddd5;border-radius:8px;padding:12px;max-height:300px;overflow-y:auto">';
+  if(steps.length) {
+    steps.forEach(function(s, i){
+      var msg = s.message_hi || s.message_en || '(no message)';
+      html += '<div style="background:#dcf8c6;border-radius:8px;padding:8px 12px;margin-bottom:6px;max-width:80%;margin-left:auto;font-size:12px;box-shadow:0 1px 1px rgba(0,0,0,0.1)">' +
+        '<div style="color:#111">'+msg.substring(0,120)+(msg.length>120?'...':'')+'</div>' +
+        '<div style="text-align:right;font-size:9px;color:#667;margin-top:2px">Step '+(i+1)+'</div></div>';
+      if(s.response_type === 'buttons' && s.options) {
+        try {
+          var btns = typeof s.options === 'string' ? JSON.parse(s.options) : s.options;
+          html += '<div style="display:flex;gap:4px;justify-content:flex-end;margin-bottom:6px">';
+          btns.slice(0,3).forEach(function(b){ html += '<span style="font-size:10px;padding:4px 8px;background:#fff;border:1px solid #ccc;border-radius:12px">'+((b.title||b.label||'Button').substring(0,20))+'</span>'; });
+          html += '</div>';
+        } catch(e){}
+      }
+      if(s.response_type === 'location_request') {
+        html += '<div style="margin-bottom:6px;max-width:80%;margin-left:auto"><span style="font-size:10px;padding:4px 8px;background:#fff;border:1px solid #25d366;border-radius:12px;color:#25d366"><i class="fas fa-map-marker-alt"></i> Send Location</span></div>';
+      }
+    });
+  } else {
+    html += '<div style="text-align:center;color:#888;font-size:12px;padding:20px">Add steps to see preview</div>';
+  }
+  html += '</div></div>';
+
+  openModal('<i class="fas fa-project-diagram" style="margin-right:8px;color:#6366f1"></i>Flow: ' + _flowEditorName, html);
 }
 
-function showAddStep(flowId, nextOrder) {
-  openModal('Add Step to Flow',
+// Drag and drop
+var _dragIdx = null;
+function flowDragStart(e, idx) { _dragIdx = idx; e.dataTransfer.effectAllowed = 'move'; e.target.style.opacity = '0.5'; }
+function flowDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+function flowDrop(e, dropIdx) {
+  e.preventDefault();
+  e.target.style.opacity = '1';
+  if(_dragIdx === null || _dragIdx === dropIdx) return;
+  var moved = _flowEditorSteps.splice(_dragIdx, 1)[0];
+  _flowEditorSteps.splice(dropIdx, 0, moved);
+  // Update step_order and save
+  var reorderData = _flowEditorSteps.map(function(s, i){ s.step_order = i+1; return {id:s.id, step_order:i+1}; });
+  api('/api/v1/bot/flows/'+_flowEditorId+'/reorder', {method:'PUT', body:JSON.stringify({steps:reorderData})}).catch(function(err){console.error('Reorder error:', err);});
+  _dragIdx = null;
+  renderFlowEditor();
+}
+
+function showAddStepEnhanced() {
+  var nextOrder = _flowEditorSteps.length + 1;
+  var typeOptions = Object.keys(_stepTypeConfig).map(function(k){
+    return '<option value="'+k+'">'+_stepTypeConfig[k].label+'</option>';
+  }).join('');
+  openModal('Add Step',
     '<div style="display:grid;gap:12px">' +
-    '<div><label style="font-size:12px;font-weight:600">Step Order</label><input id="asOrder" type="number" value="'+nextOrder+'" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>' +
-    '<div><label style="font-size:12px;font-weight:600">Message Hindi *</label><textarea id="asHi" rows="3" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></textarea></div>' +
-    '<div><label style="font-size:12px;font-weight:600">Message English</label><textarea id="asEn" rows="2" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></textarea></div>' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
-      '<div><label style="font-size:12px;font-weight:600">Response Type</label><select id="asType" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"><option value="free_text">Free Text</option><option value="buttons">Buttons (max 3)</option><option value="list">List</option><option value="none">No Response (info only)</option></select></div>' +
+      '<div><label style="font-size:12px;font-weight:600">Step Order</label><input id="asOrder" type="number" value="'+nextOrder+'" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>' +
+      '<div><label style="font-size:12px;font-weight:600">Response Type *</label><select id="asType" onchange="toggleStepFields()" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px">'+typeOptions+'</select></div>' +
+    '</div>' +
+    '<div><label style="font-size:12px;font-weight:600">Message Hindi *</label><textarea id="asHi" rows="3" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="Hindi message text"></textarea></div>' +
+    '<div><label style="font-size:12px;font-weight:600">Message English</label><textarea id="asEn" rows="2" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="English message text"></textarea></div>' +
+    '<div id="stepOptionsField" style="display:none"><label style="font-size:12px;font-weight:600">Options (JSON array)</label><textarea id="asOptions" rows="3" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-family:monospace;font-size:11px" placeholder=\'[{"id":"opt1","title":"Option 1"},{"id":"opt2","title":"Option 2"}]\'></textarea><div style="font-size:10px;color:#6b7280;margin-top:2px">For buttons: max 3 items with id+title. For lists: id+title+description.</div></div>' +
+    '<div id="stepMediaField" style="display:none"><label style="font-size:12px;font-weight:600">Media URL</label><input id="asMediaUrl" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="https://example.com/image.jpg"></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
       '<div><label style="font-size:12px;font-weight:600">Save Response As</label><input id="asSave" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="e.g. name, village, crops"></div>' +
+      '<div><label style="font-size:12px;font-weight:600">AI Context</label><input id="asAICtx" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="Context for AI"></div>' +
     '</div>' +
     '<label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="asAI"> Trigger AI after this step</label>' +
-    '<div><label style="font-size:12px;font-weight:600">AI Context (optional)</label><textarea id="asAICtx" rows="2" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px" placeholder="Extra context for AI when triggered"></textarea></div>' +
-    '<button onclick="submitStep(\''+flowId+'\')" style="padding:10px 20px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">Add Step</button></div>');
+    '<button onclick="submitStepEnhanced()" style="padding:10px 20px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;width:100%"><i class="fas fa-plus" style="margin-right:6px"></i>Add Step</button></div>');
+  toggleStepFields();
 }
 
-async function submitStep(flowId) {
+function toggleStepFields() {
+  var t = document.getElementById('asType').value;
+  document.getElementById('stepOptionsField').style.display = (t==='buttons'||t==='interactive_list') ? 'block' : 'none';
+  document.getElementById('stepMediaField').style.display = (t==='media'||t==='image') ? 'block' : 'none';
+}
+
+async function submitStepEnhanced() {
   try {
-    await api('/api/v1/bot/flows/'+flowId+'/steps', {method:'POST', body:JSON.stringify({
-      step_order:parseInt(document.getElementById('asOrder').value), message_hi:document.getElementById('asHi').value,
-      message_en:document.getElementById('asEn').value, response_type:document.getElementById('asType').value,
-      save_response_as:document.getElementById('asSave').value||null, trigger_ai:document.getElementById('asAI').checked,
-      ai_context:document.getElementById('asAICtx').value||null
-    })});
-    closeModal(); alert('Step added!');
+    var type = document.getElementById('asType').value;
+    var body = {
+      step_order: parseInt(document.getElementById('asOrder').value),
+      message_hi: document.getElementById('asHi').value,
+      message_en: document.getElementById('asEn').value,
+      response_type: type,
+      save_response_as: document.getElementById('asSave').value || null,
+      trigger_ai: document.getElementById('asAI').checked,
+      ai_context: document.getElementById('asAICtx').value || null
+    };
+    if(type==='buttons'||type==='interactive_list') {
+      var optVal = document.getElementById('asOptions').value;
+      if(optVal) { try { body.options = JSON.parse(optVal); } catch(e){alert('Invalid JSON in options');return;} }
+    }
+    if(type==='media'||type==='image') { body.media_url = document.getElementById('asMediaUrl').value || null; }
+    await api('/api/v1/bot/flows/'+_flowEditorId+'/steps', {method:'POST', body:JSON.stringify(body)});
+    closeModal();
+    await openFlowEditor(_flowEditorId, _flowEditorName);
   } catch(e){alert('Error: '+e.message);}
 }
 
-async function deleteFlowStep(stepId, flowId, flowName) {
-  if(!confirm('Delete this step?')) return;
-  try { await api('/api/v1/bot/flows/steps/'+stepId, {method:'DELETE'}); viewFlowSteps(flowId, flowName); }
-  catch(e){alert('Error: '+e.message);}
+function editFlowStep(idx) {
+  var s = _flowEditorSteps[idx];
+  var typeOptions = Object.keys(_stepTypeConfig).map(function(k){
+    return '<option value="'+k+'"'+(s.response_type===k?' selected':'')+'>'+_stepTypeConfig[k].label+'</option>';
+  }).join('');
+  var optStr = '';
+  if(s.options) { try { optStr = JSON.stringify(typeof s.options === 'string' ? JSON.parse(s.options) : s.options, null, 2); } catch(e){optStr=String(s.options);} }
+  openModal('Edit Step #'+(idx+1),
+    '<div style="display:grid;gap:12px">' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
+      '<div><label style="font-size:12px;font-weight:600">Step Order</label><input id="esOrder" type="number" value="'+(s.step_order||idx+1)+'" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>' +
+      '<div><label style="font-size:12px;font-weight:600">Response Type</label><select id="esType" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px">'+typeOptions+'</select></div>' +
+    '</div>' +
+    '<div><label style="font-size:12px;font-weight:600">Message Hindi</label><textarea id="esHi" rows="3" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px">'+(s.message_hi||'')+'</textarea></div>' +
+    '<div><label style="font-size:12px;font-weight:600">Message English</label><textarea id="esEn" rows="2" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px">'+(s.message_en||'')+'</textarea></div>' +
+    '<div><label style="font-size:12px;font-weight:600">Options (JSON)</label><textarea id="esOptions" rows="3" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-family:monospace;font-size:11px">'+optStr.replace(/"/g,'&quot;')+'</textarea></div>' +
+    '<div><label style="font-size:12px;font-weight:600">Media URL</label><input id="esMediaUrl" value="'+(s.media_url||'')+'" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">' +
+      '<div><label style="font-size:12px;font-weight:600">Save Response As</label><input id="esSave" value="'+(s.save_response_as||'')+'" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>' +
+      '<div><label style="font-size:12px;font-weight:600">AI Context</label><input id="esAICtx" value="'+(s.ai_context||'')+'" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px"></div>' +
+    '</div>' +
+    '<label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="esAI" '+(s.trigger_ai?'checked':'')+'> Trigger AI after this step</label>' +
+    '<button onclick="submitEditStep(\''+s.id+'\','+idx+')" style="padding:10px 20px;background:#6366f1;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;width:100%"><i class="fas fa-save" style="margin-right:6px"></i>Save Changes</button></div>');
+}
+
+async function submitEditStep(stepId, idx) {
+  try {
+    var body = {
+      step_order: parseInt(document.getElementById('esOrder').value),
+      message_hi: document.getElementById('esHi').value,
+      message_en: document.getElementById('esEn').value,
+      response_type: document.getElementById('esType').value,
+      save_response_as: document.getElementById('esSave').value || null,
+      media_url: document.getElementById('esMediaUrl').value || null,
+      trigger_ai: document.getElementById('esAI').checked,
+      ai_context: document.getElementById('esAICtx').value || null
+    };
+    var optVal = document.getElementById('esOptions').value.trim();
+    if(optVal) { try { body.options = JSON.parse(optVal); } catch(e){alert('Invalid JSON in options');return;} } else { body.options = null; }
+    await api('/api/v1/bot/flows/steps/'+stepId, {method:'PUT', body:JSON.stringify(body)});
+    closeModal();
+    await openFlowEditor(_flowEditorId, _flowEditorName);
+  } catch(e){alert('Error: '+e.message);}
+}
+
+async function duplicateFlowStep(idx) {
+  var s = _flowEditorSteps[idx];
+  try {
+    await api('/api/v1/bot/flows/'+_flowEditorId+'/steps', {method:'POST', body:JSON.stringify({
+      step_order: _flowEditorSteps.length + 1,
+      message_hi: s.message_hi, message_en: s.message_en,
+      response_type: s.response_type, options: s.options,
+      media_url: s.media_url, save_response_as: s.save_response_as,
+      trigger_ai: s.trigger_ai, ai_context: s.ai_context
+    })});
+    await openFlowEditor(_flowEditorId, _flowEditorName);
+  } catch(e){alert('Error: '+e.message);}
+}
+
+async function deleteFlowStepEnhanced(idx) {
+  if(!confirm('Delete step #'+(idx+1)+'?')) return;
+  try {
+    await api('/api/v1/bot/flows/steps/'+_flowEditorSteps[idx].id, {method:'DELETE'});
+    await openFlowEditor(_flowEditorId, _flowEditorName);
+  } catch(e){alert('Error: '+e.message);}
 }
 
 // --- KNOWLEDGE BASE TAB ---

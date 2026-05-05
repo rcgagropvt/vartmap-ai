@@ -1101,20 +1101,35 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
     // Execute flow steps
     const steps = linkedFlow.steps.sort((a, b) => (a.step_order || 0) - (b.step_order || 0));
     for (const step of steps) {
-      if (step.step_type === 'text') {
-        const text = lang === 'hi' ? (step.content_hi || step.content_en || step.content || '') : (step.content_en || step.content_hi || step.content || '');
+      if (step.response_type === 'text' || step.step_type === 'text') {
+        const text = lang === 'hi' ? (step.message_hi || step.content_hi || step.message_en || step.content_en || '') : (step.message_en || step.content_en || step.message_hi || step.content_hi || '');
         if (text) await sendWhatsAppMessage(from, text);
-      } else if (step.step_type === 'ai_query') {
+      } else if (step.response_type === 'ai_query' || step.step_type === 'ai_query') {
         // Let AI handle with a specific prompt context
         return false; // Fall through to AI with the message
-      } else if (step.step_type === 'buttons') {
+      } else if (step.response_type === 'buttons' || step.step_type === 'buttons') {
         try {
           const btns = typeof step.options === 'string' ? JSON.parse(step.options) : (step.options || []);
           if (btns.length > 0) {
-            const text = lang === 'hi' ? (step.content_hi || step.content || '') : (step.content_en || step.content || '');
+            const text = lang === 'hi' ? (step.message_hi || step.content_hi || '') : (step.message_en || step.content_en || '');
             await sendWhatsAppButtons(from, text || 'Choose an option:', btns.slice(0, 3).map(b => ({ id: b.id || b.key, title: (b.title || b.label || '').substring(0, 20) })));
           }
         } catch (e) { console.error('Flow button parse error:', e.message); }
+      } else if (step.response_type === 'location_request') {
+        const locText = lang === 'hi' ? (step.message_hi || 'Apni location share karein') : (step.message_en || 'Share your location');
+        await sendLocationRequest(from, locText);
+      } else if (step.response_type === 'interactive_list') {
+        try {
+          const listOpts = typeof step.options === 'string' ? JSON.parse(step.options) : (step.options || []);
+          const listText = lang === 'hi' ? (step.message_hi || '') : (step.message_en || '');
+          const sections = [{ title: 'Options', rows: listOpts.map(o => ({ id: o.id || o.key, title: (o.title || o.label || '').substring(0, 24), description: o.description || '' })) }];
+          await sendInteractiveList(from, '', listText || 'Choose:', 'Select', sections);
+        } catch (e) { console.error('Flow list parse error:', e.message); }
+      } else if (step.response_type === 'media' || step.response_type === 'image') {
+        if (step.media_url) {
+          const mediaCaption = lang === 'hi' ? (step.message_hi || '') : (step.message_en || '');
+          await sendWhatsAppImage(from, step.media_url, mediaCaption);
+        }
       }
     }
     return true; // Flow handled the message
