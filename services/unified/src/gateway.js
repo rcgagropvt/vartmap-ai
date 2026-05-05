@@ -254,10 +254,12 @@ async function getBotConfig() {
     }
 
     botConfigCache = {
-      welcome_hi: configMap.welcome_message_hi || 'Namaste! Main VartMap Krishi Sahayak hoon. Aapki kaise madad kar sakta hoon?',
-      welcome_en: configMap.welcome_message_en || 'Hello! I am VartMap Krishi Sahayak. How can I help you?',
+      welcome_hi: (configMap.welcome_message && configMap.welcome_message.hi) || configMap.welcome_message_hi || 'Namaste! Main VartMap Krishi Sahayak hoon. Aapki kaise madad kar sakta hoon?',
+      welcome_en: (configMap.welcome_message && configMap.welcome_message.en) || configMap.welcome_message_en || 'Hello! I am VartMap Krishi Sahayak. How can I help you?',
       onboarding_enabled: configMap.onboarding_enabled !== undefined ? configMap.onboarding_enabled : true,
       onboarding_fields: configMap.onboarding_fields || ['name', 'crops'],
+      menu_hi: (configMap.menu_message && configMap.menu_message.hi) || configMap.menu_message_hi || 'Aap neeche diye gaye options mein se choose kar sakte hain:',
+      menu_en: (configMap.menu_message && configMap.menu_message.en) || configMap.menu_message_en || 'You can choose from the options below:',
       menu_items: menuResp.status === 'fulfilled' ? (menuResp.value.data.items || []) : [],
       flows: flowsResp.status === 'fulfilled' ? (flowsResp.value.data.flows || []) : [],
       knowledge: knowledgeResp.status === 'fulfilled' ? (knowledgeResp.value.data.documents || knowledgeResp.value.data.items || []) : []
@@ -721,9 +723,7 @@ async function sendMenuMessage(to, botConfig, language) {
       id: m.menu_key || m.id,
       title: (language === 'hi' ? (m.title_hi || m.title_en) : (m.title_en || m.title_hi)).substring(0, 20)
     }));
-    const bodyText = language === 'hi'
-      ? 'Aap neeche diye gaye options mein se choose kar sakte hain:'
-      : 'You can choose from the options below:';
+    const bodyText = language === 'hi' ? (botConfig.menu_hi || 'Aap neeche diye gaye options mein se choose kar sakte hain:') : (botConfig.menu_en || 'You can choose from the options below:');
     await sendWhatsAppButtons(to, bodyText, buttons);
   } else {
     // Use list for 4+ items
@@ -732,10 +732,8 @@ async function sendMenuMessage(to, botConfig, language) {
       title: (language === 'hi' ? (m.title_hi || m.title_en) : (m.title_en || m.title_hi)).substring(0, 24),
       description: (language === 'hi' ? (m.description_hi || m.description_en || '') : (m.description_en || m.description_hi || '')).substring(0, 72)
     }));
-    const bodyText = language === 'hi'
-      ? 'Aap neeche diye gaye options mein se choose kar sakte hain:'
-      : 'You can choose from the options below:';
-    await sendWhatsAppList(to, bodyText, 'Options', [{ title: 'Services', rows: rows }]);
+    const bodyText2 = language === 'hi' ? (botConfig.menu_hi || 'Aap neeche diye gaye options mein se choose kar sakte hain:') : (botConfig.menu_en || 'You can choose from the options below:');
+    await sendWhatsAppList(to, bodyText2, 'Options', [{ title: 'Services', rows: rows }]);
   }
 }
 
