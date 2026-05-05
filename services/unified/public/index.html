@@ -1614,19 +1614,19 @@ async function updateCampaignStatus(id, status) { await api('/api/v1/campaigns/'
 
 async function loadAnalytics() {
   const el = document.getElementById('pageContent');
-
+  const days = document.getElementById('analyticsDays') ? document.getElementById('analyticsDays').value : 30;
 
 
   try {
     const [campData, farmerData, templateData, geoData, convData, roiData, aiOverview, aiUsage, settingsResp] = await Promise.all([
-      api('/api/v1/analytics/campaigns?days=30'),
-      api('/api/v1/analytics/farmers?days=30'),
+      api('/api/v1/analytics/campaigns?days='+days),
+      api('/api/v1/analytics/farmers?days='+days),
       api('/api/v1/analytics/templates'),
       api('/api/v1/analytics/geographic'),
-      api('/api/v1/analytics/conversations?days=30'),
+      api('/api/v1/analytics/conversations?days='+days),
 
-      api('/api/v1/analytics/roi?days=30'),
-      api('/api/v1/analytics/overview?days=30'),
+      api('/api/v1/analytics/roi?days='+days),
+      api('/api/v1/analytics/overview?days='+days),
       api('/api/v1/analytics/usage'),
       api('/api/v1/settings')
     ]);
