@@ -1,4 +1,4 @@
-// VartMap WhatsApp Gateway Routes Module
+﻿// VartMap WhatsApp Gateway Routes Module
 const axios = require('axios');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
@@ -566,6 +566,82 @@ async function sendWhatsAppImage(to, imageUrl, caption) {
     console.log('Image sent to ' + to);
     return true;
   } catch (e) {
+
+// --- LOCATION REQUEST ---
+async function sendLocationRequest(to, bodyText) {
+  try {
+    const resp = await axios.post(
+      `https://graph.facebook.com/v21.0/${WA_PHONE_ID}/messages`,
+      {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to,
+        type: 'interactive',
+        interactive: {
+          type: 'location_request_message',
+          body: { text: bodyText },
+          action: { name: 'send_location' }
+        }
+      },
+      { headers: { Authorization: `Bearer ${WA_TOKEN}`, 'Content-Type': 'application/json' } }
+    );
+    console.log(`[Location Request] Sent to ${to}, msgId: ${resp.data?.messages?.[0]?.id}`);
+    return true;
+  } catch (err) {
+    console.error(`[Location Request] Failed for ${to}:`, err.response?.data || err.message);
+    return false;
+  }
+}
+
+// --- INTERACTIVE LIST MESSAGE ---
+async function sendInteractiveList(to, headerText, bodyText, buttonText, sections) {
+  try {
+    const resp = await axios.post(
+      `https://graph.facebook.com/v21.0/${WA_PHONE_ID}/messages`,
+      {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to,
+        type: 'interactive',
+        interactive: {
+          type: 'list',
+          header: { type: 'text', text: headerText },
+          body: { text: bodyText },
+          action: { button: buttonText, sections }
+        }
+      },
+      { headers: { Authorization: `Bearer ${WA_TOKEN}`, 'Content-Type': 'application/json' } }
+    );
+    console.log(`[Interactive List] Sent to ${to}, msgId: ${resp.data?.messages?.[0]?.id}`);
+    return true;
+  } catch (err) {
+    console.error(`[Interactive List] Failed for ${to}:`, err.response?.data || err.message);
+    return false;
+  }
+}
+
+// --- REVERSE GEOCODE (Nominatim - free, no API key) ---
+async function reverseGeocode(lat, lon) {
+  try {
+    const resp = await axios.get('https://nominatim.openstreetmap.org/reverse', {
+      params: { lat, lon, format: 'json', addressdetails: 1, 'accept-language': 'en' },
+      headers: { 'User-Agent': 'VartMap-KrishiBot/1.0' }
+    });
+    const addr = resp.data?.address || {};
+    return {
+      village: addr.village || addr.town || addr.city || addr.suburb || '',
+      district: addr.county || addr.state_district || addr.district || '',
+      state: addr.state || '',
+      pin_code: addr.postcode || '',
+      full_address: resp.data?.display_name || '',
+      raw: addr
+    };
+  } catch (err) {
+    console.error('[ReverseGeocode] Error:', err.message);
+    return null;
+  }
+}
+
     console.error('Send image error:', e.response?.data || e.message);
     return false;
   }
@@ -665,85 +741,187 @@ async function sendMenuMessage(to, botConfig, language) {
 }
 
 // --- ONBOARDING HANDLER ---
-async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, botConfig) {
+async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, botConfig, messageObj) {
   const stage = farmerData.onboarding_stage || 'new';
   const lang = farmerData.language || 'hi';
 
-  if (stage === 'new') {
-    // First message ever - send welcome and ask name
-    const welcome = lang === 'hi' ? botConfig.welcome_hi : botConfig.welcome_en;
-    await sendWhatsAppMessage(from, welcome);
-
-    if (botConfig.onboarding_enabled && botConfig.onboarding_fields.includes('name')) {
+  switch (stage) {
+    case 'new': {
+      const welcome = lang === 'hi' ? botConfig.welcome_hi : botConfig.welcome_en;
+      await sendWhatsAppMessage(from, welcome);
       const askName = lang === 'hi'
-        ? 'Sabse pehle, aapka naam bataiye?'
+        ? 'Sabse pehle, aapka shubh naam kya hai?'
         : 'First, what is your name?';
       await sendWhatsAppMessage(from, askName);
       await pool.query("UPDATE farmers SET onboarding_stage = 'awaiting_name', updated_at = NOW() WHERE id = $1", [farmerId]);
-
       await pool.query(
         "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
         [sessionId, farmerId, welcome + '\n' + askName]
       );
-      return true; // handled
-    } else {
-      // No onboarding, go straight to menu
-      await pool.query("UPDATE farmers SET onboarding_stage = 'complete', profile_complete = true, updated_at = NOW() WHERE id = $1", [farmerId]);
-      await sendMenuMessage(from, botConfig, lang);
       return true;
     }
-  }
 
-  if (stage === 'awaiting_name') {
-    const name = msgBody.trim();
-    if (name.length < 2 || name.length > 60) {
-      const retry = lang === 'hi' ? 'Kripya apna sahi naam batayein:' : 'Please tell me your correct name:';
-      await sendWhatsAppMessage(from, retry);
-      return true;
-    }
-    await pool.query("UPDATE farmers SET name = $1, onboarding_stage = $2, updated_at = NOW() WHERE id = $3",
-      [name, botConfig.onboarding_fields.includes('crops') ? 'awaiting_crops' : 'complete', farmerId]);
-
-    if (botConfig.onboarding_fields.includes('crops')) {
-      const askCrops = lang === 'hi'
-        ? 'Dhanyavaad ' + name + '! Aap kaun si phasalein ugaate hain? (jaise: gehun, dhan, ganna)'
-        : 'Thank you ' + name + '! What crops do you grow? (e.g., wheat, rice, sugarcane)';
-      await sendWhatsAppMessage(from, askCrops);
+    case 'awaiting_name': {
+      const name = msgBody.trim().substring(0, 100);
+      if (!name || name.length < 2) {
+        await sendWhatsAppMessage(from, lang === 'hi'
+          ? 'Kripya apna naam batayein (kam se kam 2 akshar):'
+          : 'Please tell your name (at least 2 characters):');
+        return true;
+      }
+      await pool.query(
+        "UPDATE farmers SET name = $1, onboarding_stage = 'awaiting_location', updated_at = NOW() WHERE id = $2",
+        [name, farmerId]
+      );
+      const locMsg = lang === 'hi'
+        ? `Dhanyavaad ${name} ji! Ab apni kheti ki location share karein - neeche "Share Location" button dabayein. Isse hum aapke kshetra ki mandi, mausam aur mitti ki jaankari de payenge.\n\nAgar aap skip karna chahein toh "skip" likhein.`
+        : `Thank you ${name}! Now please share your farm location by tapping "Share Location" below. This helps us provide local mandi prices, weather & soil info.\n\nType "skip" to continue without sharing location.`;
+      await sendLocationRequest(from, locMsg);
       await pool.query(
         "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
-        [sessionId, farmerId, askCrops]
+        [sessionId, farmerId, locMsg]
       );
-    } else {
-      await pool.query("UPDATE farmers SET profile_complete = true WHERE id = $1", [farmerId]);
-      const done = lang === 'hi'
-        ? 'Dhanyavaad ' + name + '! Aap ab mujhse kuch bhi pooch sakte hain.'
-        : 'Thank you ' + name + '! You can now ask me anything.';
-      await sendWhatsAppMessage(from, done);
-      await sendMenuMessage(from, botConfig, lang);
+      return true;
     }
-    return true;
+
+    case 'awaiting_location': {
+      const locData = messageObj?.location;
+      if (locData && locData.latitude && locData.longitude) {
+        const geo = await reverseGeocode(locData.latitude, locData.longitude);
+        const locationJson = {
+          latitude: locData.latitude,
+          longitude: locData.longitude,
+          ...(geo || {})
+        };
+        await pool.query(
+          `UPDATE farmers SET location = $1, village = $2, pin_code = $3, onboarding_stage = 'awaiting_crops', updated_at = NOW() WHERE id = $4`,
+          [JSON.stringify(locationJson), geo?.village || '', geo?.pin_code || '', farmerId]
+        );
+        const confirmLoc = lang === 'hi'
+          ? `Location mil gayi! ${geo?.village ? geo.village + ', ' : ''}${geo?.district || ''}, ${geo?.state || ''}\n\nAb apni mukhya fasal chunein:`
+          : `Got your location! ${geo?.village ? geo.village + ', ' : ''}${geo?.district || ''}, ${geo?.state || ''}\n\nNow select your main crop:`;
+        const sections = [{
+          title: lang === 'hi' ? 'Pramukh Fasalein' : 'Major Crops',
+          rows: [
+            { id: 'crop_rice', title: lang === 'hi' ? 'Dhaan (Chawal)' : 'Rice', description: '' },
+            { id: 'crop_wheat', title: lang === 'hi' ? 'Gehun' : 'Wheat', description: '' },
+            { id: 'crop_cotton', title: lang === 'hi' ? 'Kapas' : 'Cotton', description: '' },
+            { id: 'crop_sugarcane', title: lang === 'hi' ? 'Ganna' : 'Sugarcane', description: '' },
+            { id: 'crop_soybean', title: lang === 'hi' ? 'Soyabean' : 'Soybean', description: '' },
+            { id: 'crop_maize', title: lang === 'hi' ? 'Makka' : 'Maize', description: '' },
+            { id: 'crop_tomato', title: lang === 'hi' ? 'Tamatar' : 'Tomato', description: '' },
+            { id: 'crop_onion', title: lang === 'hi' ? 'Pyaaz' : 'Onion', description: '' },
+            { id: 'crop_potato', title: lang === 'hi' ? 'Aloo' : 'Potato', description: '' },
+            { id: 'crop_banana', title: lang === 'hi' ? 'Kela' : 'Banana', description: '' }
+          ]
+        }];
+        await sendWhatsAppMessage(from, confirmLoc);
+        await sendInteractiveList(
+          from,
+          lang === 'hi' ? 'Fasal Chunein' : 'Select Crop',
+          lang === 'hi' ? 'Apni mukhya fasal chunein (baad mein aur jod sakte hain):' : 'Select your main crop (you can add more later):',
+          lang === 'hi' ? 'Fasal Dekhein' : 'View Crops',
+          sections
+        );
+        return true;
+      } else if (msgBody.toLowerCase().includes('skip') || msgBody.includes('\u091B\u094B\u0921\u093C')) {
+        await pool.query("UPDATE farmers SET onboarding_stage = 'awaiting_crops', updated_at = NOW() WHERE id = $1", [farmerId]);
+        const skipMsg = lang === 'hi'
+          ? 'Koi baat nahi! Baad mein location share kar sakte hain.\n\nAb apni mukhya fasal chunein:'
+          : 'No problem! You can share location later.\n\nNow select your main crop:';
+        const sections = [{
+          title: lang === 'hi' ? 'Pramukh Fasalein' : 'Major Crops',
+          rows: [
+            { id: 'crop_rice', title: lang === 'hi' ? 'Dhaan (Chawal)' : 'Rice', description: '' },
+            { id: 'crop_wheat', title: lang === 'hi' ? 'Gehun' : 'Wheat', description: '' },
+            { id: 'crop_cotton', title: lang === 'hi' ? 'Kapas' : 'Cotton', description: '' },
+            { id: 'crop_sugarcane', title: lang === 'hi' ? 'Ganna' : 'Sugarcane', description: '' },
+            { id: 'crop_soybean', title: lang === 'hi' ? 'Soyabean' : 'Soybean', description: '' },
+            { id: 'crop_maize', title: lang === 'hi' ? 'Makka' : 'Maize', description: '' },
+            { id: 'crop_tomato', title: lang === 'hi' ? 'Tamatar' : 'Tomato', description: '' },
+            { id: 'crop_onion', title: lang === 'hi' ? 'Pyaaz' : 'Onion', description: '' },
+            { id: 'crop_potato', title: lang === 'hi' ? 'Aloo' : 'Potato', description: '' },
+            { id: 'crop_banana', title: lang === 'hi' ? 'Kela' : 'Banana', description: '' }
+          ]
+        }];
+        await sendWhatsAppMessage(from, skipMsg);
+        await sendInteractiveList(
+          from,
+          lang === 'hi' ? 'Fasal Chunein' : 'Select Crop',
+          lang === 'hi' ? 'Apni mukhya fasal chunein:' : 'Select your main crop:',
+          lang === 'hi' ? 'Fasal Dekhein' : 'View Crops',
+          sections
+        );
+        return true;
+      } else {
+        const retry = lang === 'hi'
+          ? 'Kripya neeche "Share Location" button dabayein, ya skip karne ke liye "skip" likhein.'
+          : 'Please tap "Share Location" button below, or type "skip" to continue.';
+        await sendLocationRequest(from, retry);
+        return true;
+      }
+    }
+
+    case 'awaiting_crops': {
+      let selectedCrop = '';
+      if (messageObj?.interactive?.type === 'list_reply') {
+        selectedCrop = messageObj.interactive.list_reply.title;
+      } else if (msgBody.trim()) {
+        selectedCrop = msgBody.trim();
+      }
+      if (!selectedCrop || selectedCrop.length < 2) {
+        await sendWhatsAppMessage(from, lang === 'hi' ? 'Kripya apni fasal batayein ya list se chunein:' : 'Please tell your crop or select from list:');
+        return true;
+      }
+      const crops = selectedCrop.split(',').map(c => c.trim()).filter(Boolean);
+      await pool.query(
+        "UPDATE farmers SET crops = $1, onboarding_stage = 'awaiting_land_size', updated_at = NOW() WHERE id = $2",
+        [crops, farmerId]
+      );
+      const askLand = lang === 'hi'
+        ? `Bahut accha! "${crops.join(', ')}" - Aapki kitni zameen hai? (acre mein likhein, jaise "5" ya "2.5")\n\nSkip karne ke liye "skip" likhein.`
+        : `Great! "${crops.join(', ')}" - How much land do you have? (in acres, e.g. "5" or "2.5")\n\nType "skip" to continue without this.`;
+      await sendWhatsAppMessage(from, askLand);
+      return true;
+    }
+
+    case 'awaiting_land_size': {
+      if (msgBody.toLowerCase().includes('skip') || msgBody.includes('\u091B\u094B\u0921\u093C')) {
+        await pool.query(
+          "UPDATE farmers SET onboarding_stage = 'complete', profile_complete = true, updated_at = NOW() WHERE id = $1",
+          [farmerId]
+        );
+      } else {
+        const sizeText = msgBody.replace(/[^0-9.]/g, '');
+        const acres = parseFloat(sizeText);
+        if (isNaN(acres) || acres <= 0 || acres > 10000) {
+          await sendWhatsAppMessage(from, lang === 'hi'
+            ? 'Kripya sahi sankhya likhein (jaise 2, 5, 10.5) ya "skip" likhein:'
+            : 'Please enter a valid number (e.g. 2, 5, 10.5) or type "skip":');
+          return true;
+        }
+        await pool.query(
+          "UPDATE farmers SET land_holding_acres = $1, onboarding_stage = 'complete', profile_complete = true, updated_at = NOW() WHERE id = $2",
+          [acres, farmerId]
+        );
+      }
+      const complete = lang === 'hi'
+        ? `Shaandaar! Aapka registration pura ho gaya.\n\nAap ab yeh kar sakte hain:\n1. Mandi Bhav - "mandi" likhein\n2. Mausam - "mausam" likhein\n3. Fasal Salah - foto bhejein\n4. Mitti Jaanch - "soil" likhein\n\nKoi bhi sawaal puchein!`
+        : `Excellent! Your registration is complete.\n\nYou can now:\n1. Mandi Prices - type "mandi"\n2. Weather - type "weather"\n3. Crop Advice - send a photo\n4. Soil Info - type "soil"\n\nAsk me anything!`;
+      await sendWhatsAppMessage(from, complete);
+      await pool.query(
+        "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
+        [sessionId, farmerId, complete]
+      );
+      return true;
+    }
+
+    case 'complete':
+      return false;
+
+    default:
+      return false;
   }
-
-  if (stage === 'awaiting_crops') {
-    const crops = msgBody.trim();
-    const farmerName = farmerData.name || 'Kisan';
-        await pool.query("UPDATE farmers SET crops = $1, onboarding_stage = 'complete', profile_complete = true, updated_at = NOW() WHERE id = $2",
-      ['{' + crops.split(/[,\s]+/).map(c => c.trim()).filter(c => c).join(',') + '}', farmerId]);
-
-
-    const done = (farmerData.language || 'hi') === 'hi'
-      ? 'Bahut badhiya ' + farmerName + '! Aapki profile complete ho gayi. Ab main aapki har tarah se madad kar sakta hoon.'
-      : 'Excellent ' + farmerName + '! Your profile is complete. I can now help you with everything.';
-    await sendWhatsAppMessage(from, done);
-    await sendMenuMessage(from, botConfig, farmerData.language || 'hi');
-    await pool.query(
-      "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
-      [sessionId, farmerId, done]
-    );
-    return true;
-  }
-
-  return false; // Not in onboarding, continue normal flow
 }
 // --- WEATHER API ---
 async function getWeather(city) {
@@ -1233,6 +1411,7 @@ app.post('/webhook', async (req, res) => {
             }
           } else {
             msgBody = msg.text?.body || msg.image?.caption || msg.audio?.caption || '';
+          if (msg.type === 'location') { msgBody = '[location shared]'; }
           }
 
           console.log('Incoming from ' + from + ' (' + profileName + ') [' + msgType + ']: ' + msgBody.substring(0, 100));
@@ -1275,7 +1454,7 @@ app.post('/webhook', async (req, res) => {
           }
 
           // 4. Store incoming message
-          const storedMsgType = (msgType === 'voice') ? 'audio' : (msgType === 'interactive' ? 'text' : msgType);
+          const storedMsgType = (msgType === 'voice') ? 'audio' : (msgType === 'interactive' ? 'text' : (msgType === 'location' ? 'location' : msgType));
           await pool.query(
             "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_message_id, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'inbound', 'farmer', $3, $4, $5, 'delivered', NOW())",
             [sessionId, farmerId, storedMsgType, msgBody || '[' + msgType + ']', waMessageId]
@@ -1284,7 +1463,7 @@ app.post('/webhook', async (req, res) => {
           // 5. ONBOARDING CHECK (new farmers)
           const onboardingStage = farmerData.onboarding_stage || 'new';
           if (onboardingStage !== 'complete' && botConfig.onboarding_enabled) {
-            const handled = await handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, botConfig);
+            const handled = await handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, botConfig, msg);
             if (handled) continue;
           }
 
