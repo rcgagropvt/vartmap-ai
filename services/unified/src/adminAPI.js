@@ -37,6 +37,16 @@ module.exports = function setupAdminAPI(app, pool) {
   });
   
   // ---
+  // === AUDIT LOG HELPER ===
+  async function auditLog(eventType, entityType, entityId, action, actor, severity, metadata) {
+    try {
+      await pool.query(
+        `INSERT INTO audit_log (event_id, event_type, entity_type, entity_id, action, actor_type, actor_id, severity, metadata, service, created_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, 'admin-api', NOW())`,
+        [eventType, entityType, entityId || null, action, actor?.type || 'admin', actor?.id || 'system', severity || 'info', metadata ? JSON.stringify(metadata) : null]
+      );
+    } catch (e) { console.error('Audit log error:', e.message); }
+  }
   app.post('/api/v1/auth/login', async (req, res) => {
     try {
       const { email, password } = req.body;
@@ -46,6 +56,7 @@ module.exports = function setupAdminAPI(app, pool) {
       if (!await bcrypt.compare(password, user.password_hash)) return res.status(401).json({ error: 'Invalid credentials' });
       const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, process.env.JWT_SECRET, { expiresIn: '24h' });
       await pool.query('UPDATE admin_users SET last_login_at=NOW() WHERE id=$1', [user.id]);
+            await auditLog('auth.login', 'admin', null, 'Admin login', {type:'admin',id:email}, 'info', {email});
       res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
@@ -205,6 +216,7 @@ module.exports = function setupAdminAPI(app, pool) {
       if (!sets.length) return res.status(400).json({ error: 'No fields to update' });
       vals.push(req.params.id);
       const r = await pool.query(`UPDATE farmers SET ${sets.join(',')} WHERE id=$${vals.length} RETURNING *`, vals);
+            await auditLog('farmer.created', 'farmer', null, 'Created farmer', {type:'admin',id:req.user?.id||'unknown'}, 'info', req.body);
       res.json({ farmer: r.rows[0] });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
@@ -381,6 +393,7 @@ module.exports = function setupAdminAPI(app, pool) {
         `INSERT INTO message_templates (name, language, category, template_text, variables, wa_template_name, status) VALUES ($1,$2,$3,$4,$5,$6,'active') RETURNING *`,
         [name, language || 'hi', category, template_text, variables || '{}', wa_template_name]
       );
+            await auditLog('template.created', 'template', null, 'Created template', {type:'admin',id:req.user?.id||'unknown'}, 'info', {name:req.body.name});
       res.json({ template: r.rows[0] });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
@@ -772,6 +785,7 @@ module.exports = function setupAdminAPI(app, pool) {
         [sentCount, farmers.rows.length, req.params.id]
       );
   
+            await auditLog('campaign.launched', 'campaign', req.params.id, 'Launched campaign', {type:'admin',id:req.user?.id||'unknown'}, 'info', {campaign_id:req.params.id});
       res.json({ success: true, total: farmers.rows.length, sent: sentCount, failed: failedCount });
     } catch (e) {
       console.error('Campaign launch error:', e.message);
@@ -3251,6 +3265,7 @@ const XLSX = require('xlsx');
           [key, String(value)]
         );
       }
+            await auditLog('settings.updated', 'settings', null, 'Updated settings', {type:'admin',id:req.user?.id||'unknown'}, 'warning', null);
       res.json({ message: 'Settings updated' });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
