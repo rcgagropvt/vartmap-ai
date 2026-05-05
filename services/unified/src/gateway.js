@@ -566,6 +566,10 @@ async function sendWhatsAppImage(to, imageUrl, caption) {
     console.log('Image sent to ' + to);
     return true;
   } catch (e) {
+    console.error('Send image error:', e.response?.data || e.message);
+    return false;
+  }
+}
 
 // --- LOCATION REQUEST --- v2.1
 async function sendLocationRequest(to, bodyText) {
@@ -639,11 +643,6 @@ async function reverseGeocode(lat, lon) {
   } catch (err) {
     console.error('[ReverseGeocode] Error:', err.message);
     return null;
-  }
-}
-
-    console.error('Send image error:', e.response?.data || e.message);
-    return false;
   }
 }
 
