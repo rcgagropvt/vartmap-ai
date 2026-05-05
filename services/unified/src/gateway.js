@@ -571,7 +571,7 @@ async function sendWhatsAppImage(to, imageUrl, caption) {
 async function sendLocationRequest(to, bodyText) {
   try {
     const resp = await axios.post(
-      `https://graph.facebook.com/v21.0/${WA_PHONE_ID}/messages`,
+      'https://graph.facebook.com/v21.0/' + phoneNumberId + '/messages',
       {
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
@@ -583,7 +583,7 @@ async function sendLocationRequest(to, bodyText) {
           action: { name: 'send_location' }
         }
       },
-      { headers: { Authorization: `Bearer ${WA_TOKEN}`, 'Content-Type': 'application/json' } }
+      { headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' } }
     );
     console.log(`[Location Request] Sent to ${to}, msgId: ${resp.data?.messages?.[0]?.id}`);
     return true;
@@ -597,7 +597,7 @@ async function sendLocationRequest(to, bodyText) {
 async function sendInteractiveList(to, headerText, bodyText, buttonText, sections) {
   try {
     const resp = await axios.post(
-      `https://graph.facebook.com/v21.0/${WA_PHONE_ID}/messages`,
+      'https://graph.facebook.com/v21.0/' + phoneNumberId + '/messages',
       {
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
@@ -610,7 +610,7 @@ async function sendInteractiveList(to, headerText, bodyText, buttonText, section
           action: { button: buttonText, sections }
         }
       },
-      { headers: { Authorization: `Bearer ${WA_TOKEN}`, 'Content-Type': 'application/json' } }
+      { headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' } }
     );
     console.log(`[Interactive List] Sent to ${to}, msgId: ${resp.data?.messages?.[0]?.id}`);
     return true;
