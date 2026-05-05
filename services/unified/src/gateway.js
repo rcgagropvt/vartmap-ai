@@ -567,7 +567,7 @@ async function sendWhatsAppImage(to, imageUrl, caption) {
     return true;
   } catch (e) {
 
-// --- LOCATION REQUEST ---
+// --- LOCATION REQUEST --- v2.1
 async function sendLocationRequest(to, bodyText) {
   try {
     const resp = await axios.post(
