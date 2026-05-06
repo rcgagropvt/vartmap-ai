@@ -4,6 +4,23 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 module.exports = function setupGateway(app, pool, redis) {
 // --- AI SETUP (Gemini + Groq fallback) ---
+
+  // SLA breach checker - runs every 60 seconds
+  setInterval(async () => {
+    try {
+      const breached = await pool.query("SELECT s.id, s.sla_policy_id, s.assigned_to, p.escalate_to, p.name as policy_name FROM wa_chat_sessions s JOIN sla_policies p ON s.sla_policy_id = p.id WHERE s.chat_status NOT IN ('resolved','closed') AND s.sla_due_at < NOW() AND s.escalated = false");
+      for (const session of breached.rows) {
+        await pool.query("INSERT INTO sla_breaches (session_id, policy_id, breach_type) VALUES ($1, $2, 'sla_breach')", [session.id, session.sla_policy_id]);
+        if (session.escalate_to) {
+          await pool.query("UPDATE wa_chat_sessions SET escalated=true, escalated_at=NOW(), escalated_to=$1, priority='urgent', updated_at=NOW() WHERE id=$2", [session.escalate_to, session.id]);
+          await pool.query("INSERT INTO assignment_history (session_id, assigned_from, assigned_to, reason) VALUES ($1, $2, $3, 'sla_escalation')", [session.id, session.assigned_to, session.escalate_to]);
+        } else {
+          await pool.query("UPDATE wa_chat_sessions SET escalated=true, escalated_at=NOW(), priority='urgent', updated_at=NOW() WHERE id=$1", [session.id]);
+        }
+        console.log('SLA BREACH: Session ' + session.id + ' escalated (' + session.policy_name + ')');
+      }
+    } catch (e) { console.error('SLA check error:', e.message); }
+  }, 60000);
 const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
 let groqClient = null;
 if (process.env.GROQ_API_KEY) {
@@ -1560,6 +1577,49 @@ app.post('/webhook', async (req, res) => {
           }
           const sessionId = session.rows[0].id;
           await pool.query('UPDATE wa_chat_sessions SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1', [sessionId]);
+
+          // Auto-assign chat if new session and no assignment
+          if (!session.rows[0].assigned_to) {
+            try {
+              const rules = await pool.query('SELECT * FROM assignment_rules WHERE is_active=true ORDER BY priority DESC');
+              let assignedAgent = null;
+              for (const rule of rules.rows) {
+                if (rule.conditions && rule.conditions.languages && farmerData.language && !rule.conditions.languages.includes(farmerData.language)) continue;
+                if (rule.conditions && rule.conditions.keywords && msgBody) {
+                  const hasKw = rule.conditions.keywords.some(kw => msgBody.toLowerCase().includes(kw.toLowerCase()));
+                  if (!hasKw) continue;
+                }
+                let agentQ = "SELECT id, current_chat_count, last_assigned_at FROM admin_users WHERE agent_status='online' AND role != 'super_admin'";
+                const agentP = [];
+                if (rule.agent_pool && rule.agent_pool.length > 0) { agentQ += " AND id = ANY($1)"; agentP.push(rule.agent_pool); }
+                const agents = await pool.query(agentQ, agentP);
+                const eligible = agents.rows.filter(a => a.current_chat_count < (rule.max_chats_per_agent || 20));
+                if (eligible.length === 0) continue;
+                if (rule.strategy === 'round_robin') {
+                  eligible.sort((a, b) => new Date(a.last_assigned_at) - new Date(b.last_assigned_at));
+                } else {
+                  eligible.sort((a, b) => a.current_chat_count - b.current_chat_count);
+                }
+                assignedAgent = eligible[0];
+                if (assignedAgent) break;
+              }
+              if (!assignedAgent) {
+                const fb = await pool.query("SELECT id FROM admin_users WHERE agent_status='online' AND role != 'super_admin' ORDER BY current_chat_count ASC LIMIT 1");
+                if (fb.rows.length > 0) assignedAgent = fb.rows[0];
+              }
+              if (assignedAgent) {
+                await pool.query("UPDATE wa_chat_sessions SET assigned_to=$1, chat_status='assigned' WHERE id=$2", [assignedAgent.id, sessionId]);
+                await pool.query("UPDATE admin_users SET last_assigned_at=NOW(), current_chat_count=current_chat_count+1 WHERE id=$1", [assignedAgent.id]);
+                await pool.query("INSERT INTO assignment_history (session_id, assigned_to, reason) VALUES ($1, $2, 'auto_round_robin')", [sessionId, assignedAgent.id]);
+                const sla = await pool.query("SELECT * FROM sla_policies WHERE priority='normal' AND is_active=true LIMIT 1");
+                if (sla.rows.length > 0) {
+                  const dueAt = new Date(Date.now() + sla.rows[0].first_response_minutes * 60000);
+                  await pool.query("UPDATE wa_chat_sessions SET sla_policy_id=$1, sla_due_at=$2 WHERE id=$3", [sla.rows[0].id, dueAt, sessionId]);
+                }
+                console.log('Auto-assigned session ' + sessionId + ' to agent ' + assignedAgent.id);
+              }
+            } catch (autoErr) { console.error('Auto-assign error:', autoErr.message); }
+          }
 
           // 3. Handle media - get download URL
           let mediaUrl = null;

@@ -493,6 +493,285 @@ module.exports = function setupAdminAPI(app, pool) {
   });
 
   
+
+  // ===== AUTO-ASSIGNMENT RULES =====
+  app.get('/api/v1/assignment-rules', auth, async (req, res) => {
+    try {
+      const result = await pool.query('SELECT * FROM assignment_rules ORDER BY priority DESC, created_at');
+      res.json({ rules: result.rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/v1/assignment-rules', auth, async (req, res) => {
+    try {
+      const { name, strategy, conditions, agent_pool, max_chats_per_agent, is_active } = req.body;
+      if (!name) return res.status(400).json({ error: 'Name required' });
+      const result = await pool.query(
+        `INSERT INTO assignment_rules (name, strategy, conditions, agent_pool, max_chats_per_agent, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [name, strategy || 'round_robin', conditions || {}, agent_pool || [], max_chats_per_agent || 20, is_active !== false]
+      );
+      res.json({ rule: result.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.put('/api/v1/assignment-rules/:id', auth, async (req, res) => {
+    try {
+      const fields = Object.entries(req.body).filter(([k]) => !['id','created_at'].includes(k));
+      if (fields.length === 0) return res.status(400).json({ error: 'No fields' });
+      const sets = fields.map(([k], i) => `${k}=$${i+1}`).join(', ');
+      const vals = fields.map(([,v]) => v);
+      vals.push(req.params.id);
+      const result = await pool.query(`UPDATE assignment_rules SET ${sets}, updated_at=NOW() WHERE id=$${vals.length} RETURNING *`, vals);
+      if (result.rows.length === 0) return res.status(404).json({ error: 'Rule not found' });
+      res.json({ rule: result.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete('/api/v1/assignment-rules/:id', auth, async (req, res) => {
+    try {
+      await pool.query('DELETE FROM assignment_rules WHERE id=$1', [req.params.id]);
+      res.json({ message: 'Rule deleted' });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // Auto-assign incoming chat (called internally)
+  app.post('/api/v1/chats/auto-assign', auth, async (req, res) => {
+    try {
+      const { session_id, farmer_language, message_text } = req.body;
+      if (!session_id) return res.status(400).json({ error: 'session_id required' });
+      const rules = await pool.query('SELECT * FROM assignment_rules WHERE is_active=true ORDER BY priority DESC');
+      let assignedAgent = null;
+      for (const rule of rules.rows) {
+        if (rule.conditions && rule.conditions.languages && farmer_language && !rule.conditions.languages.includes(farmer_language)) continue;
+        if (rule.conditions && rule.conditions.keywords && message_text) {
+          const hasKeyword = rule.conditions.keywords.some(kw => message_text.toLowerCase().includes(kw.toLowerCase()));
+          if (!hasKeyword) continue;
+        }
+        let agentQuery = "SELECT id, current_chat_count, last_assigned_at FROM admin_users WHERE agent_status='online' AND role != 'super_admin'";
+        let agentParams = [];
+        if (rule.agent_pool && rule.agent_pool.length > 0) {
+          agentQuery += " AND id = ANY($1)";
+          agentParams.push(rule.agent_pool);
+        }
+        const agents = await pool.query(agentQuery, agentParams);
+        const eligible = agents.rows.filter(a => a.current_chat_count < (rule.max_chats_per_agent || 20));
+        if (eligible.length === 0) continue;
+        if (rule.strategy === 'round_robin') {
+          eligible.sort((a, b) => new Date(a.last_assigned_at) - new Date(b.last_assigned_at));
+          assignedAgent = eligible[0];
+        } else if (rule.strategy === 'least_load') {
+          eligible.sort((a, b) => a.current_chat_count - b.current_chat_count);
+          assignedAgent = eligible[0];
+        }
+        if (assignedAgent) break;
+      }
+      if (!assignedAgent) {
+        const fallback = await pool.query("SELECT id, current_chat_count FROM admin_users WHERE agent_status='online' AND role != 'super_admin' ORDER BY current_chat_count ASC LIMIT 1");
+        if (fallback.rows.length > 0) assignedAgent = fallback.rows[0];
+      }
+      if (assignedAgent) {
+        await pool.query("UPDATE wa_chat_sessions SET assigned_to=$1, chat_status='assigned', updated_at=NOW() WHERE id=$2", [assignedAgent.id, session_id]);
+        await pool.query("UPDATE admin_users SET last_assigned_at=NOW(), current_chat_count=current_chat_count+1 WHERE id=$1", [assignedAgent.id]);
+        await pool.query("INSERT INTO assignment_history (session_id, assigned_to, reason) VALUES ($1, $2, 'auto_assignment')", [session_id, assignedAgent.id]);
+        const session = await pool.query('SELECT priority FROM wa_chat_sessions WHERE id=$1', [session_id]);
+        const priority = (session.rows[0] && session.rows[0].priority) || 'normal';
+        const sla = await pool.query('SELECT * FROM sla_policies WHERE priority=$1 AND is_active=true LIMIT 1', [priority]);
+        if (sla.rows.length > 0) {
+          const dueAt = new Date(Date.now() + sla.rows[0].first_response_minutes * 60000);
+          await pool.query("UPDATE wa_chat_sessions SET sla_policy_id=$1, sla_due_at=$2 WHERE id=$3", [sla.rows[0].id, dueAt, session_id]);
+        }
+        res.json({ assigned: true, agent_id: assignedAgent.id, strategy: 'auto' });
+      } else {
+        res.json({ assigned: false, reason: 'No agents available' });
+      }
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ===== SLA POLICIES =====
+  app.get('/api/v1/sla-policies', auth, async (req, res) => {
+    try {
+      const result = await pool.query('SELECT * FROM sla_policies ORDER BY first_response_minutes');
+      res.json({ policies: result.rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/v1/sla-policies', auth, async (req, res) => {
+    try {
+      const { name, priority, first_response_minutes, resolution_minutes, escalation_minutes, escalate_to, notify_channel } = req.body;
+      if (!name || !priority) return res.status(400).json({ error: 'Name and priority required' });
+      const result = await pool.query(
+        "INSERT INTO sla_policies (name, priority, first_response_minutes, resolution_minutes, escalation_minutes, escalate_to, notify_channel) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
+        [name, priority, first_response_minutes || 15, resolution_minutes || 240, escalation_minutes || 30, escalate_to || null, notify_channel || 'dashboard']
+      );
+      res.json({ policy: result.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.put('/api/v1/sla-policies/:id', auth, async (req, res) => {
+    try {
+      const fields = Object.entries(req.body).filter(([k]) => !['id','created_at'].includes(k));
+      if (fields.length === 0) return res.status(400).json({ error: 'No fields' });
+      const sets = fields.map(([k], i) => `${k}=$${i+1}`).join(', ');
+      const vals = fields.map(([,v]) => v);
+      vals.push(req.params.id);
+      const result = await pool.query(`UPDATE sla_policies SET ${sets} WHERE id=$${vals.length} RETURNING *`, vals);
+      res.json({ policy: result.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete('/api/v1/sla-policies/:id', auth, async (req, res) => {
+    try {
+      await pool.query('DELETE FROM sla_policies WHERE id=$1', [req.params.id]);
+      res.json({ message: 'Policy deleted' });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // SLA breach check (called periodically or on-demand)
+  app.post('/api/v1/sla/check-breaches', auth, async (req, res) => {
+    try {
+      const breached = await pool.query(`
+        SELECT s.id as session_id, s.sla_policy_id, s.assigned_to, p.escalate_to, p.name as policy_name
+        FROM wa_chat_sessions s
+        JOIN sla_policies p ON s.sla_policy_id = p.id
+        WHERE s.chat_status NOT IN ('resolved','closed')
+          AND s.sla_due_at < NOW()
+          AND s.escalated = false
+      `);
+      let breachCount = 0;
+      for (const session of breached.rows) {
+        await pool.query("INSERT INTO sla_breaches (session_id, policy_id, breach_type) VALUES ($1, $2, 'sla_breach')", [session.session_id, session.sla_policy_id]);
+        if (session.escalate_to) {
+          await pool.query("UPDATE wa_chat_sessions SET escalated=true, escalated_at=NOW(), escalated_to=$1, priority='urgent', updated_at=NOW() WHERE id=$2", [session.escalate_to, session.session_id]);
+          await pool.query("INSERT INTO assignment_history (session_id, assigned_from, assigned_to, reason) VALUES ($1, $2, $3, 'sla_escalation')", [session.session_id, session.assigned_to, session.escalate_to]);
+        } else {
+          await pool.query("UPDATE wa_chat_sessions SET escalated=true, escalated_at=NOW(), priority='urgent', updated_at=NOW() WHERE id=$1", [session.session_id]);
+        }
+        breachCount++;
+      }
+      res.json({ breaches_found: breachCount, checked_at: new Date().toISOString() });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get('/api/v1/sla/breaches', auth, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT b.*, s.assigned_to, s.farmer_id, p.name as policy_name, f.name as farmer_name, f.phone
+        FROM sla_breaches b
+        JOIN wa_chat_sessions s ON b.session_id = s.id
+        JOIN sla_policies p ON b.policy_id = p.id
+        LEFT JOIN farmers f ON s.farmer_id = f.id
+        WHERE b.acknowledged = false
+        ORDER BY b.breached_at DESC LIMIT 50
+      `);
+      res.json({ breaches: result.rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.put('/api/v1/sla/breaches/:id/acknowledge', auth, async (req, res) => {
+    try {
+      const result = await pool.query("UPDATE sla_breaches SET acknowledged=true, acknowledged_by=$1, acknowledged_at=NOW() WHERE id=$2 RETURNING *", [req.user.id, req.params.id]);
+      res.json({ breach: result.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ===== BULK ACTIONS =====
+  app.post('/api/v1/chats/bulk/assign', auth, async (req, res) => {
+    try {
+      const { session_ids, agent_id } = req.body;
+      if (!Array.isArray(session_ids) || session_ids.length === 0) return res.status(400).json({ error: 'session_ids array required' });
+      if (!agent_id) return res.status(400).json({ error: 'agent_id required' });
+      const result = await pool.query("UPDATE wa_chat_sessions SET assigned_to=$1, chat_status='assigned', updated_at=NOW() WHERE id = ANY($2) RETURNING id", [agent_id, session_ids]);
+      await pool.query("UPDATE admin_users SET current_chat_count = (SELECT COUNT(*) FROM wa_chat_sessions WHERE assigned_to=$1 AND chat_status NOT IN ('resolved','closed')) WHERE id=$1", [agent_id]);
+      for (const row of result.rows) {
+        await pool.query("INSERT INTO assignment_history (session_id, assigned_to, reason) VALUES ($1, $2, 'bulk_assign')", [row.id, agent_id]);
+      }
+      res.json({ updated: result.rowCount });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/v1/chats/bulk/label', auth, async (req, res) => {
+    try {
+      const { session_ids, labels, action } = req.body;
+      if (!Array.isArray(session_ids) || !Array.isArray(labels)) return res.status(400).json({ error: 'session_ids and labels arrays required' });
+      let query;
+      if (action === 'add') {
+        query = "UPDATE wa_chat_sessions SET labels = array_cat(labels, $1::text[]), updated_at=NOW() WHERE id = ANY($2) RETURNING id";
+      } else {
+        query = "UPDATE wa_chat_sessions SET labels = $1::text[], updated_at=NOW() WHERE id = ANY($2) RETURNING id";
+      }
+      const result = await pool.query(query, [labels, session_ids]);
+      res.json({ updated: result.rowCount });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/v1/chats/bulk/status', auth, async (req, res) => {
+    try {
+      const { session_ids, status } = req.body;
+      if (!Array.isArray(session_ids) || !status) return res.status(400).json({ error: 'session_ids and status required' });
+      const validStatuses = ['open', 'assigned', 'pending', 'resolved', 'closed'];
+      if (!validStatuses.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+      const extra = (status === 'resolved') ? ', resolved_at=NOW()' : '';
+      const result = await pool.query("UPDATE wa_chat_sessions SET chat_status=$1" + extra + ", updated_at=NOW() WHERE id = ANY($2) RETURNING id", [status, session_ids]);
+      if (status === 'resolved' || status === 'closed') {
+        await pool.query("UPDATE admin_users SET current_chat_count = (SELECT COUNT(*) FROM wa_chat_sessions WHERE assigned_to=admin_users.id AND chat_status NOT IN ('resolved','closed')) WHERE id IN (SELECT DISTINCT assigned_to FROM wa_chat_sessions WHERE id = ANY($1) AND assigned_to IS NOT NULL)", [session_ids]);
+      }
+      res.json({ updated: result.rowCount });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // Export chats as CSV
+  app.get('/api/v1/chats/export/csv', auth, async (req, res) => {
+    try {
+      const { status, assigned_to, from_date, to_date, labels } = req.query;
+      let query = "SELECT s.id, s.chat_status, s.priority, s.labels, s.created_at, s.resolved_at, s.unread_count, f.name as farmer_name, f.phone as farmer_phone, f.language, f.primary_crop, a.name as agent_name, (SELECT COUNT(*) FROM wa_messages WHERE session_id=s.id) as message_count, s.first_response_at, s.sla_due_at, s.escalated FROM wa_chat_sessions s LEFT JOIN farmers f ON s.farmer_id = f.id LEFT JOIN admin_users a ON s.assigned_to = a.id WHERE 1=1";
+      const params = [];
+      let paramIdx = 1;
+      if (status) { query += " AND s.chat_status=$" + paramIdx++; params.push(status); }
+      if (assigned_to) { query += " AND s.assigned_to=$" + paramIdx++; params.push(assigned_to); }
+      if (from_date) { query += " AND s.created_at >= $" + paramIdx++; params.push(from_date); }
+      if (to_date) { query += " AND s.created_at <= $" + paramIdx++; params.push(to_date); }
+      if (labels) { query += " AND s.labels && $" + paramIdx++ + "::text[]"; params.push(labels.split(',')); }
+      query += ' ORDER BY s.created_at DESC LIMIT 5000';
+      const result = await pool.query(query, params);
+      const headers = ['ID','Status','Priority','Farmer Name','Phone','Language','Crop','Agent','Messages','Labels','Created','Resolved','First Response','SLA Due','Escalated'];
+      let csv = headers.join(',') + '\n';
+      for (const row of result.rows) {
+        csv += [row.id, row.chat_status, row.priority, '"' + (row.farmer_name || '').replace(/"/g, '""') + '"', row.farmer_phone, row.language, row.primary_crop || '', '"' + (row.agent_name || 'Unassigned').replace(/"/g, '""') + '"', row.message_count, '"' + (row.labels || []).join(';') + '"', row.created_at, row.resolved_at || '', row.first_response_at || '', row.sla_due_at || '', row.escalated ? 'Yes' : 'No'].join(',') + '\n';
+      }
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="chats_export_' + new Date().toISOString().split('T')[0] + '.csv"');
+      res.send(csv);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ===== CHAT ANALYTICS =====
+  app.get('/api/v1/chat-analytics', auth, async (req, res) => {
+    try {
+      const { period } = req.query;
+      let since = new Date();
+      if (period === 'week') since.setDate(since.getDate() - 7);
+      else if (period === 'month') since.setDate(since.getDate() - 30);
+      else since.setHours(0, 0, 0, 0);
+      const [total, open, resolved, breaches, avgResponse, agentStats] = await Promise.all([
+        pool.query("SELECT COUNT(*) as count FROM wa_chat_sessions WHERE created_at >= $1", [since]),
+        pool.query("SELECT COUNT(*) as count FROM wa_chat_sessions WHERE chat_status NOT IN ('resolved','closed') AND created_at >= $1", [since]),
+        pool.query("SELECT COUNT(*) as count FROM wa_chat_sessions WHERE chat_status='resolved' AND resolved_at >= $1", [since]),
+        pool.query("SELECT COUNT(*) as count FROM sla_breaches WHERE breached_at >= $1 AND acknowledged=false", [since]),
+        pool.query("SELECT AVG(EXTRACT(EPOCH FROM (first_response_at - created_at))/60) as avg_minutes FROM wa_chat_sessions WHERE first_response_at IS NOT NULL AND created_at >= $1", [since]),
+        pool.query("SELECT a.id, a.name, a.agent_status, a.current_chat_count, COUNT(s.id) as total_handled, AVG(EXTRACT(EPOCH FROM (s.first_response_at - s.created_at))/60) as avg_response_min FROM admin_users a LEFT JOIN wa_chat_sessions s ON s.assigned_to = a.id AND s.created_at >= $1 WHERE a.role != 'super_admin' GROUP BY a.id, a.name, a.agent_status, a.current_chat_count", [since])
+      ]);
+      res.json({
+        period: period || 'today',
+        total_chats: parseInt(total.rows[0].count),
+        open_chats: parseInt(open.rows[0].count),
+        resolved_chats: parseInt(resolved.rows[0].count),
+        sla_breaches: parseInt(breaches.rows[0].count),
+        avg_first_response_min: Math.round(parseFloat(avgResponse.rows[0].avg_minutes) || 0),
+        agents: agentStats.rows
+      });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
   
   // ---
   app.get('/api/v1/templates', auth, async (req, res) => {
