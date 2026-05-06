@@ -1158,6 +1158,10 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
 
   console.log('Menu matched: ' + matchedMenu.menu_key + ' for farmer ' + farmerId);
 
+  // Clear any previous AI chat mode or pending action when a new menu is selected
+  deactivateAiChat(farmerId);
+  clearPendingAction(farmerId);
+
   // Check if this menu item has a linked flow
   const linkedFlow = (botConfig.flows || []).find(f =>
     f.menu_key === matchedMenu.menu_key || f.trigger_key === matchedMenu.menu_key
@@ -1387,6 +1391,24 @@ async function getMediaUrl(mediaId) {
 }
 
 // --- HEALTH ---
+
+  // --- SEND MESSAGE ENDPOINT (used by admin chat panel) ---
+  app.post('/api/v1/send-message', async (req, res) => {
+    try {
+      const { phone, message, session_id, farmer_id } = req.body;
+      if (!phone || !message) return res.status(400).json({ error: 'phone and message required' });
+      const sent = await sendWhatsAppMessage(phone, message);
+      if (sent) {
+        res.json({ success: true, message: 'Sent' });
+      } else {
+        res.status(500).json({ error: 'Failed to send' });
+      }
+    } catch (e) {
+      console.error('Send message endpoint error:', e.message);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
 app.get('/health', async (req, res) => {
   try {
     const r = await pool.query('SELECT NOW()');
