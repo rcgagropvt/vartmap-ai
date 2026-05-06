@@ -207,6 +207,11 @@ tr:hover{background:rgba(76,175,80,.03)}
       <div class="nav-item" onclick="navigate('referrals')"><i class="fas fa-user-plus"></i> Referrals</div>
     </div>
     <div class="nav-section">
+      <div class="nav-section-title">Team & SLA</div>
+      <div class="nav-item" onclick="navigate('assignment-rules')"><i class="fas fa-random"></i> Assignment Rules</div>
+      <div class="nav-item" onclick="navigate('sla-dashboard')"><i class="fas fa-clock"></i> SLA Dashboard</div>
+      <div class="nav-item" onclick="navigate('chat-analytics')"><i class="fas fa-chart-line"></i> Chat Analytics</div>
+    <div class="nav-section">
       <div class="nav-section-title">Data & Intelligence</div>
       <div class="nav-item" onclick="navigate('soil-data')"><i class="fas fa-globe-asia"></i> Soil Database</div>
       <div class="nav-item" onclick="navigate('schemes')"><i class="fas fa-university"></i> Govt Schemes</div>
@@ -327,7 +332,7 @@ function navigate(page) {
     'overview':'Overview','chats':'WhatsApp Chat','farmers':'Farmers','conversations':'Conversations',
     'templates':'Message Templates','campaigns':'Campaigns','spin-wheels':'Spin Wheels & Lucky Draw',
     'loyalty':'Loyalty Program','coupons':'Coupon Codes','rewards':'Rewards','referrals':'Referrals',
-    'soil-data':'Soil Nutrient Database','schemes':'Government Schemes','products':'Products',
+    'assignment-rules':'Assignment Rules','sla-dashboard':'SLA Dashboard','chat-analytics':'Chat Analytics','soil-data':'Soil Nutrient Database','schemes':'Government Schemes','products':'Products',
     'mandi-prices':'Mandi Prices','dealers':'Dealers','field-agents':'Field Agents','orders':'Orders',
     'moderation':'Moderation Queue','notifications':'Notification Logs','analytics':'Analytics',
     'services':'Service Health','admin-users':'Admin Users','audit-log':'Audit Log','settings':'Settings','catalog':'Product Catalog','bot-builder':'Bot Builder'
@@ -337,7 +342,7 @@ function navigate(page) {
     'overview':loadOverview,'chats':loadChats,'farmers':loadFarmers,'conversations':loadConversations,
     'templates':loadTemplates,'campaigns':loadCampaigns,'spin-wheels':loadSpinWheels,
     'loyalty':loadLoyaltyProgram,'coupons':loadCoupons,'rewards':loadRewards,'referrals':loadReferrals,
-    'soil-data':loadSoilData,'schemes':loadSchemes,'products':loadProducts,
+    'assignment-rules':loadAssignmentRules,'sla-dashboard':loadSLADashboard,'chat-analytics':loadChatAnalytics,'soil-data':loadSoilData,'schemes':loadSchemes,'products':loadProducts,
     'mandi-prices':loadMandi,'dealers':loadDealers,'field-agents':loadFieldAgents,'orders':loadOrders,
     'moderation':loadModeration,'notifications':loadNotifications,'analytics':loadAnalytics,'services':loadServices,'admin-users':loadAdminUsers,'audit-log':loadAuditLog,'settings':loadSettings,'catalog':loadProductCatalog,'bot-builder':loadBotBuilder};
   const loader = loaders[page];
@@ -653,6 +658,63 @@ let _agents = [];
 let _chatNotes = [];
 let _currentChatData = null;
 
+var _selectedChats = [];
+function toggleChatSelect(e, chatId) {
+  e.stopPropagation();
+  var idx = _selectedChats.indexOf(chatId);
+  if (idx > -1) _selectedChats.splice(idx, 1); else _selectedChats.push(chatId);
+  document.getElementById('chat-cb-'+chatId).checked = idx === -1;
+  updateBulkToolbar();
+}
+function selectAllChats(checked) {
+  var items = document.querySelectorAll('.chat-cb');
+  _selectedChats = [];
+  items.forEach(function(cb){ cb.checked = checked; if(checked) _selectedChats.push(cb.dataset.id); });
+  updateBulkToolbar();
+}
+function updateBulkToolbar() {
+  var tb = document.getElementById('bulkToolbar');
+  if (!tb) return;
+  if (_selectedChats.length > 0) {
+    tb.style.display = 'flex';
+    document.getElementById('bulkCount').textContent = _selectedChats.length + ' selected';
+  } else {
+    tb.style.display = 'none';
+  }
+}
+async function bulkAssign() {
+  if (_selectedChats.length === 0) return;
+  var agents = _agents || [];
+  var opts = agents.map(function(a){return '<option value="'+a.id+'">'+a.name+'</option>';}).join('');
+  openModal('Bulk Assign '+_selectedChats.length+' Chats', '<div><label style="font-weight:600;font-size:13px">Assign to Agent</label><select id="bulkAgentSelect" class="form-control">'+opts+'</select></div>', '<button class="btn btn-primary" onclick="submitBulkAssign()">Assign</button>');
+}
+async function submitBulkAssign() {
+  var agentId = document.getElementById('bulkAgentSelect').value;
+  if (!agentId) return alert('Select an agent');
+  try { await api('/api/v1/chats/bulk/assign', {method:'POST', body:JSON.stringify({session_ids:_selectedChats, agent_id:agentId})}); closeModal(); _selectedChats=[]; loadChats(); } catch(e){alert(e.message);}
+}
+async function bulkLabel() {
+  if (_selectedChats.length === 0) return;
+  openModal('Add Labels to '+_selectedChats.length+' Chats', '<div><label style="font-weight:600;font-size:13px">Labels (comma-separated)</label><input id="bulkLabelInput" class="form-control" placeholder="vip, follow-up, urgent"></div><div style="margin-top:8px"><label style="font-size:12px"><input type="radio" name="labelAction" value="add" checked> Add to existing</label> <label style="font-size:12px;margin-left:12px"><input type="radio" name="labelAction" value="set"> Replace all</label></div>', '<button class="btn btn-primary" onclick="submitBulkLabel()">Apply Labels</button>');
+}
+async function submitBulkLabel() {
+  var labels = document.getElementById('bulkLabelInput').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
+  if (labels.length === 0) return alert('Enter at least one label');
+  var action = document.querySelector('input[name="labelAction"]:checked').value;
+  try { await api('/api/v1/chats/bulk/label', {method:'POST', body:JSON.stringify({session_ids:_selectedChats, labels:labels, action:action})}); closeModal(); _selectedChats=[]; loadChats(); } catch(e){alert(e.message);}
+}
+async function bulkStatus(status) {
+  if (_selectedChats.length === 0) return;
+  if (!confirm('Change '+_selectedChats.length+' chats to "'+status+'"?')) return;
+  try { await api('/api/v1/chats/bulk/status', {method:'POST', body:JSON.stringify({session_ids:_selectedChats, status:status})}); _selectedChats=[]; loadChats(); } catch(e){alert(e.message);}
+}
+function bulkExport() {
+  var token = localStorage.getItem('token') || sessionStorage.getItem('token');
+  var params = '?token=' + token;
+  if (_chatFilters.status) params += '&status=' + _chatFilters.status;
+  window.open('/api/v1/chats/export/csv' + params, '_blank');
+}
+
 async function loadChats() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i></div>';
@@ -693,13 +755,14 @@ function renderChatLayout(chats) {
         // Header with agent status
         '<div style="padding:12px 16px;border-bottom:1px solid #e5e7eb;background:#f8fafc">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
-            '<h3 style="margin:0;font-size:16px;color:#1e293b"><i class="fab fa-whatsapp" style="color:#25D366;margin-right:6px"></i>Chats</h3>' +
+            '<h3 style="margin:0;font-size:16px;color:#1e293b"><input type="checkbox" onchange="selectAllChats(this.checked)" style="margin-right:6px;cursor:pointer" title="Select All"><i class="fab fa-whatsapp" style="color:#25D366;margin-right:6px"></i>Chats</h3>' +
             '<div style="display:flex;align-items:center;gap:8px">' +
               '<select onchange="updateAgentStatus(this.value)" style="padding:4px 8px;font-size:11px;border:1px solid #d1d5db;border-radius:4px;background:#fff">' +
                 '<option value="online" style="color:#10b981">Online</option>' +
                 '<option value="away" style="color:#f59e0b">Away</option>' +
                 '<option value="offline" style="color:#6b7280">Offline</option>' +
               '</select>' +
+              '<button onclick="bulkExport()" style="padding:4px 8px;font-size:11px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;cursor:pointer" title="Export CSV"><i class="fas fa-download"></i></button>' +
               '<button onclick="showQuickReplyManager()" style="padding:4px 8px;font-size:11px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;cursor:pointer" title="Quick Replies"><i class="fas fa-bolt"></i></button>' +
             '</div>' +
           '</div>' +
@@ -713,6 +776,15 @@ function renderChatLayout(chats) {
           '<button onclick="_chatFilters.status=\'assigned\';loadChats()" style="flex:1;padding:8px 4px;font-size:11px;border:none;cursor:pointer;background:'+(_chatFilters.status==='assigned'?'#eff6ff':'#fff')+';color:'+(_chatFilters.status==='assigned'?'#2563eb':'#6b7280')+';border-bottom:2px solid '+(_chatFilters.status==='assigned'?'#2563eb':'transparent')+'">Mine</button>' +
           '<button onclick="_chatFilters.status=\'resolved\';loadChats()" style="flex:1;padding:8px 4px;font-size:11px;border:none;cursor:pointer;background:'+(_chatFilters.status==='resolved'?'#eff6ff':'#fff')+';color:'+(_chatFilters.status==='resolved'?'#2563eb':'#6b7280')+';border-bottom:2px solid '+(_chatFilters.status==='resolved'?'#2563eb':'transparent')+'">Resolved</button>' +
         '</div>' +
+        // Bulk action toolbar
+        '<div id="bulkToolbar" style="display:none;padding:8px 12px;background:#1e40af;color:#fff;align-items:center;gap:8px;font-size:12px">' +
+          '<span id="bulkCount">0 selected</span>' +
+          '<button onclick="bulkAssign()" style="padding:3px 8px;font-size:11px;background:#3b82f6;color:#fff;border:none;border-radius:4px;cursor:pointer"><i class="fas fa-user-plus"></i> Assign</button>' +
+          '<button onclick="bulkLabel()" style="padding:3px 8px;font-size:11px;background:#8b5cf6;color:#fff;border:none;border-radius:4px;cursor:pointer"><i class="fas fa-tag"></i> Label</button>' +
+          '<button onclick="bulkStatus(\'resolved\')" style="padding:3px 8px;font-size:11px;background:#10b981;color:#fff;border:none;border-radius:4px;cursor:pointer"><i class="fas fa-check"></i> Resolve</button>' +
+          '<button onclick="bulkStatus(\'closed\')" style="padding:3px 8px;font-size:11px;background:#6b7280;color:#fff;border:none;border-radius:4px;cursor:pointer"><i class="fas fa-times"></i> Close</button>' +
+          '<button onclick="_selectedChats=[];updateBulkToolbar();loadChats()" style="padding:3px 8px;font-size:11px;background:transparent;color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:4px;cursor:pointer;margin-left:auto">Cancel</button>' +
+        '</div>' +
         // Chat list
         '<div id="chatListItems" style="flex:1;overflow-y:auto">' +
           (filtered.length ? filtered.map(function(c){
@@ -721,6 +793,7 @@ function renderChatLayout(chats) {
             return '<div class="chat-item" id="chat-'+c.id+'" onclick="openChatSession(\''+c.id+'\')" style="padding:12px 16px;border-bottom:1px solid #f1f5f9;cursor:pointer;transition:background 0.15s;'+(unread?'background:#eff6ff;':'background:#fff;')+'" onmouseenter="this.style.background=\'#f8fafc\'" onmouseleave="this.style.background=\''+(unread?'#eff6ff':'#fff')+'\'">' +
               '<div style="display:flex;justify-content:space-between;align-items:start">' +
                 '<div style="display:flex;align-items:center;gap:8px">' +
+                  '<input type="checkbox" class="chat-cb" data-id="'+c.id+'" id="chat-cb-'+c.id+'" onclick="toggleChatSelect(event,'''+c.id+''')"'+(_selectedChats.includes(c.id)?' checked':'')+' style="cursor:pointer;flex-shrink:0">' +
                   '<div style="width:36px;height:36px;border-radius:50%;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#475569">'+(c.farmer_name||'?').charAt(0).toUpperCase()+'</div>' +
                   '<div>' +
                     '<div style="font-weight:'+(unread?'700':'500')+';font-size:13px;color:#1e293b">'+(c.farmer_name||'Unknown')+'</div>' +
@@ -1021,6 +1094,417 @@ function searchChats(q) {
 }
 
 // ------
+
+// ===== ASSIGNMENT RULES MANAGER =====
+async function loadAssignmentRules() {
+  var el = document.getElementById('content');
+  try {
+    var [rulesData, agentsData] = await Promise.all([
+      api('/api/v1/assignment-rules'),
+      api('/api/v1/agents')
+    ]);
+    var rules = rulesData.rules || [];
+    var agents = agentsData.agents || [];
+    
+    el.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <div>
+          <h3 style="margin:0">Auto-Assignment Rules</h3>
+          <small style="color:#666">Configure how incoming chats are distributed to agents</small>
+        </div>
+        <button class="btn btn-primary" onclick="showCreateRuleModal()"><i class="fas fa-plus"></i> New Rule</button>
+      </div>
+      <div style="display:grid;gap:16px">
+        ${rules.length === 0 ? '<div class="card" style="padding:40px;text-align:center;color:#666"><i class="fas fa-random" style="font-size:48px;margin-bottom:16px;opacity:.3"></i><p>No assignment rules configured</p><p style="font-size:13px">Create a rule to auto-assign incoming chats to agents</p></div>' : ''}
+        ${rules.map(r => `
+          <div class="card" style="padding:16px;border-left:4px solid ${r.is_active ? '#4CAF50' : '#ccc'}">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start">
+              <div>
+                <h4 style="margin:0 0 4px">${r.name} <span style="font-size:11px;padding:2px 8px;border-radius:12px;background:${r.strategy==='round_robin'?'#E3F2FD':'#FFF3E0'};color:${r.strategy==='round_robin'?'#1565C0':'#E65100'}">${r.strategy.replace('_',' ')}</span></h4>
+                <div style="font-size:13px;color:#666;margin-top:4px">
+                  <span><i class="fas fa-users"></i> Max ${r.max_chats_per_agent || 20} chats/agent</span>
+                  <span style="margin-left:12px"><i class="fas fa-sort-numeric-down"></i> Priority: ${r.priority || 0}</span>
+                  ${r.conditions && r.conditions.languages ? '<span style="margin-left:12px"><i class="fas fa-language"></i> ' + r.conditions.languages.join(', ') + '</span>' : ''}
+                  ${r.conditions && r.conditions.keywords ? '<span style="margin-left:12px"><i class="fas fa-key"></i> ' + r.conditions.keywords.join(', ') + '</span>' : ''}
+                  ${r.agent_pool && r.agent_pool.length > 0 ? '<span style="margin-left:12px"><i class="fas fa-user-check"></i> ' + r.agent_pool.length + ' agents in pool</span>' : '<span style="margin-left:12px"><i class="fas fa-globe"></i> All online agents</span>'}
+                </div>
+              </div>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-sm ${r.is_active?'btn-success':'btn-outline'}" onclick="toggleRule('${r.id}',${!r.is_active})">${r.is_active?'Active':'Inactive'}</button>
+                <button class="btn btn-sm btn-outline" onclick="editRule('${r.id}')"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-sm btn-danger" onclick="deleteRule('${r.id}')"><i class="fas fa-trash"></i></button>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="card" style="margin-top:24px;padding:20px;background:#f8f9fa">
+        <h4 style="margin:0 0 12px"><i class="fas fa-info-circle" style="color:#1976D2"></i> How Auto-Assignment Works</h4>
+        <div style="font-size:13px;color:#555;line-height:1.8">
+          <p><strong>Round Robin:</strong> Assigns to the agent who was assigned longest ago (fair rotation).</p>
+          <p><strong>Least Load:</strong> Assigns to the agent with fewest active chats (capacity-based).</p>
+          <p><strong>Priority:</strong> Higher priority rules are evaluated first. First matching rule wins.</p>
+          <p><strong>Conditions:</strong> Filter by farmer language or message keywords before assigning.</p>
+          <p><strong>Agent Pool:</strong> Restrict assignment to specific agents, or leave empty for all online agents.</p>
+        </div>
+      </div>`;
+  } catch(e) { el.innerHTML = '<div class="card" style="padding:20px;color:red">Error: '+e.message+'</div>'; }
+}
+
+function showCreateRuleModal() {
+  openModal('Create Assignment Rule', `
+    <div style="display:grid;gap:14px">
+      <div><label style="font-weight:600;font-size:13px">Rule Name</label><input id="ruleName" class="form-control" placeholder="e.g. Hindi Speaker Round Robin"></div>
+      <div><label style="font-weight:600;font-size:13px">Strategy</label>
+        <select id="ruleStrategy" class="form-control">
+          <option value="round_robin">Round Robin (fair rotation)</option>
+          <option value="least_load">Least Load (capacity-based)</option>
+        </select></div>
+      <div><label style="font-weight:600;font-size:13px">Max Chats Per Agent</label><input id="ruleMaxChats" class="form-control" type="number" value="20" min="1"></div>
+      <div><label style="font-weight:600;font-size:13px">Priority (higher = checked first)</label><input id="rulePriority" class="form-control" type="number" value="0"></div>
+      <div><label style="font-weight:600;font-size:13px">Language Filter (comma-separated, e.g. hi,en)</label><input id="ruleLanguages" class="form-control" placeholder="Leave empty for all languages"></div>
+      <div><label style="font-weight:600;font-size:13px">Keyword Filter (comma-separated)</label><input id="ruleKeywords" class="form-control" placeholder="e.g. urgent,emergency"></div>
+    </div>
+  `, '<button class="btn btn-primary" onclick="submitRule()">Create Rule</button>');
+}
+
+async function submitRule() {
+  var name = document.getElementById('ruleName').value.trim();
+  if (!name) return alert('Name required');
+  var conditions = {};
+  var langs = document.getElementById('ruleLanguages').value.trim();
+  if (langs) conditions.languages = langs.split(',').map(s=>s.trim());
+  var kws = document.getElementById('ruleKeywords').value.trim();
+  if (kws) conditions.keywords = kws.split(',').map(s=>s.trim());
+  try {
+    await api('/api/v1/assignment-rules', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: name,
+        strategy: document.getElementById('ruleStrategy').value,
+        max_chats_per_agent: parseInt(document.getElementById('ruleMaxChats').value) || 20,
+        priority: parseInt(document.getElementById('rulePriority').value) || 0,
+        conditions: conditions
+      })
+    });
+    closeModal(); loadAssignmentRules();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function toggleRule(id, active) {
+  try { await api('/api/v1/assignment-rules/'+id, { method:'PUT', body:JSON.stringify({is_active:active}) }); loadAssignmentRules(); }
+  catch(e) { alert(e.message); }
+}
+
+async function deleteRule(id) {
+  if (!confirm('Delete this assignment rule?')) return;
+  try { await api('/api/v1/assignment-rules/'+id, {method:'DELETE'}); loadAssignmentRules(); }
+  catch(e) { alert(e.message); }
+}
+
+async function editRule(id) {
+  try {
+    var d = await api('/api/v1/assignment-rules');
+    var rule = (d.rules || []).find(r => r.id === id);
+    if (!rule) return alert('Rule not found');
+    openModal('Edit Rule: ' + rule.name, `
+      <div style="display:grid;gap:14px">
+        <div><label style="font-weight:600;font-size:13px">Rule Name</label><input id="editRuleName" class="form-control" value="${rule.name}"></div>
+        <div><label style="font-weight:600;font-size:13px">Strategy</label>
+          <select id="editRuleStrategy" class="form-control">
+            <option value="round_robin" ${rule.strategy==='round_robin'?'selected':''}>Round Robin</option>
+            <option value="least_load" ${rule.strategy==='least_load'?'selected':''}>Least Load</option>
+          </select></div>
+        <div><label style="font-weight:600;font-size:13px">Max Chats Per Agent</label><input id="editRuleMaxChats" class="form-control" type="number" value="${rule.max_chats_per_agent||20}"></div>
+        <div><label style="font-weight:600;font-size:13px">Priority</label><input id="editRulePriority" class="form-control" type="number" value="${rule.priority||0}"></div>
+        <div><label style="font-weight:600;font-size:13px">Language Filter</label><input id="editRuleLanguages" class="form-control" value="${rule.conditions&&rule.conditions.languages?rule.conditions.languages.join(','):''}"></div>
+        <div><label style="font-weight:600;font-size:13px">Keyword Filter</label><input id="editRuleKeywords" class="form-control" value="${rule.conditions&&rule.conditions.keywords?rule.conditions.keywords.join(','):''}"></div>
+      </div>
+    `, '<button class="btn btn-primary" onclick="submitEditRule(\''+id+'\')">Save Changes</button>');
+  } catch(e) { alert(e.message); }
+}
+
+async function submitEditRule(id) {
+  var conditions = {};
+  var langs = document.getElementById('editRuleLanguages').value.trim();
+  if (langs) conditions.languages = langs.split(',').map(s=>s.trim());
+  var kws = document.getElementById('editRuleKeywords').value.trim();
+  if (kws) conditions.keywords = kws.split(',').map(s=>s.trim());
+  try {
+    await api('/api/v1/assignment-rules/'+id, {
+      method: 'PUT',
+      body: JSON.stringify({
+        name: document.getElementById('editRuleName').value.trim(),
+        strategy: document.getElementById('editRuleStrategy').value,
+        max_chats_per_agent: parseInt(document.getElementById('editRuleMaxChats').value) || 20,
+        priority: parseInt(document.getElementById('editRulePriority').value) || 0,
+        conditions: conditions
+      })
+    });
+    closeModal(); loadAssignmentRules();
+  } catch(e) { alert(e.message); }
+}
+
+// ===== SLA DASHBOARD =====
+async function loadSLADashboard() {
+  var el = document.getElementById('content');
+  try {
+    var [policiesData, breachesData, analyticsData] = await Promise.all([
+      api('/api/v1/sla-policies'),
+      api('/api/v1/sla/breaches'),
+      api('/api/v1/chat-analytics?period=today')
+    ]);
+    var policies = policiesData.policies || [];
+    var breaches = breachesData.breaches || [];
+    var stats = analyticsData;
+
+    el.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <div>
+          <h3 style="margin:0">SLA Dashboard</h3>
+          <small style="color:#666">Monitor response times, breaches, and escalations</small>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-sm btn-outline" onclick="checkSLABreaches()"><i class="fas fa-sync"></i> Check Now</button>
+          <button class="btn btn-sm btn-primary" onclick="showCreateSLAModal()"><i class="fas fa-plus"></i> New Policy</button>
+        </div>
+      </div>
+
+      <!-- SLA Stats Cards -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px">
+        <div class="card" style="padding:16px;text-align:center;border-top:3px solid #4CAF50">
+          <div style="font-size:28px;font-weight:700;color:#4CAF50">${stats.resolved_chats || 0}</div>
+          <div style="font-size:12px;color:#666">Resolved Today</div>
+        </div>
+        <div class="card" style="padding:16px;text-align:center;border-top:3px solid #FF9800">
+          <div style="font-size:28px;font-weight:700;color:#FF9800">${stats.open_chats || 0}</div>
+          <div style="font-size:12px;color:#666">Open Chats</div>
+        </div>
+        <div class="card" style="padding:16px;text-align:center;border-top:3px solid #F44336">
+          <div style="font-size:28px;font-weight:700;color:#F44336">${breaches.length}</div>
+          <div style="font-size:12px;color:#666">Active Breaches</div>
+        </div>
+        <div class="card" style="padding:16px;text-align:center;border-top:3px solid #2196F3">
+          <div style="font-size:28px;font-weight:700;color:#2196F3">${stats.avg_first_response_min || 0}m</div>
+          <div style="font-size:12px;color:#666">Avg Response</div>
+        </div>
+      </div>
+
+      <!-- Active Breaches -->
+      ${breaches.length > 0 ? `
+      <div class="card" style="padding:20px;margin-bottom:24px;border-left:4px solid #F44336">
+        <h4 style="margin:0 0 12px;color:#D32F2F"><i class="fas fa-exclamation-triangle"></i> Active SLA Breaches (${breaches.length})</h4>
+        <div style="max-height:300px;overflow-y:auto">
+          <table style="width:100%;font-size:13px;border-collapse:collapse">
+            <tr style="background:#fafafa;font-weight:600"><td style="padding:8px">Farmer</td><td>Policy</td><td>Breach Type</td><td>Time</td><td>Action</td></tr>
+            ${breaches.map(b => `
+              <tr style="border-bottom:1px solid #eee">
+                <td style="padding:8px">${b.farmer_name || 'Unknown'} <br><small style="color:#999">${b.phone || ''}</small></td>
+                <td>${b.policy_name}</td>
+                <td><span style="padding:2px 8px;border-radius:10px;background:#FFEBEE;color:#D32F2F;font-size:11px">${b.breach_type}</span></td>
+                <td><small>${new Date(b.breached_at).toLocaleString()}</small></td>
+                <td><button class="btn btn-sm btn-outline" onclick="acknowledgeBreach('${b.id}')"><i class="fas fa-check"></i> Ack</button></td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+      </div>` : '<div class="card" style="padding:20px;margin-bottom:24px;text-align:center;color:#4CAF50"><i class="fas fa-check-circle" style="font-size:32px"></i><p style="margin-top:8px">No active SLA breaches</p></div>'}
+
+      <!-- SLA Policies -->
+      <div class="card" style="padding:20px">
+        <h4 style="margin:0 0 16px">SLA Policies</h4>
+        <table style="width:100%;font-size:13px;border-collapse:collapse">
+          <tr style="background:#fafafa;font-weight:600"><td style="padding:10px">Policy</td><td>Priority</td><td>First Response</td><td>Resolution</td><td>Escalation</td><td>Status</td><td>Actions</td></tr>
+          ${policies.map(p => `
+            <tr style="border-bottom:1px solid #eee">
+              <td style="padding:10px;font-weight:500">${p.name}</td>
+              <td><span style="padding:2px 8px;border-radius:10px;font-size:11px;background:${p.priority==='urgent'?'#FFEBEE':p.priority==='high'?'#FFF3E0':p.priority==='normal'?'#E3F2FD':'#F5F5F5'};color:${p.priority==='urgent'?'#D32F2F':p.priority==='high'?'#E65100':p.priority==='normal'?'#1565C0':'#666'}">${p.priority}</span></td>
+              <td>${p.first_response_minutes} min</td>
+              <td>${p.resolution_minutes} min</td>
+              <td>${p.escalation_minutes} min</td>
+              <td>${p.is_active ? '<span style="color:#4CAF50">Active</span>' : '<span style="color:#999">Inactive</span>'}</td>
+              <td>
+                <button class="btn btn-sm btn-outline" onclick="editSLAPolicy('${p.id}')"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-sm btn-danger" onclick="deleteSLAPolicy('${p.id}')"><i class="fas fa-trash"></i></button>
+              </td>
+            </tr>
+          `).join('')}
+        </table>
+      </div>`;
+  } catch(e) { el.innerHTML = '<div class="card" style="padding:20px;color:red">Error: '+e.message+'</div>'; }
+}
+
+async function checkSLABreaches() {
+  try { var r = await api('/api/v1/sla/check-breaches', {method:'POST'}); alert('Checked: ' + r.breaches_found + ' breaches found'); loadSLADashboard(); }
+  catch(e) { alert(e.message); }
+}
+
+async function acknowledgeBreach(id) {
+  try { await api('/api/v1/sla/breaches/'+id+'/acknowledge', {method:'PUT'}); loadSLADashboard(); }
+  catch(e) { alert(e.message); }
+}
+
+function showCreateSLAModal() {
+  openModal('Create SLA Policy', `
+    <div style="display:grid;gap:14px">
+      <div><label style="font-weight:600;font-size:13px">Policy Name</label><input id="slaName" class="form-control" placeholder="e.g. VIP Farmers"></div>
+      <div><label style="font-weight:600;font-size:13px">Priority Level</label>
+        <select id="slaPriority" class="form-control">
+          <option value="low">Low</option>
+          <option value="normal" selected>Normal</option>
+          <option value="high">High</option>
+          <option value="urgent">Urgent</option>
+        </select></div>
+      <div><label style="font-weight:600;font-size:13px">First Response (minutes)</label><input id="slaFirstResponse" class="form-control" type="number" value="15"></div>
+      <div><label style="font-weight:600;font-size:13px">Resolution Time (minutes)</label><input id="slaResolution" class="form-control" type="number" value="240"></div>
+      <div><label style="font-weight:600;font-size:13px">Escalation After (minutes)</label><input id="slaEscalation" class="form-control" type="number" value="30"></div>
+    </div>
+  `, '<button class="btn btn-primary" onclick="submitSLAPolicy()">Create Policy</button>');
+}
+
+async function submitSLAPolicy() {
+  var name = document.getElementById('slaName').value.trim();
+  if (!name) return alert('Name required');
+  try {
+    await api('/api/v1/sla-policies', {
+      method:'POST',
+      body:JSON.stringify({
+        name: name,
+        priority: document.getElementById('slaPriority').value,
+        first_response_minutes: parseInt(document.getElementById('slaFirstResponse').value) || 15,
+        resolution_minutes: parseInt(document.getElementById('slaResolution').value) || 240,
+        escalation_minutes: parseInt(document.getElementById('slaEscalation').value) || 30
+      })
+    });
+    closeModal(); loadSLADashboard();
+  } catch(e) { alert(e.message); }
+}
+
+async function editSLAPolicy(id) {
+  var d = await api('/api/v1/sla-policies');
+  var p = (d.policies||[]).find(x=>x.id===id);
+  if(!p) return;
+  openModal('Edit: '+p.name, `
+    <div style="display:grid;gap:14px">
+      <div><label style="font-weight:600;font-size:13px">Name</label><input id="editSlaName" class="form-control" value="${p.name}"></div>
+      <div><label style="font-weight:600;font-size:13px">Priority</label>
+        <select id="editSlaPriority" class="form-control">
+          <option value="low" ${p.priority==='low'?'selected':''}>Low</option>
+          <option value="normal" ${p.priority==='normal'?'selected':''}>Normal</option>
+          <option value="high" ${p.priority==='high'?'selected':''}>High</option>
+          <option value="urgent" ${p.priority==='urgent'?'selected':''}>Urgent</option>
+        </select></div>
+      <div><label style="font-weight:600;font-size:13px">First Response (min)</label><input id="editSlaFR" class="form-control" type="number" value="${p.first_response_minutes}"></div>
+      <div><label style="font-weight:600;font-size:13px">Resolution (min)</label><input id="editSlaRes" class="form-control" type="number" value="${p.resolution_minutes}"></div>
+      <div><label style="font-weight:600;font-size:13px">Escalation (min)</label><input id="editSlaEsc" class="form-control" type="number" value="${p.escalation_minutes}"></div>
+      <div><label style="font-weight:600;font-size:13px">Active</label><select id="editSlaActive" class="form-control"><option value="true" ${p.is_active?'selected':''}>Yes</option><option value="false" ${!p.is_active?'selected':''}>No</option></select></div>
+    </div>
+  `, '<button class="btn btn-primary" onclick="submitEditSLA(\''+id+'\')">Save</button>');
+}
+
+async function submitEditSLA(id) {
+  try {
+    await api('/api/v1/sla-policies/'+id, { method:'PUT', body:JSON.stringify({
+      name: document.getElementById('editSlaName').value.trim(),
+      priority: document.getElementById('editSlaPriority').value,
+      first_response_minutes: parseInt(document.getElementById('editSlaFR').value),
+      resolution_minutes: parseInt(document.getElementById('editSlaRes').value),
+      escalation_minutes: parseInt(document.getElementById('editSlaEsc').value),
+      is_active: document.getElementById('editSlaActive').value === 'true'
+    })});
+    closeModal(); loadSLADashboard();
+  } catch(e) { alert(e.message); }
+}
+
+async function deleteSLAPolicy(id) {
+  if(!confirm('Delete this SLA policy?')) return;
+  try { await api('/api/v1/sla-policies/'+id, {method:'DELETE'}); loadSLADashboard(); } catch(e){alert(e.message);}
+}
+
+// ===== CHAT ANALYTICS =====
+async function loadChatAnalytics() {
+  var el = document.getElementById('content');
+  try {
+    var [today, week, month] = await Promise.all([
+      api('/api/v1/chat-analytics?period=today'),
+      api('/api/v1/chat-analytics?period=week'),
+      api('/api/v1/chat-analytics?period=month')
+    ]);
+
+    el.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <div>
+          <h3 style="margin:0">Chat Analytics</h3>
+          <small style="color:#666">Performance metrics and agent statistics</small>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-sm btn-outline" onclick="exportChatsCSV()"><i class="fas fa-download"></i> Export CSV</button>
+          <button class="btn btn-sm btn-outline" onclick="loadChatAnalytics()"><i class="fas fa-sync"></i> Refresh</button>
+        </div>
+      </div>
+
+      <!-- Period Comparison -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px">
+        <div class="card" style="padding:16px">
+          <h5 style="margin:0 0 12px;color:#666;font-size:12px;text-transform:uppercase">Today</h5>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
+            <div><strong style="font-size:20px;color:#1B5E20">${today.total_chats}</strong><br>Total</div>
+            <div><strong style="font-size:20px;color:#4CAF50">${today.resolved_chats}</strong><br>Resolved</div>
+            <div><strong style="font-size:20px;color:#FF9800">${today.open_chats}</strong><br>Open</div>
+            <div><strong style="font-size:20px;color:#2196F3">${today.avg_first_response_min}m</strong><br>Avg Response</div>
+          </div>
+        </div>
+        <div class="card" style="padding:16px">
+          <h5 style="margin:0 0 12px;color:#666;font-size:12px;text-transform:uppercase">This Week</h5>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
+            <div><strong style="font-size:20px;color:#1B5E20">${week.total_chats}</strong><br>Total</div>
+            <div><strong style="font-size:20px;color:#4CAF50">${week.resolved_chats}</strong><br>Resolved</div>
+            <div><strong style="font-size:20px;color:#FF9800">${week.open_chats}</strong><br>Open</div>
+            <div><strong style="font-size:20px;color:#2196F3">${week.avg_first_response_min}m</strong><br>Avg Response</div>
+          </div>
+        </div>
+        <div class="card" style="padding:16px">
+          <h5 style="margin:0 0 12px;color:#666;font-size:12px;text-transform:uppercase">This Month</h5>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
+            <div><strong style="font-size:20px;color:#1B5E20">${month.total_chats}</strong><br>Total</div>
+            <div><strong style="font-size:20px;color:#4CAF50">${month.resolved_chats}</strong><br>Resolved</div>
+            <div><strong style="font-size:20px;color:#FF9800">${month.open_chats}</strong><br>Open</div>
+            <div><strong style="font-size:20px;color:#2196F3">${month.avg_first_response_min}m</strong><br>Avg Response</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SLA Breach Summary -->
+      <div class="card" style="padding:20px;margin-bottom:24px;${today.sla_breaches > 0 ? 'border-left:4px solid #F44336' : 'border-left:4px solid #4CAF50'}">
+        <h4 style="margin:0 0 8px">${today.sla_breaches > 0 ? '<i class="fas fa-exclamation-triangle" style="color:#F44336"></i>' : '<i class="fas fa-check-circle" style="color:#4CAF50"></i>'} SLA Status</h4>
+        <p style="margin:0;font-size:13px;color:#666">${today.sla_breaches > 0 ? today.sla_breaches + ' unacknowledged breaches today. <a href="#" onclick="navigate(\'sla-dashboard\');return false">View SLA Dashboard</a>' : 'All SLAs met today. Great work!'}</p>
+      </div>
+
+      <!-- Agent Performance -->
+      <div class="card" style="padding:20px">
+        <h4 style="margin:0 0 16px">Agent Performance (Today)</h4>
+        ${today.agents && today.agents.length > 0 ? `
+        <table style="width:100%;font-size:13px;border-collapse:collapse">
+          <tr style="background:#fafafa;font-weight:600"><td style="padding:10px">Agent</td><td>Status</td><td>Active Chats</td><td>Handled Today</td><td>Avg Response</td></tr>
+          ${today.agents.map(a => `
+            <tr style="border-bottom:1px solid #eee">
+              <td style="padding:10px;font-weight:500">${a.name || 'Unknown'}</td>
+              <td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${a.agent_status==='online'?'#4CAF50':a.agent_status==='busy'?'#FF9800':'#ccc'};margin-right:6px"></span>${a.agent_status || 'offline'}</td>
+              <td>${a.current_chat_count || 0}</td>
+              <td>${a.total_handled || 0}</td>
+              <td>${a.avg_response_min ? Math.round(a.avg_response_min) + ' min' : '-'}</td>
+            </tr>
+          `).join('')}
+        </table>` : '<p style="color:#666;text-align:center">No agent data available</p>'}
+      </div>`;
+  } catch(e) { el.innerHTML = '<div class="card" style="padding:20px;color:red">Error: '+e.message+'</div>'; }
+}
+
+function exportChatsCSV() {
+  var token = localStorage.getItem('token') || sessionStorage.getItem('token');
+  window.open('/api/v1/chats/export/csv?token=' + token, '_blank');
+}
+
 async function loadFarmers() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
