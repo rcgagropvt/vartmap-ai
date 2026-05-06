@@ -1089,7 +1089,7 @@ function searchChats(q) {
 
 // ===== ASSIGNMENT RULES MANAGER =====
 async function loadAssignmentRules() {
-  var el = document.getElementById('content');
+  var el = document.getElementById('pageContent');
   try {
     var [rulesData, agentsData] = await Promise.all([
       api('/api/v1/assignment-rules'),
@@ -1239,7 +1239,7 @@ async function submitEditRule(id) {
 
 // ===== SLA DASHBOARD =====
 async function loadSLADashboard() {
-  var el = document.getElementById('content');
+  var el = document.getElementById('pageContent');
   try {
     var [policiesData, breachesData, analyticsData] = await Promise.all([
       api('/api/v1/sla-policies'),
@@ -1415,7 +1415,7 @@ async function deleteSLAPolicy(id) {
 
 // ===== CHAT ANALYTICS =====
 async function loadChatAnalytics() {
-  var el = document.getElementById('content');
+  var el = document.getElementById('pageContent');
   try {
     var [today, week, month] = await Promise.all([
       api('/api/v1/chat-analytics?period=today'),
