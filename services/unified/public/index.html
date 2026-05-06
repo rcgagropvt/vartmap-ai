@@ -645,110 +645,375 @@ async function loadOverview() {
 }
 
 // ------
+// --- ENHANCED CHAT MODULE ---
+let _chatFilters = { status: '', assigned: '', label: '', search: '' };
+let _quickReplies = [];
+let _chatLabels = [];
+let _agents = [];
+let _chatNotes = [];
+let _currentChatData = null;
+
 async function loadChats() {
   const el = document.getElementById('pageContent');
-  el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading chats...</p></div>';
+  el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i></div>';
   try {
-    const d = await api('/api/v1/chats?limit=100');
-    el.innerHTML = `
-    <div class="chat-layout">
-      <div class="chat-list">
-        <div class="chat-list-header">
-          <h3><i class="fab fa-whatsapp" style="color:#25D366"></i> Chats (${d.chats.length})</h3>
-          <div class="search-box"><i class="fas fa-search"></i><input placeholder="Search farmers..." oninput="searchChats(this.value)"></div>
-        </div>
-        <div id="chatListItems">
-          ${d.chats.length ? d.chats.map(c => `
-            <div class="chat-item" id="chat-${c.id}" onclick="openChatSession('${c.id}')">
-              <div class="chat-name"><span>${c.farmer_name || 'Unknown'}</span><span style="font-size:11px;color:var(--text-light)">${timeAgo(c.last_message_at)}</span></div>
-              <div class="chat-preview">${c.farmer_phone || ''} | ${c.village || ''}</div>
-              <div class="chat-meta">
-                <span class="status ${c.status}">${c.status}</span>
-                ${c.unread_count > 0 ? `<span class="unread">${c.unread_count}</span>` : ''}
-              </div>
-            </div>
-          `).join('') : '<div class="empty"><p>No chats yet. Start a chat from the Farmers page.</p></div>'}
-        </div>
-      </div>
-      <div class="chat-main" id="chatMain">
-        <div class="empty" style="flex:1;display:flex;align-items:center;justify-content:center"><div><i class="fab fa-whatsapp" style="font-size:64px;color:#25D366;opacity:.2"></i><p style="margin-top:16px">Select a chat to start messaging</p></div></div>
-      </div>
-    </div>`;
-  } catch (e) { el.innerHTML = '<div class="empty"><i class="fas fa-exclamation-triangle"></i><p>Error loading chats</p></div>'; }
+    const [chatsResp, labelsResp, agentsResp, qrResp] = await Promise.all([
+      api('/api/v1/chats?limit=100'),
+      api('/api/v1/chat-labels').catch(() => ({labels:[]})),
+      api('/api/v1/agents').catch(() => ({agents:[]})),
+      api('/api/v1/quick-replies').catch(() => ({replies:[]}))
+    ]);
+    _chatLabels = labelsResp.labels || [];
+    _agents = agentsResp.agents || [];
+    _quickReplies = qrResp.replies || [];
+    var chats = chatsResp.chats || [];
+    renderChatLayout(chats);
+  } catch(e) { el.innerHTML = '<div class="empty"><i class="fas fa-exclamation-triangle"></i><p>Error: '+e.message+'</p></div>'; }
+}
+
+function renderChatLayout(chats) {
+  const el = document.getElementById('pageContent');
+  var filtered = chats.filter(function(c) {
+    if (_chatFilters.status && c.chat_status !== _chatFilters.status && c.status !== _chatFilters.status) return false;
+    if (_chatFilters.assigned === 'unassigned' && c.admin_id) return false;
+    if (_chatFilters.assigned === 'mine' && c.admin_id !== USER.id) return false;
+    if (_chatFilters.search) {
+      var s = _chatFilters.search.toLowerCase();
+      if (!(c.farmer_name||'').toLowerCase().includes(s) && !(c.farmer_phone||'').includes(s)) return false;
+    }
+    return true;
+  });
+  var statusCounts = {open:0, assigned:0, resolved:0, all: chats.length};
+  chats.forEach(function(c){ var st = c.chat_status || c.status || 'open'; if(statusCounts[st]!==undefined) statusCounts[st]++; });
+
+  el.innerHTML =
+    '<div style="display:flex;height:calc(100vh - 80px);gap:0;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08)">' +
+      // Left panel - chat list
+      '<div style="width:340px;background:#fff;border-right:1px solid #e5e7eb;display:flex;flex-direction:column;flex-shrink:0">' +
+        // Header with agent status
+        '<div style="padding:12px 16px;border-bottom:1px solid #e5e7eb;background:#f8fafc">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+            '<h3 style="margin:0;font-size:16px;color:#1e293b"><i class="fab fa-whatsapp" style="color:#25D366;margin-right:6px"></i>Chats</h3>' +
+            '<div style="display:flex;align-items:center;gap:8px">' +
+              '<select onchange="updateAgentStatus(this.value)" style="padding:4px 8px;font-size:11px;border:1px solid #d1d5db;border-radius:4px;background:#fff">' +
+                '<option value="online" style="color:#10b981">Online</option>' +
+                '<option value="away" style="color:#f59e0b">Away</option>' +
+                '<option value="offline" style="color:#6b7280">Offline</option>' +
+              '</select>' +
+              '<button onclick="showQuickReplyManager()" style="padding:4px 8px;font-size:11px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;cursor:pointer" title="Quick Replies"><i class="fas fa-bolt"></i></button>' +
+            '</div>' +
+          '</div>' +
+          // Search
+          '<input id="chatSearchInput" placeholder="Search by name or phone..." oninput="_chatFilters.search=this.value;loadChats()" style="width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;background:#fff">' +
+        '</div>' +
+        // Filter tabs
+        '<div style="display:flex;border-bottom:1px solid #e5e7eb;background:#fff">' +
+          '<button onclick="_chatFilters.status=\'\';loadChats()" style="flex:1;padding:8px 4px;font-size:11px;border:none;cursor:pointer;background:'+(!_chatFilters.status?'#eff6ff':'#fff')+';color:'+(!_chatFilters.status?'#2563eb':'#6b7280')+';border-bottom:2px solid '+(!_chatFilters.status?'#2563eb':'transparent')+'">All ('+statusCounts.all+')</button>' +
+          '<button onclick="_chatFilters.status=\'open\';loadChats()" style="flex:1;padding:8px 4px;font-size:11px;border:none;cursor:pointer;background:'+(_chatFilters.status==='open'?'#eff6ff':'#fff')+';color:'+(_chatFilters.status==='open'?'#2563eb':'#6b7280')+';border-bottom:2px solid '+(_chatFilters.status==='open'?'#2563eb':'transparent')+'">Open</button>' +
+          '<button onclick="_chatFilters.status=\'assigned\';loadChats()" style="flex:1;padding:8px 4px;font-size:11px;border:none;cursor:pointer;background:'+(_chatFilters.status==='assigned'?'#eff6ff':'#fff')+';color:'+(_chatFilters.status==='assigned'?'#2563eb':'#6b7280')+';border-bottom:2px solid '+(_chatFilters.status==='assigned'?'#2563eb':'transparent')+'">Mine</button>' +
+          '<button onclick="_chatFilters.status=\'resolved\';loadChats()" style="flex:1;padding:8px 4px;font-size:11px;border:none;cursor:pointer;background:'+(_chatFilters.status==='resolved'?'#eff6ff':'#fff')+';color:'+(_chatFilters.status==='resolved'?'#2563eb':'#6b7280')+';border-bottom:2px solid '+(_chatFilters.status==='resolved'?'#2563eb':'transparent')+'">Resolved</button>' +
+        '</div>' +
+        // Chat list
+        '<div id="chatListItems" style="flex:1;overflow-y:auto">' +
+          (filtered.length ? filtered.map(function(c){
+            var unread = c.unread_count > 0;
+            var statusColor = (c.chat_status||c.status)==='assigned'?'#f59e0b':(c.chat_status||c.status)==='resolved'?'#10b981':'#3b82f6';
+            return '<div class="chat-item" id="chat-'+c.id+'" onclick="openChatSession(\''+c.id+'\')" style="padding:12px 16px;border-bottom:1px solid #f1f5f9;cursor:pointer;transition:background 0.15s;'+(unread?'background:#eff6ff;':'background:#fff;')+'" onmouseenter="this.style.background=\'#f8fafc\'" onmouseleave="this.style.background=\''+(unread?'#eff6ff':'#fff')+'\'">' +
+              '<div style="display:flex;justify-content:space-between;align-items:start">' +
+                '<div style="display:flex;align-items:center;gap:8px">' +
+                  '<div style="width:36px;height:36px;border-radius:50%;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#475569">'+(c.farmer_name||'?').charAt(0).toUpperCase()+'</div>' +
+                  '<div>' +
+                    '<div style="font-weight:'+(unread?'700':'500')+';font-size:13px;color:#1e293b">'+(c.farmer_name||'Unknown')+'</div>' +
+                    '<div style="font-size:11px;color:#6b7280;margin-top:1px">'+(c.farmer_phone||'')+' '+(c.village?'| '+c.village:'')+'</div>' +
+                  '</div>' +
+                '</div>' +
+                '<div style="text-align:right">' +
+                  '<div style="font-size:10px;color:#9ca3af">'+timeAgo(c.last_message_at)+'</div>' +
+                  (unread ? '<div style="margin-top:4px;width:18px;height:18px;border-radius:50%;background:#10b981;color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;margin-left:auto">'+c.unread_count+'</div>' : '') +
+                '</div>' +
+              '</div>' +
+              '<div style="display:flex;gap:4px;margin-top:6px;margin-left:44px">' +
+                '<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:'+statusColor+'15;color:'+statusColor+'">'+(c.chat_status||c.status||'open')+'</span>' +
+                (c.assigned_name ? '<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:#f3e8ff;color:#7c3aed"><i class="fas fa-user" style="margin-right:2px"></i>'+c.assigned_name+'</span>' : '') +
+                ((c.labels||[]).slice(0,2).map(function(l){return '<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:#fef3c7;color:#92400e">'+l+'</span>';}).join('')) +
+              '</div>' +
+            '</div>';
+          }).join('') : '<div style="padding:30px;text-align:center;color:#9ca3af;font-size:13px">No chats match filters</div>') +
+        '</div>' +
+      '</div>' +
+      // Center panel - messages
+      '<div style="flex:1;display:flex;flex-direction:column;background:#f8fafc" id="chatMain">' +
+        '<div style="flex:1;display:flex;align-items:center;justify-content:center"><div style="text-align:center"><i class="fab fa-whatsapp" style="font-size:64px;color:#25D366;opacity:.15"></i><p style="margin-top:12px;color:#9ca3af;font-size:13px">Select a chat to start messaging</p></div></div>' +
+      '</div>' +
+      // Right panel - context (hidden until chat opened)
+      '<div id="chatContext" style="width:0;overflow:hidden;transition:width 0.3s;background:#fff;border-left:1px solid #e5e7eb"></div>' +
+    '</div>';
 }
 
 async function openChatSession(id) {
   currentChat = id;
-  document.querySelectorAll('.chat-item').forEach(el => el.classList.remove('active'));
-  const item = document.getElementById('chat-' + id);
-  if (item) item.classList.add('active');
-  const mainEl = document.getElementById('chatMain');
-  mainEl.innerHTML = '<div class="empty" style="flex:1;display:flex;align-items:center;justify-content:center"><i class="fas fa-spinner fa-spin"></i></div>';
+  document.querySelectorAll('.chat-item').forEach(function(el){ el.style.background='#fff'; });
+  var item = document.getElementById('chat-' + id);
+  if(item) item.style.background = '#eff6ff';
+  var mainEl = document.getElementById('chatMain');
+  mainEl.innerHTML = '<div style="flex:1;display:flex;align-items:center;justify-content:center"><i class="fas fa-spinner fa-spin" style="font-size:24px;color:#9ca3af"></i></div>';
   try {
-    const d = await api('/api/v1/chats/' + id + '/messages');
-    const chatItem = document.querySelector('#chat-' + id);
-    const name = chatItem ? chatItem.querySelector('.chat-name span').textContent : 'Farmer';
-    mainEl.innerHTML = `
-      <div class="chat-main-header">
-        <div class="farmer-info"><h4>${name}</h4><span>Chat Session</span></div>
-        <div class="flex gap-10">
-          <button class="btn btn-sm btn-outline" onclick="assignChat('${id}')"><i class="fas fa-user-tag"></i> Assign</button>
-          <button class="btn btn-sm btn-danger" onclick="closeChat('${id}')"><i class="fas fa-times"></i> Close</button>
-        </div>
-      </div>
-      <div class="chat-messages" id="chatMessages">
-        ${d.messages.length ? d.messages.map(m => `
-          <div class="msg ${m.direction}">
-            ${m.direction === 'outbound' ? `<div class="msg-sender">${m.admin_name || 'Bot'}</div>` : ''}
-            <div>${m.content || '[media]'}</div>
-            <div class="msg-time">${new Date(m.created_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</div>
-          </div>
-        `).join('') : '<div class="empty"><p>No messages yet</p></div>'}
-      </div>
-      <div class="chat-input">
-        <input id="chatMsgInput" placeholder="Type a message..." onkeydown="if(event.key==='Enter')sendChatMsg('${id}')">
-        <button class="btn btn-primary" onclick="sendChatMsg('${id}')"><i class="fas fa-paper-plane"></i></button>
-      </div>`;
-    const msgs = document.getElementById('chatMessages');
-    if (msgs) msgs.scrollTop = msgs.scrollHeight;
-  } catch (e) { mainEl.innerHTML = '<div class="empty"><p>Error loading messages</p></div>'; }
+    var d = await api('/api/v1/chats/' + id + '/messages');
+    var chatItem = document.getElementById('chat-' + id);
+    var name = 'Farmer';
+    if(chatItem) { var nameEl = chatItem.querySelector('[style*="font-weight"]'); if(nameEl) name = nameEl.textContent; }
+    _currentChatData = { id: id, name: name, messages: d.messages };
+    renderChatMessages(id, name, d.messages);
+    loadChatContext(id);
+  } catch(e) { mainEl.innerHTML = '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#ef4444">Error: '+e.message+'</div>'; }
+}
+
+function renderChatMessages(id, name, messages) {
+  var mainEl = document.getElementById('chatMain');
+  mainEl.innerHTML =
+    // Header
+    '<div style="padding:12px 16px;border-bottom:1px solid #e5e7eb;background:#fff;display:flex;justify-content:space-between;align-items:center">' +
+      '<div style="display:flex;align-items:center;gap:10px">' +
+        '<div style="width:32px;height:32px;border-radius:50%;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#475569">'+name.charAt(0).toUpperCase()+'</div>' +
+        '<div><div style="font-weight:600;font-size:14px;color:#1e293b">'+name+'</div><div style="font-size:11px;color:#10b981">Online</div></div>' +
+      '</div>' +
+      '<div style="display:flex;gap:6px">' +
+        '<button onclick="showAssignModal(\''+id+'\')" style="padding:5px 10px;font-size:11px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:5px;cursor:pointer" title="Assign"><i class="fas fa-user-tag"></i></button>' +
+        '<button onclick="showLabelModal(\''+id+'\')" style="padding:5px 10px;font-size:11px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:5px;cursor:pointer" title="Labels"><i class="fas fa-tag"></i></button>' +
+        '<button onclick="updateChatStatus(\''+id+'\',\'resolved\')" style="padding:5px 10px;font-size:11px;background:#d1fae5;border:1px solid #a7f3d0;border-radius:5px;cursor:pointer;color:#065f46" title="Resolve"><i class="fas fa-check"></i></button>' +
+        '<button onclick="toggleChatContext()" style="padding:5px 10px;font-size:11px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:5px;cursor:pointer" title="Info Panel"><i class="fas fa-info-circle"></i></button>' +
+      '</div>' +
+    '</div>' +
+    // Messages
+    '<div id="chatMessages" style="flex:1;overflow-y:auto;padding:16px;background:#e5ddd5">' +
+      (messages.length ? messages.map(function(m){
+        var isOut = m.direction === 'outbound';
+        var time = new Date(m.created_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+        var statusIcon = m.wa_status === 'read' ? '<i class="fas fa-check-double" style="color:#53bdeb"></i>' : m.wa_status === 'delivered' ? '<i class="fas fa-check-double" style="color:#8696a0"></i>' : m.wa_status === 'sent' ? '<i class="fas fa-check" style="color:#8696a0"></i>' : '';
+        return '<div style="display:flex;justify-content:'+(isOut?'flex-end':'flex-start')+';margin-bottom:6px">' +
+          '<div style="max-width:65%;padding:8px 12px;border-radius:8px;background:'+(isOut?'#dcf8c6':'#fff')+';box-shadow:0 1px 1px rgba(0,0,0,0.1);position:relative">' +
+            (isOut && m.admin_name ? '<div style="font-size:10px;color:#1e88e5;font-weight:600;margin-bottom:2px">'+m.admin_name+'</div>' : '') +
+            (!isOut && m.farmer_name ? '<div style="font-size:10px;color:#e65100;font-weight:600;margin-bottom:2px">'+m.farmer_name+'</div>' : '') +
+            '<div style="font-size:13px;color:#111;white-space:pre-wrap;word-break:break-word">'+(m.content||'[media]')+'</div>' +
+            '<div style="display:flex;justify-content:flex-end;align-items:center;gap:4px;margin-top:3px"><span style="font-size:10px;color:#667">'+time+'</span>'+(isOut?statusIcon:'')+'</div>' +
+          '</div>' +
+        '</div>';
+      }).join('') : '<div style="text-align:center;color:#8696a0;font-size:12px;padding:20px">No messages yet</div>') +
+    '</div>' +
+    // Input area
+    '<div style="padding:10px 16px;background:#f0f2f5;border-top:1px solid #e5e7eb;display:flex;align-items:center;gap:8px">' +
+      '<button onclick="showQuickReplyPicker(\''+id+'\')" style="padding:8px;background:none;border:none;cursor:pointer;color:#54656f;font-size:16px" title="Quick Replies"><i class="fas fa-bolt"></i></button>' +
+      '<input id="chatMsgInput" placeholder="Type a message... (/ for quick replies)" oninput="handleChatInput(event,\''+id+'\')" onkeydown="if(event.key===\'Enter\')sendChatMsg(\''+id+'\')" style="flex:1;padding:10px 14px;border:1px solid #e2e8f0;border-radius:20px;font-size:13px;outline:none">' +
+      '<button onclick="sendChatMsg(\''+id+'\')" style="width:36px;height:36px;border-radius:50%;background:#10b981;border:none;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center"><i class="fas fa-paper-plane" style="font-size:13px"></i></button>' +
+    '</div>';
+  var msgs = document.getElementById('chatMessages');
+  if(msgs) msgs.scrollTop = msgs.scrollHeight;
+}
+
+function handleChatInput(e, chatId) {
+  var val = e.target.value;
+  if(val === '/') { showQuickReplyPicker(chatId); }
+}
+
+function showQuickReplyPicker(chatId) {
+  if(!_quickReplies.length) { alert('No quick replies configured. Add them from the Quick Replies manager.'); return; }
+  var html = '<div style="display:grid;gap:8px">';
+  _quickReplies.forEach(function(qr){
+    html += '<div onclick="insertQuickReply(\''+chatId+'\',\''+qr.content.replace(/'/g,'\\\'').replace(/\n/g,'\\n')+'\')" style="padding:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;cursor:pointer;transition:background 0.15s" onmouseenter="this.style.background=\'#eff6ff\'" onmouseleave="this.style.background=\'#f8fafc\'">' +
+      '<div style="font-weight:600;font-size:12px;color:#1e293b">/' + qr.shortcode + ' - ' + qr.title + '</div>' +
+      '<div style="font-size:11px;color:#6b7280;margin-top:2px">' + qr.content.substring(0,60) + '...</div>' +
+    '</div>';
+  });
+  html += '</div>';
+  openModal('Quick Replies', html);
+}
+
+function insertQuickReply(chatId, content) {
+  closeModal();
+  var inp = document.getElementById('chatMsgInput');
+  if(inp) { inp.value = content.replace(/\\n/g, '\n'); inp.focus(); }
 }
 
 async function sendChatMsg(id) {
-  const inp = document.getElementById('chatMsgInput');
-  const content = inp.value.trim();
-  if (!content) return;
+  var inp = document.getElementById('chatMsgInput');
+  var content = inp.value.trim();
+  if(!content) return;
   inp.value = '';
-  const msgs = document.getElementById('chatMessages');
-  const emptyEl = msgs.querySelector('.empty');
-  if (emptyEl) emptyEl.remove();
-  msgs.innerHTML += `<div class="msg outbound"><div class="msg-sender">${USER.name}</div><div>${content}</div><div class="msg-time">sending...</div></div>`;
+  var msgs = document.getElementById('chatMessages');
+  msgs.innerHTML += '<div style="display:flex;justify-content:flex-end;margin-bottom:6px"><div style="max-width:65%;padding:8px 12px;border-radius:8px;background:#dcf8c6;box-shadow:0 1px 1px rgba(0,0,0,0.1)"><div style="font-size:10px;color:#1e88e5;font-weight:600;margin-bottom:2px">'+USER.name+'</div><div style="font-size:13px;color:#111;white-space:pre-wrap">'+content+'</div><div style="text-align:right;margin-top:3px"><span style="font-size:10px;color:#667">sending...</span></div></div></div>';
   msgs.scrollTop = msgs.scrollHeight;
   try {
-    const r = await api('/api/v1/chats/' + id + '/send', { method: 'POST', body: JSON.stringify({ content }) });
-    if (r.wa_delivered) console.log('Message delivered to WhatsApp');
-    else console.warn('Saved but WA failed:', r.wa_error);
-    setTimeout(() => openChatSession(id), 1000);
-  } catch (e) { console.error('Send error:', e); }
+    var r = await api('/api/v1/chats/' + id + '/send', { method: 'POST', body: JSON.stringify({ content: content }) });
+    if(!r.wa_delivered) console.warn('WA delivery failed:', r.wa_error);
+    setTimeout(function(){ openChatSession(id); }, 1500);
+  } catch(e) { console.error('Send error:', e); }
 }
 
-setInterval(() => {
-  if (currentChat && currentPage === 'chats') {
-    api('/api/v1/chats/' + currentChat + '/messages').then(d => {
-      const msgs = document.getElementById('chatMessages');
-      if (!msgs) return;
-      const currentCount = msgs.querySelectorAll('.msg').length;
-      if (d.messages.length !== currentCount) openChatSession(currentChat);
-    }).catch(() => {});
-  }
-}, 5000);
+async function loadChatContext(sessionId) {
+  var ctx = document.getElementById('chatContext');
+  ctx.style.width = '280px';
+  ctx.innerHTML = '<div style="padding:16px"><div style="text-align:center;color:#9ca3af"><i class="fas fa-spinner fa-spin"></i></div></div>';
+  try {
+    var notes = await api('/api/v1/chats/' + sessionId + '/notes').catch(function(){ return {notes:[]}; });
+    _chatNotes = notes.notes || [];
+    ctx.innerHTML =
+      '<div style="padding:16px;height:100%;overflow-y:auto">' +
+        '<h4 style="margin:0 0 12px;font-size:13px;color:#1e293b"><i class="fas fa-info-circle" style="margin-right:6px;color:#6366f1"></i>Chat Info</h4>' +
+        // Actions
+        '<div style="display:grid;gap:6px;margin-bottom:16px">' +
+          '<button onclick="showAssignModal(\''+sessionId+'\')" style="padding:8px;font-size:11px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;cursor:pointer;text-align:left"><i class="fas fa-user-tag" style="margin-right:6px;color:#6366f1"></i>Assign to Agent</button>' +
+          '<button onclick="showLabelModal(\''+sessionId+'\')" style="padding:8px;font-size:11px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;cursor:pointer;text-align:left"><i class="fas fa-tag" style="margin-right:6px;color:#f59e0b"></i>Manage Labels</button>' +
+          '<button onclick="updateChatStatus(\''+sessionId+'\',\'resolved\')" style="padding:8px;font-size:11px;background:#d1fae5;border:1px solid #a7f3d0;border-radius:6px;cursor:pointer;text-align:left;color:#065f46"><i class="fas fa-check-circle" style="margin-right:6px"></i>Mark Resolved</button>' +
+        '</div>' +
+        // Notes section
+        '<h4 style="margin:0 0 8px;font-size:12px;color:#6b7280"><i class="fas fa-sticky-note" style="margin-right:6px"></i>Internal Notes</h4>' +
+        '<div style="margin-bottom:8px"><textarea id="noteInput" rows="2" placeholder="Add a note (not visible to farmer)..." style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:6px;font-size:11px;resize:none"></textarea>' +
+        '<button onclick="addChatNote(\''+sessionId+'\')" style="padding:4px 10px;font-size:10px;background:#6366f1;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-top:4px">Add Note</button></div>' +
+        '<div id="notesList" style="max-height:200px;overflow-y:auto">' +
+          (_chatNotes.length ? _chatNotes.map(function(n){
+            return '<div style="padding:8px;background:#fefce8;border-radius:6px;margin-bottom:6px;border-left:3px solid #f59e0b">' +
+              '<div style="font-size:10px;color:#92400e;font-weight:600">'+(n.author_name||'Admin')+' - '+timeAgo(n.created_at)+'</div>' +
+              '<div style="font-size:11px;color:#1e293b;margin-top:2px">'+n.content+'</div>' +
+            '</div>';
+          }).join('') : '<div style="font-size:11px;color:#9ca3af;text-align:center;padding:8px">No notes yet</div>') +
+        '</div>' +
+      '</div>';
+  } catch(e) { ctx.innerHTML = '<div style="padding:16px;color:#ef4444;font-size:12px">Error loading context</div>'; }
+}
 
+function toggleChatContext() {
+  var ctx = document.getElementById('chatContext');
+  ctx.style.width = ctx.style.width === '0px' || ctx.style.width === '0' ? '280px' : '0px';
+}
+
+async function addChatNote(sessionId) {
+  var inp = document.getElementById('noteInput');
+  var content = inp.value.trim();
+  if(!content) return;
+  inp.value = '';
+  try {
+    await api('/api/v1/chats/' + sessionId + '/notes', { method: 'POST', body: JSON.stringify({ content: content }) });
+    loadChatContext(sessionId);
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+function showAssignModal(sessionId) {
+  var html = '<div style="display:grid;gap:8px">';
+  html += '<button onclick="assignChatTo(\''+sessionId+'\',null)" style="padding:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;cursor:pointer;text-align:left;font-size:12px"><i class="fas fa-user-slash" style="margin-right:8px;color:#ef4444"></i>Unassign</button>';
+  _agents.forEach(function(a){
+    var statusDot = a.agent_status === 'online' ? '#10b981' : a.agent_status === 'away' ? '#f59e0b' : '#9ca3af';
+    html += '<button onclick="assignChatTo(\''+sessionId+'\',\''+a.id+'\')" style="padding:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;cursor:pointer;text-align:left;font-size:12px;display:flex;align-items:center;gap:8px" onmouseenter="this.style.background=\'#eff6ff\'" onmouseleave="this.style.background=\'#f8fafc\'">' +
+      '<span style="width:8px;height:8px;border-radius:50%;background:'+statusDot+'"></span>' +
+      '<span>'+a.name+'</span><span style="font-size:10px;color:#9ca3af;margin-left:auto">'+a.role+'</span>' +
+    '</button>';
+  });
+  html += '</div>';
+  openModal('Assign Chat', html);
+}
+
+async function assignChatTo(sessionId, agentId) {
+  try {
+    await api('/api/v1/chats/' + sessionId + '/assign', { method: 'PUT', body: JSON.stringify({ admin_id: agentId, status: agentId ? 'assigned' : 'active' }) });
+    closeModal();
+    loadChats();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+function showLabelModal(sessionId) {
+  var html = '<div style="display:grid;gap:8px">';
+  html += '<div style="display:flex;gap:6px;margin-bottom:8px"><input id="newLabelInput" placeholder="New label name..." style="flex:1;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:12px"><button onclick="addLabel(\''+sessionId+'\')" style="padding:8px 12px;background:#10b981;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:11px">Add</button></div>';
+  _chatLabels.forEach(function(l){
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:8px;background:#f8fafc;border-radius:6px;cursor:pointer;font-size:12px"><input type="checkbox" class="labelCheck" value="'+l.name+'"><span style="width:12px;height:12px;border-radius:3px;background:'+l.color+'"></span>'+l.name+'</label>';
+  });
+  html += '<button onclick="saveChatLabels(\''+sessionId+'\')" style="margin-top:8px;padding:8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;width:100%">Save Labels</button></div>';
+  openModal('Manage Labels', html);
+}
+
+async function addLabel(sessionId) {
+  var name = document.getElementById('newLabelInput').value.trim();
+  if(!name) return;
+  try {
+    await api('/api/v1/chat-labels', { method: 'POST', body: JSON.stringify({ name: name }) });
+    closeModal();
+    _chatLabels = (await api('/api/v1/chat-labels')).labels || [];
+    showLabelModal(sessionId);
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function saveChatLabels(sessionId) {
+  var checked = [];
+  document.querySelectorAll('.labelCheck:checked').forEach(function(el){ checked.push(el.value); });
+  try {
+    await api('/api/v1/chats/' + sessionId + '/labels', { method: 'PUT', body: JSON.stringify({ labels: checked }) });
+    closeModal();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function updateChatStatus(sessionId, status) {
+  try {
+    await api('/api/v1/chats/' + sessionId + '/status', { method: 'PUT', body: JSON.stringify({ chat_status: status }) });
+    loadChats();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function updateAgentStatus(status) {
+  try { await api('/api/v1/agents/status', { method: 'PUT', body: JSON.stringify({ agent_status: status }) }); }
+  catch(e) { console.error('Status update error:', e); }
+}
+
+function showQuickReplyManager() {
+  var html = '<div style="display:grid;gap:12px">' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+      '<input id="qrShortcode" placeholder="Shortcode (e.g. greeting)" style="padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:12px">' +
+      '<input id="qrTitle" placeholder="Title" style="padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:12px">' +
+    '</div>' +
+    '<textarea id="qrContent" rows="3" placeholder="Message content..." style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:12px"></textarea>' +
+    '<button onclick="saveQuickReply()" style="padding:8px;background:#10b981;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px">Save Quick Reply</button>' +
+    '<hr style="border:none;border-top:1px solid #e5e7eb">' +
+    '<div style="max-height:200px;overflow-y:auto">';
+  _quickReplies.forEach(function(qr){
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#f8fafc;border-radius:6px;margin-bottom:4px">' +
+      '<div><span style="font-weight:600;font-size:11px;color:#6366f1">/'+qr.shortcode+'</span> <span style="font-size:11px;color:#6b7280">'+qr.title+'</span></div>' +
+      '<button onclick="deleteQuickReply(\''+qr.id+'\')" style="padding:2px 6px;font-size:10px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:3px;cursor:pointer"><i class="fas fa-trash"></i></button>' +
+    '</div>';
+  });
+  html += '</div></div>';
+  openModal('Quick Reply Manager', html);
+}
+
+async function saveQuickReply() {
+  var shortcode = document.getElementById('qrShortcode').value.trim();
+  var title = document.getElementById('qrTitle').value.trim();
+  var content = document.getElementById('qrContent').value.trim();
+  if(!shortcode || !title || !content) { alert('All fields required'); return; }
+  try {
+    await api('/api/v1/quick-replies', { method: 'POST', body: JSON.stringify({ shortcode:shortcode, title:title, content:content }) });
+    _quickReplies = (await api('/api/v1/quick-replies')).replies || [];
+    closeModal(); showQuickReplyManager();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function deleteQuickReply(id) {
+  try {
+    await api('/api/v1/quick-replies/' + id, { method: 'DELETE' });
+    _quickReplies = (await api('/api/v1/quick-replies')).replies || [];
+    closeModal(); showQuickReplyManager();
+  } catch(e) { alert('Error: ' + e.message); }
+}
 
 async function closeChat(id) { await api('/api/v1/chats/' + id + '/assign', { method: 'PUT', body: JSON.stringify({ status: 'closed' }) }); loadChats(); }
-async function assignChat(id) {
-  await api('/api/v1/chats/' + id + '/assign', { method: 'PUT', body: JSON.stringify({ admin_id: USER.id, status: 'assigned' }) });
-  loadChats();
-}
+async function assignChat(id) { showAssignModal(id); }
+
+setInterval(function() {
+  if (currentChat && currentPage === 'chats') {
+    api('/api/v1/chats/' + currentChat + '/messages').then(function(d) {
+      var msgs = document.getElementById('chatMessages');
+      if (!msgs) return;
+      var currentCount = msgs.querySelectorAll('[style*="margin-bottom:6px"]').length;
+      if (d.messages.length !== currentCount) openChatSession(currentChat);
+    }).catch(function(){});
+  }
+}, 5000);
 function searchChats(q) {
   document.querySelectorAll('.chat-item').forEach(el => {
     el.style.display = el.textContent.toLowerCase().includes(q.toLowerCase()) ? 'block' : 'none';

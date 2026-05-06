@@ -369,6 +369,129 @@ module.exports = function setupAdminAPI(app, pool) {
       res.status(500).json({ error: err.message });
     }
   });
+
+  // --- CHAT LABELS ---
+  app.get('/api/v1/chat-labels', auth, async (req, res) => {
+    try {
+      const r = await pool.query('SELECT * FROM chat_labels ORDER BY name');
+      res.json({ labels: r.rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/v1/chat-labels', auth, async (req, res) => {
+    try {
+      const { name, color } = req.body;
+      if (!name) return res.status(400).json({ error: 'name required' });
+      const r = await pool.query('INSERT INTO chat_labels (id, name, color, created_at) VALUES (gen_random_uuid(), $1, $2, NOW()) RETURNING *', [name, color || '#6366f1']);
+      res.json({ label: r.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete('/api/v1/chat-labels/:id', auth, async (req, res) => {
+    try {
+      await pool.query('DELETE FROM chat_labels WHERE id=$1', [req.params.id]);
+      res.json({ message: 'Label deleted' });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // --- CHAT NOTES ---
+  app.get('/api/v1/chats/:id/notes', auth, async (req, res) => {
+    try {
+      const r = await pool.query('SELECT n.*, a.name as author_name FROM chat_notes n LEFT JOIN admin_users a ON n.author_id=a.id WHERE n.session_id=$1 ORDER BY n.created_at DESC', [req.params.id]);
+      res.json({ notes: r.rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/v1/chats/:id/notes', auth, async (req, res) => {
+    try {
+      const { content } = req.body;
+      if (!content) return res.status(400).json({ error: 'content required' });
+      const r = await pool.query('INSERT INTO chat_notes (id, session_id, author_id, content, created_at) VALUES (gen_random_uuid(), $1, $2, $3, NOW()) RETURNING *', [req.params.id, req.user.id, content]);
+      res.json({ note: r.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete('/api/v1/chat-notes/:id', auth, async (req, res) => {
+    try {
+      await pool.query('DELETE FROM chat_notes WHERE id=$1', [req.params.id]);
+      res.json({ message: 'Note deleted' });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // --- QUICK REPLIES ---
+  app.get('/api/v1/quick-replies', auth, async (req, res) => {
+    try {
+      const r = await pool.query('SELECT * FROM quick_replies WHERE is_active=true ORDER BY category, title');
+      res.json({ replies: r.rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/v1/quick-replies', auth, async (req, res) => {
+    try {
+      const { shortcode, title, content, category } = req.body;
+      if (!shortcode || !title || !content) return res.status(400).json({ error: 'shortcode, title, content required' });
+      const r = await pool.query('INSERT INTO quick_replies (id, shortcode, title, content, category, created_by, created_at) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NOW()) RETURNING *', [shortcode, title, content, category || 'general', req.user.id]);
+      res.json({ reply: r.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.put('/api/v1/quick-replies/:id', auth, async (req, res) => {
+    try {
+      const { shortcode, title, content, category, is_active } = req.body;
+      const r = await pool.query('UPDATE quick_replies SET shortcode=COALESCE($1,shortcode), title=COALESCE($2,title), content=COALESCE($3,content), category=COALESCE($4,category), is_active=COALESCE($5,is_active) WHERE id=$6 RETURNING *', [shortcode, title, content, category, is_active, req.params.id]);
+      if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
+      res.json({ reply: r.rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.delete('/api/v1/quick-replies/:id', auth, async (req, res) => {
+    try {
+      await pool.query('DELETE FROM quick_replies WHERE id=$1', [req.params.id]);
+      res.json({ message: 'Quick reply deleted' });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // --- CHAT STATUS & LABELS UPDATE ---
+  app.put('/api/v1/chats/:id/status', auth, async (req, res) => {
+    try {
+      const { chat_status, priority } = req.body;
+      const updates = []; const vals = []; let idx = 1;
+      if (chat_status) { updates.push('chat_status=$' + idx); vals.push(chat_status); idx++; }
+      if (priority) { updates.push('priority=$' + idx); vals.push(priority); idx++; }
+      if (chat_status === 'resolved') { updates.push('resolved_at=NOW()'); }
+      updates.push('updated_at=NOW()');
+      vals.push(req.params.id);
+      const r = await pool.query('UPDATE wa_chat_sessions SET ' + updates.join(',') + ' WHERE id=$' + idx + ' RETURNING *', vals);
+      if (!r.rows.length) return res.status(404).json({ error: 'Session not found' });
+      res.json(r.rows[0]);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.put('/api/v1/chats/:id/labels', auth, async (req, res) => {
+    try {
+      const { labels } = req.body;
+      const r = await pool.query('UPDATE wa_chat_sessions SET labels=$1, updated_at=NOW() WHERE id=$2 RETURNING *', [labels || [], req.params.id]);
+      if (!r.rows.length) return res.status(404).json({ error: 'Session not found' });
+      res.json(r.rows[0]);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // --- AGENT STATUS ---
+  app.put('/api/v1/agents/status', auth, async (req, res) => {
+    try {
+      const { agent_status } = req.body;
+      await pool.query('UPDATE admin_users SET agent_status=$1 WHERE id=$2', [agent_status || 'offline', req.user.id]);
+      res.json({ status: agent_status });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get('/api/v1/agents', auth, async (req, res) => {
+    try {
+      const r = await pool.query("SELECT id, name, email, role, agent_status, max_concurrent_chats FROM admin_users WHERE role != 'super_admin' ORDER BY name");
+      res.json({ agents: r.rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
   
   
   // ---
