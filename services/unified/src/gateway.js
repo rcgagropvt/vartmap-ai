@@ -257,6 +257,8 @@ async function getBotConfig() {
       welcome_hi: (configMap.welcome_message && configMap.welcome_message.hi) || configMap.welcome_message_hi || 'Namaste! Main VartMap Krishi Sahayak hoon. Aapki kaise madad kar sakta hoon?',
       welcome_en: (configMap.welcome_message && configMap.welcome_message.en) || configMap.welcome_message_en || 'Hello! I am VartMap Krishi Sahayak. How can I help you?',
       onboarding_enabled: configMap.onboarding_enabled !== undefined ? configMap.onboarding_enabled : true,
+      use_whatsapp_flow: (configMap.onboarding_settings && configMap.onboarding_settings.use_whatsapp_flow) || false,
+      whatsapp_flow_id: (configMap.onboarding_settings && configMap.onboarding_settings.flow_id) || '2021948632035353',
       onboarding_fields: configMap.onboarding_fields || ['name', 'crops'],
       menu_hi: (configMap.menu_message && configMap.menu_message.hi) || configMap.menu_message_hi || 'Aap neeche diye gaye options mein se choose kar sakte hain:',
       menu_en: (configMap.menu_message && configMap.menu_message.en) || configMap.menu_message_en || 'You can choose from the options below:',
@@ -626,6 +628,43 @@ async function sendInteractiveList(to, headerText, bodyText, buttonText, section
   }
 }
 
+
+// --- SEND WHATSAPP FLOW ---
+async function sendWhatsAppFlow(to, flowId, headerText, bodyText, ctaText, screenName) {
+  try {
+    const resp = await axios.post(
+      'https://graph.facebook.com/v21.0/' + phoneNumberId + '/messages',
+      {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: to,
+        type: 'interactive',
+        interactive: {
+          type: 'flow',
+          header: { type: 'text', text: headerText || 'VartMap Krishi Sahayak' },
+          body: { text: bodyText || 'Please complete the registration form.' },
+          footer: { text: '2 min mein complete karein' },
+          action: {
+            name: 'flow',
+            parameters: {
+              flow_message_version: '3',
+              flow_id: flowId,
+              flow_cta: ctaText || 'Register Now',
+              flow_action: 'navigate',
+              flow_action_payload: { screen: screenName || 'WELCOME_SCREEN' }
+            }
+          }
+        }
+      },
+      { headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' } }
+    );
+    console.log('Flow sent to ' + to + ', id: ' + resp.data.messages[0].id);
+    return true;
+  } catch (e) {
+    console.error('Send Flow error:', e.response?.data || e.message);
+    return false;
+  }
+}
 // --- REVERSE GEOCODE (Nominatim - free, no API key) ---
 async function reverseGeocode(lat, lon) {
   try {
@@ -741,6 +780,35 @@ async function sendMenuMessage(to, botConfig, language) {
 async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, botConfig, messageObj) {
   const stage = farmerData.onboarding_stage || 'new';
   const lang = farmerData.language || 'hi';
+
+
+  // Handle WhatsApp Flow form response (all data at once)
+  if (msgBody === '__FLOW_RESPONSE__' && messageObj?._flowData) {
+    const fd = messageObj._flowData;
+    console.log('[Onboarding] Flow form received:', JSON.stringify(fd));
+    const updates = [];
+    const vals = [];
+    let idx = 1;
+    if (fd.farmer_name) { updates.push('name=$' + idx); vals.push(fd.farmer_name); idx++; }
+    if (fd.language) { updates.push('language=$' + idx); vals.push(fd.language); idx++; }
+    if (fd.pin_code) { updates.push('pin_code=$' + idx); vals.push(String(fd.pin_code)); idx++; }
+    if (fd.primary_crop) { updates.push('crops=$' + idx); vals.push(JSON.stringify([fd.primary_crop])); idx++; }
+    if (fd.land_acres) { updates.push('land_holding_acres=$' + idx); vals.push(fd.land_acres); idx++; }
+    updates.push('onboarding_stage=$' + idx); vals.push('awaiting_location'); idx++;
+    updates.push('updated_at=NOW()');
+    vals.push(farmerId);
+    await pool.query('UPDATE farmers SET ' + updates.join(',') + ' WHERE id=$' + idx, vals);
+    // Now ask for location (Flow doesn't support LocationPicker)
+    const locMsg = (fd.language || lang) === 'hi'
+      ? 'Dhanyavaad ' + (fd.farmer_name || '') + '! Ab kripya apni khet ki location share karein (ya "skip" type karein):'
+      : 'Thank you ' + (fd.farmer_name || '') + '! Now please share your farm location (or type "skip"):';
+    await sendLocationRequest(from, locMsg);
+    await pool.query(
+      "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
+      [sessionId, farmerId, 'Flow form processed - asking location']
+    );
+    return true;
+  }
 
   switch (stage) {
     case 'new': {
@@ -1420,6 +1488,14 @@ app.post('/webhook', async (req, res) => {
               msgBody = msg.interactive.button_reply.id || msg.interactive.button_reply.title || '';
             } else if (msg.interactive?.type === 'list_reply') {
               msgBody = msg.interactive.list_reply.id || msg.interactive.list_reply.title || '';
+            } else if (msg.interactive?.type === 'nfm_reply') {
+              // WhatsApp Flow form submission
+              try {
+                const flowResponse = JSON.parse(msg.interactive.nfm_reply.response_json || '{}');
+                console.log('[Flow Response]', JSON.stringify(flowResponse));
+                msgBody = '__FLOW_RESPONSE__';
+                msg._flowData = flowResponse;
+              } catch (e) { console.error('Flow response parse error:', e.message); msgBody = ''; }
             }
           } else {
             msgBody = msg.text?.body || msg.image?.caption || msg.audio?.caption || '';
