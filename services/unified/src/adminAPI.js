@@ -4255,4 +4255,422 @@ const XLSX = require('xlsx');
   });
   
   // ---
+
+  // ============================================================
+  // FARMER MOBILE APP API ENDPOINTS
+  // ============================================================
+
+  // --- OTP Auth ---
+  app.post('/api/v1/farmer/auth/send-otp', async (req, res) => {
+    try {
+      const { phone } = req.body;
+      if (!phone) return res.status(400).json({ error: 'Phone required' });
+
+      const cleanPhone = phone.replace(/[^0-9+]/g, '');
+      
+      // Generate 4-digit OTP
+      const otp = Math.floor(1000 + Math.random() * 9000).toString();
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 min
+
+      // Store OTP in database
+      await pool.query(
+        `INSERT INTO farmer_otps (phone, otp, expires_at) VALUES ($1, $2, $3)
+         ON CONFLICT (phone) DO UPDATE SET otp = $2, expires_at = $3, attempts = 0`,
+        [cleanPhone, otp, expiresAt]
+      );
+
+      // Send OTP via WhatsApp (using existing gateway)
+      try {
+        const axios = require('axios');
+        await axios.post('http://localhost:10000/api/v1/send-message', {
+          to: cleanPhone,
+          message: `Your VartMap login OTP is: ${otp}\nValid for 5 minutes.\n\nआपका OTP है: ${otp}`
+        });
+      } catch (whatsappErr) {
+        console.log('OTP WhatsApp send failed, OTP stored:', otp);
+      }
+
+      res.json({ success: true, message: 'OTP sent via WhatsApp' });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/v1/farmer/auth/verify-otp', async (req, res) => {
+    try {
+      const { phone, otp } = req.body;
+      if (!phone || !otp) return res.status(400).json({ error: 'Phone and OTP required' });
+
+      const cleanPhone = phone.replace(/[^0-9+]/g, '');
+
+      // Verify OTP
+      const { rows } = await pool.query(
+        `SELECT * FROM farmer_otps WHERE phone = $1 AND otp = $2 AND expires_at > NOW() AND attempts < 5`,
+        [cleanPhone, otp]
+      );
+
+      if (!rows.length) {
+        // Increment attempts
+        await pool.query(`UPDATE farmer_otps SET attempts = attempts + 1 WHERE phone = $1`, [cleanPhone]);
+        return res.status(401).json({ error: 'Invalid or expired OTP' });
+      }
+
+      // Delete used OTP
+      await pool.query(`DELETE FROM farmer_otps WHERE phone = $1`, [cleanPhone]);
+
+      // Find or create farmer
+      let farmer;
+      const { rows: existing } = await pool.query(`SELECT * FROM farmers WHERE phone = $1`, [cleanPhone]);
+      
+      if (existing.length) {
+        farmer = existing[0];
+      } else {
+        const { rows: created } = await pool.query(
+          `INSERT INTO farmers (phone, language, onboarding_stage) VALUES ($1, 'hi', 'registered') RETURNING *`,
+          [cleanPhone]
+        );
+        farmer = created[0];
+      }
+
+      // Generate JWT token
+      const jwt = require('jsonwebtoken');
+      const secret = process.env.JWT_SECRET || 'vartmap-farmer-secret-2024';
+      const token = jwt.sign({ id: farmer.id, phone: farmer.phone, role: 'farmer' }, secret, { expiresIn: '90d' });
+
+      res.json({ token, farmer });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // --- Farmer Auth Middleware ---
+  function farmerAuth(req, res, next) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    try {
+      const jwt = require('jsonwebtoken');
+      const secret = process.env.JWT_SECRET || 'vartmap-farmer-secret-2024';
+      const decoded = jwt.verify(authHeader.split(' ')[1], secret);
+      if (decoded.role !== 'farmer') return res.status(403).json({ error: 'Not a farmer token' });
+      req.farmer = decoded;
+      next();
+    } catch (e) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+  }
+
+  // --- Profile ---
+  app.get('/api/v1/farmer/profile', farmerAuth, async (req, res) => {
+    try {
+      const { rows } = await pool.query(`SELECT * FROM farmers WHERE id = $1`, [req.farmer.id]);
+      if (!rows.length) return res.status(404).json({ error: 'Farmer not found' });
+      res.json({ farmer: rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.put('/api/v1/farmer/profile', farmerAuth, async (req, res) => {
+    try {
+      const { name, village, crops, language, district, state, land_acres } = req.body;
+      const { rows } = await pool.query(
+        `UPDATE farmers SET
+          name = COALESCE($2, name),
+          village = COALESCE($3, village),
+          crops = COALESCE($4, crops),
+          language = COALESCE($5, language),
+          district = COALESCE($6, district),
+          state = COALESCE($7, state),
+          land_acres = COALESCE($8, land_acres),
+          updated_at = NOW()
+        WHERE id = $1 RETURNING *`,
+        [req.farmer.id, name, village, crops ? JSON.stringify(crops) : null, language, district, state, land_acres]
+      );
+      res.json({ farmer: rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // --- Dashboard ---
+  app.get('/api/v1/farmer/dashboard', farmerAuth, async (req, res) => {
+    try {
+      const farmerId = req.farmer.id;
+      const { rows: farmerRows } = await pool.query(`SELECT * FROM farmers WHERE id = $1`, [farmerId]);
+      const farmer = farmerRows[0] || {};
+
+      // Get loyalty points
+      const { rows: loyaltyRows } = await pool.query(
+        `SELECT COALESCE(SUM(points), 0) as total_points FROM loyalty_points WHERE farmer_id = $1`,
+        [farmerId]
+      );
+
+      // Get unread messages count
+      const { rows: msgRows } = await pool.query(
+        `SELECT COUNT(*) as unread FROM wa_messages m
+         JOIN wa_chat_sessions s ON m.session_id = s.id
+         WHERE s.farmer_id = $1 AND m.direction = 'incoming' AND m.read = false`,
+        [farmerId]
+      );
+
+      // Get active orders count
+      let orderCount = 0;
+      try {
+        const { rows: orderRows } = await pool.query(
+          `SELECT COUNT(*) as count FROM orders WHERE farmer_id = $1 AND status NOT IN ('delivered', 'cancelled')`,
+          [farmerId]
+        );
+        orderCount = parseInt(orderRows[0]?.count || 0);
+      } catch(e) {}
+
+      res.json({
+        farmer,
+        points: parseInt(loyaltyRows[0]?.total_points || 0),
+        tier: farmer.loyalty_tier || 'Bronze',
+        unreadMessages: parseInt(msgRows[0]?.unread || 0),
+        activeOrders: orderCount,
+        greeting: `Welcome ${farmer.name || 'Farmer'}! Have a great day.`,
+        weather: null,
+        mandiPrices: [],
+        tips: ['Keep soil moist during summer', 'Check for pest infestations weekly', 'Update your crop profile for better recommendations']
+      });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // --- Messages (synced with WhatsApp) ---
+  app.get('/api/v1/farmer/messages', farmerAuth, async (req, res) => {
+    try {
+      const { limit = 50, before } = req.query;
+      const farmerId = req.farmer.id;
+
+      let query = `SELECT m.* FROM wa_messages m
+        JOIN wa_chat_sessions s ON m.session_id = s.id
+        WHERE s.farmer_id = $1`;
+      const params = [farmerId];
+
+      if (before) {
+        query += ` AND m.created_at < $2`;
+        params.push(before);
+      }
+
+      query += ` ORDER BY m.created_at ASC LIMIT $${params.length + 1}`;
+      params.push(parseInt(limit));
+
+      const { rows } = await pool.query(query, params);
+      res.json({ messages: rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/v1/farmer/messages', farmerAuth, async (req, res) => {
+    try {
+      const { text, type = 'text' } = req.body;
+      if (!text) return res.status(400).json({ error: 'Message text required' });
+
+      const farmerId = req.farmer.id;
+      const { rows: farmerRows } = await pool.query(`SELECT phone FROM farmers WHERE id = $1`, [farmerId]);
+      if (!farmerRows.length) return res.status(404).json({ error: 'Farmer not found' });
+
+      const phone = farmerRows[0].phone;
+
+      // Find or create chat session
+      let sessionId;
+      const { rows: sessions } = await pool.query(
+        `SELECT id FROM wa_chat_sessions WHERE farmer_id = $1 ORDER BY created_at DESC LIMIT 1`,
+        [farmerId]
+      );
+
+      if (sessions.length) {
+        sessionId = sessions[0].id;
+      } else {
+        const { rows: newSession } = await pool.query(
+          `INSERT INTO wa_chat_sessions (farmer_id, status) VALUES ($1, 'open') RETURNING id`,
+          [farmerId]
+        );
+        sessionId = newSession[0].id;
+      }
+
+      // Store message as outgoing from farmer (direction = 'incoming' from admin perspective)
+      const { rows: msg } = await pool.query(
+        `INSERT INTO wa_messages (session_id, direction, body, msg_type, created_at)
+         VALUES ($1, 'incoming', $2, $3, NOW()) RETURNING *`,
+        [sessionId, text, type]
+      );
+
+      // Send via WhatsApp API so it appears in the actual WhatsApp chat
+      try {
+        const axios = require('axios');
+        await axios.post('http://localhost:10000/api/v1/send-message', {
+          to: phone,
+          message: text
+        });
+      } catch (whatsappErr) {
+        console.log('App message WhatsApp relay failed:', whatsappErr.message);
+      }
+
+      // Update session timestamp
+      await pool.query(`UPDATE wa_chat_sessions SET last_message_at = NOW() WHERE id = $1`, [sessionId]);
+
+      res.json({ message: msg[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // --- Products ---
+  app.get('/api/v1/farmer/products', farmerAuth, async (req, res) => {
+    try {
+      const { category } = req.query;
+      let query = `SELECT * FROM products WHERE active = true`;
+      const params = [];
+      if (category) { query += ` AND category = $1`; params.push(category); }
+      query += ` ORDER BY created_at DESC`;
+      const { rows } = await pool.query(query, params);
+      res.json({ products: rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get('/api/v1/farmer/products/:id', farmerAuth, async (req, res) => {
+    try {
+      const { rows } = await pool.query(`SELECT * FROM products WHERE id = $1`, [req.params.id]);
+      if (!rows.length) return res.status(404).json({ error: 'Product not found' });
+      res.json({ product: rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // --- Orders ---
+  app.get('/api/v1/farmer/orders', farmerAuth, async (req, res) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT * FROM orders WHERE farmer_id = $1 ORDER BY created_at DESC`,
+        [req.farmer.id]
+      );
+      res.json({ orders: rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/v1/farmer/orders', farmerAuth, async (req, res) => {
+    try {
+      const { items, address } = req.body;
+      if (!items || !items.length) return res.status(400).json({ error: 'Items required' });
+
+      // Calculate total
+      let total = 0;
+      for (const item of items) {
+        const { rows } = await pool.query(`SELECT price FROM products WHERE id = $1`, [item.product_id]);
+        if (rows.length) total += rows[0].price * (item.quantity || 1);
+      }
+
+      const { rows } = await pool.query(
+        `INSERT INTO orders (farmer_id, items, total, address, status, created_at)
+         VALUES ($1, $2, $3, $4, 'pending', NOW()) RETURNING *`,
+        [req.farmer.id, JSON.stringify(items), total, address]
+      );
+
+      res.json({ order: rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // --- Loyalty & Rewards ---
+  app.get('/api/v1/farmer/loyalty', farmerAuth, async (req, res) => {
+    try {
+      const farmerId = req.farmer.id;
+      const { rows: points } = await pool.query(
+        `SELECT COALESCE(SUM(points), 0) as total FROM loyalty_points WHERE farmer_id = $1`,
+        [farmerId]
+      );
+      const { rows: history } = await pool.query(
+        `SELECT * FROM loyalty_points WHERE farmer_id = $1 ORDER BY created_at DESC LIMIT 20`,
+        [farmerId]
+      );
+      const { rows: farmerRows } = await pool.query(`SELECT loyalty_tier FROM farmers WHERE id = $1`, [farmerId]);
+
+      res.json({
+        points: parseInt(points[0]?.total || 0),
+        tier: farmerRows[0]?.loyalty_tier || 'Bronze',
+        history: history
+      });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get('/api/v1/farmer/coupons', farmerAuth, async (req, res) => {
+    try {
+      const { rows } = await pool.query(
+        `SELECT * FROM coupons WHERE (farmer_id = $1 OR farmer_id IS NULL) AND expires_at > NOW() AND used = false ORDER BY created_at DESC`,
+        [req.farmer.id]
+      );
+      res.json({ coupons: rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/v1/farmer/spin', farmerAuth, async (req, res) => {
+    try {
+      const farmerId = req.farmer.id;
+
+      // Check if already spun today
+      const { rows: spins } = await pool.query(
+        `SELECT * FROM spin_history WHERE farmer_id = $1 AND created_at > NOW() - INTERVAL '24 hours'`,
+        [farmerId]
+      );
+      if (spins.length) return res.status(429).json({ error: 'Already spun today. Try again tomorrow!' });
+
+      // Get active spin wheel
+      const { rows: wheels } = await pool.query(`SELECT * FROM spin_wheels WHERE active = true LIMIT 1`);
+      if (!wheels.length) return res.status(404).json({ error: 'No active spin wheel' });
+
+      const wheel = wheels[0];
+      const prizes = wheel.prizes || [];
+      if (!prizes.length) return res.status(404).json({ error: 'No prizes configured' });
+
+      // Weighted random selection
+      const totalWeight = prizes.reduce((sum, p) => sum + (p.weight || 1), 0);
+      let random = Math.random() * totalWeight;
+      let prize = prizes[0];
+      for (const p of prizes) {
+        random -= (p.weight || 1);
+        if (random <= 0) { prize = p; break; }
+      }
+
+      // Record spin
+      await pool.query(
+        `INSERT INTO spin_history (farmer_id, wheel_id, prize, created_at) VALUES ($1, $2, $3, NOW())`,
+        [farmerId, wheel.id, JSON.stringify(prize)]
+      );
+
+      // Award points if prize is points
+      if (prize.type === 'points' && prize.value) {
+        await pool.query(
+          `INSERT INTO loyalty_points (farmer_id, points, reason, created_at) VALUES ($1, $2, 'Spin wheel prize', NOW())`,
+          [farmerId, prize.value]
+        );
+      }
+
+      res.json({ prize });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // --- Schemes ---
+  app.get('/api/v1/farmer/schemes', farmerAuth, async (req, res) => {
+    try {
+      const { rows } = await pool.query(`SELECT * FROM government_schemes WHERE active = true ORDER BY created_at DESC`);
+      res.json({ schemes: rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // --- Mandi Prices ---
+  app.get('/api/v1/farmer/mandi-prices', farmerAuth, async (req, res) => {
+    try {
+      const { district } = req.query;
+      let query = `SELECT * FROM mandi_prices WHERE date >= NOW() - INTERVAL '3 days'`;
+      const params = [];
+      if (district) { query += ` AND district = $1`; params.push(district); }
+      query += ` ORDER BY date DESC LIMIT 20`;
+      const { rows } = await pool.query(query, params);
+      res.json({ prices: rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // --- Push Token ---
+  app.post('/api/v1/farmer/push-token', farmerAuth, async (req, res) => {
+    try {
+      const { token } = req.body;
+      await pool.query(
+        `UPDATE farmers SET push_token = $2, updated_at = NOW() WHERE id = $1`,
+        [req.farmer.id, token]
+      );
+      res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
 };
