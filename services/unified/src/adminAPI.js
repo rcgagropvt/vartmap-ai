@@ -4372,7 +4372,7 @@ const XLSX = require('xlsx');
       const updates = []; const vals = [req.farmer.id]; let idx = 2;
       if (name) { updates.push('name = $' + idx); vals.push(name); idx++; }
       if (village) { updates.push('village = $' + idx); vals.push(village); idx++; }
-      if (crops) { updates.push('crops = $' + idx); vals.push(JSON.stringify(crops)); idx++; }
+      if (crops) { updates.push('crops = $' + idx); vals.push(Array.isArray(crops) ? '{' + crops.join(',') + '}' : crops); idx++; }
       if (language) { updates.push('language = $' + idx); vals.push(language); idx++; }
       if (land_acres) { updates.push('land_holding_acres = $' + idx); vals.push(land_acres); idx++; }
       if (pin_code) { updates.push('pin_code = $' + idx); vals.push(pin_code); idx++; }
