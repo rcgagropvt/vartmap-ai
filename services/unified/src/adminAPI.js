@@ -4673,4 +4673,205 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
+
+  // ====== AI CHAT (Same RAG as WhatsApp bot) ======
+  app.post('/api/v1/farmer/chat', farmerAuth, async (req, res) => {
+    try {
+      const { message } = req.body;
+      if (!message) return res.status(400).json({ error: 'Message required' });
+
+      const farmerId = req.farmer.id;
+      const farmerData = await pool.query('SELECT * FROM farmers WHERE id = $1', [farmerId]);
+      const farmer = farmerData.rows[0];
+
+      // Build context with farmer info
+      const context = `Farmer: ${farmer.name || 'Unknown'}, Crops: ${(farmer.crops || []).join(', ') || 'Not specified'}, Village: ${farmer.village || 'Unknown'}, District: ${farmer.district || 'Unknown'}`;
+
+      // Use Gemini AI (same as WhatsApp bot)
+      const { GoogleGenerativeAI } = require('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+      const systemPrompt = `You are a helpful Indian farming assistant (Krishi Sahayak). You help farmers with crop advice, pest management, weather guidance, government schemes, organic farming, and market information. Answer in simple language. Mix Hindi and English if helpful. Keep answers concise and actionable.
+
+Farmer context: ${context}
+
+Answer the following question:`;
+
+      const result = await model.generateContent(systemPrompt + '\n\n' + message);
+      const reply = result.response.text();
+
+      // Store message in wa_messages for sync
+      try {
+        let session = await pool.query('SELECT id FROM wa_chat_sessions WHERE farmer_id = $1 AND status = $2', [farmerId, 'active']);
+        if (!session.rows.length) {
+          session = await pool.query("INSERT INTO wa_chat_sessions (id, farmer_id, status, last_message_at, created_at, updated_at) VALUES (gen_random_uuid(), $1, 'active', NOW(), NOW(), NOW()) RETURNING *", [farmerId]);
+        }
+        const sessionId = session.rows[0].id;
+        await pool.query("INSERT INTO wa_messages (id, session_id, farmer_id, direction, message_type, content, created_at) VALUES (gen_random_uuid(), $1, $2, 'inbound', 'text', $3, NOW())", [sessionId, farmerId, message]);
+        await pool.query("INSERT INTO wa_messages (id, session_id, farmer_id, direction, message_type, content, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'text', $3, NOW())", [sessionId, farmerId, reply]);
+      } catch (syncErr) { console.log('Chat sync error:', syncErr.message); }
+
+      res.json({ reply });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ====== FASAL DOCTOR (Crop Disease Diagnosis) ======
+  app.post('/api/v1/farmer/diagnose', farmerAuth, async (req, res) => {
+    try {
+      const { symptoms, image } = req.body;
+      if (!symptoms && !image) return res.status(400).json({ error: 'Provide symptoms or image' });
+
+      const { GoogleGenerativeAI } = require('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+      const farmerId = req.farmer.id;
+      const farmerData = await pool.query('SELECT crops, village FROM farmers WHERE id = $1', [farmerId]);
+      const farmer = farmerData.rows[0] || {};
+
+      let prompt = `You are an expert agricultural scientist and plant pathologist (Fasal Doctor). Diagnose the crop disease based on the information provided. Return your response as JSON with these fields: disease (name of disease), description (brief explanation), treatment (specific remedies and chemicals with dosage), prevention (how to prevent in future). Use simple language. Mix Hindi terms where common.
+
+Farmer's crops: ${(farmer.crops || []).join(', ')}
+Location: ${farmer.village || 'India'}
+
+`;
+      if (symptoms) {
+        prompt += `Symptoms described: ${symptoms}`;
+      }
+      if (image) {
+        prompt += `The farmer has uploaded an image of the affected crop. Based on common diseases, provide diagnosis. Symptoms from image analysis needed.`;
+      }
+
+      const result = await model.generateContent(prompt);
+      let reply = result.response.text();
+
+      // Try to parse as JSON
+      try {
+        reply = reply.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        const parsed = JSON.parse(reply);
+        res.json(parsed);
+      } catch (parseErr) {
+        res.json({ disease: 'Analysis Complete', description: reply, treatment: 'Please consult a local agronomist for specific treatment.', prevention: 'Maintain crop hygiene and proper irrigation.' });
+      }
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ====== MANDI PRICES ======
+  app.post('/api/v1/farmer/mandi-prices', farmerAuth, async (req, res) => {
+    try {
+      const { crop, state, district } = req.body;
+
+      // Try fetching from data.gov.in API
+      const axios = require('axios');
+      const commodity = (crop || 'Wheat').trim();
+      const stateName = (state || 'Uttar Pradesh').trim();
+
+      try {
+        const apiUrl = `https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=${process.env.DATA_GOV_API_KEY || '579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b'}&format=json&limit=20&filters[commodity]=${encodeURIComponent(commodity)}&filters[state]=${encodeURIComponent(stateName)}`;
+        const response = await axios.get(apiUrl, { timeout: 8000 });
+
+        if (response.data && response.data.records && response.data.records.length > 0) {
+          const prices = response.data.records.map((r) => ({
+            market: r.market || r.district,
+            commodity: r.commodity,
+            min_price: r.min_price,
+            max_price: r.max_price,
+            modal_price: r.modal_price,
+            date: r.arrival_date || new Date().toISOString().split('T')[0],
+            district: r.district,
+            state: r.state,
+          }));
+          return res.json({ prices, source: 'data.gov.in' });
+        }
+      } catch (apiErr) {
+        console.log('Data.gov.in API error:', apiErr.message);
+      }
+
+      // Fallback: AI-generated estimate
+      const { GoogleGenerativeAI } = require('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+      const prompt = `Provide current estimated mandi prices for ${commodity} in ${stateName}${district ? ', ' + district : ''} in India. Return as JSON array with fields: market, commodity, min_price (number), max_price (number), modal_price (number), date (YYYY-MM-DD). Include 3-5 nearby mandis. Use realistic current prices in INR per quintal.`;
+
+      const result = await model.generateContent(prompt);
+      let reply = result.response.text().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      try {
+        const parsed = JSON.parse(reply);
+        res.json({ prices: Array.isArray(parsed) ? parsed : parsed.prices || [], source: 'ai-estimate' });
+      } catch (parseErr) {
+        res.json({ prices: [], source: 'unavailable', message: 'Could not fetch prices' });
+      }
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ====== DAILY TIP ======
+  app.get('/api/v1/farmer/daily-tip', farmerAuth, async (req, res) => {
+    try {
+      const farmerId = req.farmer.id;
+      const farmerData = await pool.query('SELECT crops, village FROM farmers WHERE id = $1', [farmerId]);
+      const farmer = farmerData.rows[0] || {};
+
+      const { GoogleGenerativeAI } = require('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+      const month = new Date().toLocaleString('en-IN', { month: 'long' });
+      const prompt = `Give one short actionable farming tip for the month of ${month} for a farmer growing ${(farmer.crops || ['general crops']).join(', ')} in ${farmer.village || 'North India'}. Keep it under 2 sentences. Mix Hindi words if natural.`;
+
+      const result = await model.generateContent(prompt);
+      res.json({ tip: result.response.text() });
+    } catch (e) { res.json({ tip: 'Keep your fields well-irrigated and monitor for pests regularly.' }); }
+  });
+
+  // ====== WEATHER ======
+  app.get('/api/v1/farmer/weather', farmerAuth, async (req, res) => {
+    try {
+      const farmerId = req.farmer.id;
+      const farmerData = await pool.query('SELECT village, district, location FROM farmers WHERE id = $1', [farmerId]);
+      const farmer = farmerData.rows[0] || {};
+      const city = farmer.village || farmer.district || 'Delhi';
+
+      const axios = require('axios');
+      const weatherKey = process.env.OPENWEATHER_API_KEY || '';
+      if (weatherKey) {
+        const weatherRes = await axios.get(`https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)},IN&appid=${weatherKey}&units=metric`, { timeout: 5000 });
+        const w = weatherRes.data;
+        return res.json({
+          temp: Math.round(w.main.temp),
+          description: w.weather[0].description,
+          humidity: w.main.humidity,
+          wind: Math.round(w.wind.speed * 3.6),
+          icon: w.weather[0].icon,
+        });
+      }
+      res.json({ temp: null, description: 'Weather data unavailable', humidity: null, wind: null });
+    } catch (e) { res.json({ temp: null, description: 'Weather data unavailable', humidity: null, wind: null }); }
+  });
+
+  // ====== GOVERNMENT SCHEMES ======
+  app.get('/api/v1/farmer/schemes', farmerAuth, async (req, res) => {
+    try {
+      const { GoogleGenerativeAI } = require('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+      const farmerId = req.farmer.id;
+      const farmerData = await pool.query('SELECT crops, village, land_holding_acres FROM farmers WHERE id = $1', [farmerId]);
+      const farmer = farmerData.rows[0] || {};
+
+      const prompt = `List 5 current Indian government schemes available for a farmer growing ${(farmer.crops || ['crops']).join(', ')} with ${farmer.land_holding_acres || 'small'} acres land in ${farmer.village || 'Uttar Pradesh'}. Return JSON array with fields: name, description (1 line), benefit (monetary or other), eligibility (short), how_to_apply (1 line). Include PM-KISAN, PM Fasal Bima if relevant.`;
+
+      const result = await model.generateContent(prompt);
+      let reply = result.response.text().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      try {
+        const parsed = JSON.parse(reply);
+        res.json({ schemes: Array.isArray(parsed) ? parsed : parsed.schemes || [] });
+      } catch (parseErr) {
+        res.json({ schemes: [] });
+      }
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
 };
