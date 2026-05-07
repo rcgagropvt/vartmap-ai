@@ -4643,7 +4643,7 @@ const XLSX = require('xlsx');
   // --- Schemes ---
   app.get('/api/v1/farmer/schemes', farmerAuth, async (req, res) => {
     try {
-      const { rows } = await pool.query(`SELECT * FROM government_schemes WHERE active = true ORDER BY created_at DESC`);
+      const { rows } = await pool.query(`SELECT * FROM government_schemes WHERE status = 'active' ORDER BY created_at DESC`);
       res.json({ schemes: rows });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
