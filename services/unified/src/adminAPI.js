@@ -4851,7 +4851,7 @@ Location: ${farmer.village || 'India'}
         });
       }
       res.json({ temp: null, description: 'Weather data unavailable', humidity: null, wind: null });
-    } catch (e) { res.json({ temp: null, description: 'Weather data unavailable', humidity: null, wind: null }); }
+    } catch (e) { console.log('Weather error:', e.message, 'Key present:', !!process.env.OPENWEATHER_API_KEY); res.json({ temp: null, description: 'Error: ' + e.message, humidity: null, wind: null }); }
   });
 
   // ====== GOVERNMENT SCHEMES ======
