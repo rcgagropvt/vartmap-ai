@@ -5017,7 +5017,7 @@ Location: ${farmer.village || 'India'}
     }
   });
 
-  app.post('/api/v1/farmer/community/posts', farmerAuth, async (req, res) => {
+  app.post('/api/v1/farmer/community/posts', farmerAuth, upload.single('media'), async (req, res) => {
     try {
       const { content, category, crop, image_url, username } = req.body;
       if (!content) return res.status(400).json({ error: 'Content required' });
@@ -5025,7 +5025,7 @@ Location: ${farmer.village || 'India'}
       if (username) { await pool.query('UPDATE farmers SET community_username = $1 WHERE id = $2', [username, req.farmer.id]).catch(() => {}); }
       const { rows } = await pool.query(
         `INSERT INTO community_posts (farmer_id, username, content, image_url, category, crop, created_at) VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING *`,
-        [req.farmer.id, username || req.farmer.name || 'Farmer', content, image_url || null, category || 'general', crop || null]
+        [req.farmer.id, username || req.farmer.name || 'Farmer', content, req.file ? ('data:' + req.file.mimetype + ';base64,' + req.file.buffer.toString('base64')) : image_url || null, category || 'general', crop || null]
       );
       res.json({ post: rows[0] });
     } catch (e) { res.status(500).json({ error: e.message }); }
