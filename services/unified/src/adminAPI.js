@@ -4690,7 +4690,7 @@ const XLSX = require('xlsx');
       // Use Gemini AI (same as WhatsApp bot)
       const { GoogleGenerativeAI } = require('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
       const systemPrompt = `You are a helpful Indian farming assistant (Krishi Sahayak). You help farmers with crop advice, pest management, weather guidance, government schemes, organic farming, and market information. Answer in simple language. Mix Hindi and English if helpful. Keep answers concise and actionable.
 
@@ -4724,7 +4724,7 @@ Answer the following question:`;
 
       const { GoogleGenerativeAI } = require('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
       const farmerId = req.farmer.id;
       const farmerData = await pool.query('SELECT crops, village FROM farmers WHERE id = $1', [farmerId]);
@@ -4791,7 +4791,7 @@ Location: ${farmer.village || 'India'}
       // Fallback: AI-generated estimate
       const { GoogleGenerativeAI } = require('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
       const prompt = `Provide current estimated mandi prices for ${commodity} in ${stateName}${district ? ', ' + district : ''} in India. Return as JSON array with fields: market, commodity, min_price (number), max_price (number), modal_price (number), date (YYYY-MM-DD). Include 3-5 nearby mandis. Use realistic current prices in INR per quintal.`;
 
@@ -4815,7 +4815,7 @@ Location: ${farmer.village || 'India'}
 
       const { GoogleGenerativeAI } = require('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
       const month = new Date().toLocaleString('en-IN', { month: 'long' });
       const prompt = `Give one short actionable farming tip for the month of ${month} for a farmer growing ${(farmer.crops || ['general crops']).join(', ')} in ${farmer.village || 'North India'}. Keep it under 2 sentences. Mix Hindi words if natural.`;
@@ -4855,7 +4855,7 @@ Location: ${farmer.village || 'India'}
     try {
       const { GoogleGenerativeAI } = require('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
       const farmerId = req.farmer.id;
       const farmerData = await pool.query('SELECT crops, village, land_holding_acres FROM farmers WHERE id = $1', [farmerId]);
