@@ -4283,7 +4283,7 @@ const XLSX = require('xlsx');
       try {
         const axios = require('axios');
         await axios.post('http://localhost:10000/api/v1/send-message', {
-          to: cleanPhone,
+          phone: cleanPhone,
           message: `Your VartMap login OTP is: ${otp}\nValid for 5 minutes.\n\nआपका OTP है: ${otp}`
         });
       } catch (whatsappErr) {
