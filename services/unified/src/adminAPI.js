@@ -4878,11 +4878,11 @@ Location: ${farmer.village || 'India'}
       const crops = farmer.crops || [];
 
       const axios = require('axios');
-      let lat = 26.8, lon = 82.7;
-      try {
-        const geo = await axios.get('https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(city) + '&count=1&country=IN', { timeout: 5000 });
-        if (geo.data.results && geo.data.results[0]) { lat = geo.data.results[0].latitude; lon = geo.data.results[0].longitude; }
-      } catch(e) {}
+      // Hardcoded coords for common UP/Bihar cities to avoid geocoding API calls
+      const cityCoords = { 'basti': [26.79, 82.73], 'gorakhpur': [26.75, 83.37], 'lucknow': [26.85, 80.95], 'varanasi': [25.32, 83.01], 'allahabad': [25.43, 81.85], 'patna': [25.6, 85.1], 'delhi': [28.61, 77.23], 'kanpur': [26.45, 80.35] };
+      const cityLower = city.toLowerCase();
+      let lat = 26.79, lon = 82.73;
+      if (cityCoords[cityLower]) { lat = cityCoords[cityLower][0]; lon = cityCoords[cityLower][1]; }
 
       const forecastUrl = 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon + '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,windspeed_10m_max,weathercode,sunrise,sunset&hourly=temperature_2m,relativehumidity_2m,windspeed_10m,precipitation_probability&current=temperature_2m,relativehumidity_2m,windspeed_10m,weathercode&timezone=Asia/Kolkata&forecast_days=7';
       
