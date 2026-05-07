@@ -4861,6 +4861,81 @@ Location: ${farmer.village || 'India'}
     } catch (e) { console.log('Weather error:', e.message, 'Key present:', !!process.env.OPENWEATHER_API_KEY); res.json({ temp: null, description: 'Error: ' + e.message, humidity: null, wind: null }); }
   });
 
+  // Weather forecast with 7-day, spraying conditions, AI tips
+  app.get('/api/v1/farmer/weather/forecast', farmerAuth, async (req, res) => {
+    try {
+      const farmerId = req.farmer.id;
+      const farmerData = await pool.query('SELECT village, location, crops FROM farmers WHERE id = $1', [farmerId]);
+      const farmer = farmerData.rows[0] || {};
+      const city = farmer.village || (farmer.location && farmer.location.district) || 'Basti';
+      const crops = farmer.crops || [];
+
+      // Get coordinates for the city using Open-Meteo geocoding
+      const axios = require('axios');
+      let lat = 26.8; let lon = 82.7; // default Basti
+      try {
+        const geo = await axios.get('https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(city) + '&count=1&country=IN', { timeout: 5000 });
+        if (geo.data.results && geo.data.results[0]) { lat = geo.data.results[0].latitude; lon = geo.data.results[0].longitude; }
+      } catch(e) {}
+
+      // Get 7-day forecast from Open-Meteo
+      const forecastUrl = 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon + '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,windspeed_10m_max,weathercode,sunrise,sunset&hourly=temperature_2m,relativehumidity_2m,windspeed_10m,precipitation_probability&current=temperature_2m,relativehumidity_2m,windspeed_10m,weathercode&timezone=Asia/Kolkata&forecast_days=7';
+      const forecastRes = await axios.get(forecastUrl, { timeout: 8000 });
+      const fd = forecastRes.data;
+
+      // Current weather
+      const current = {
+        temp: Math.round(fd.current.temperature_2m),
+        humidity: fd.current.relativehumidity_2m,
+        wind: Math.round(fd.current.windspeed_10m),
+        weathercode: fd.current.weathercode,
+      };
+
+      // Daily forecast
+      const daily = fd.daily.time.map((date, i) => ({
+        date,
+        temp_max: Math.round(fd.daily.temperature_2m_max[i]),
+        temp_min: Math.round(fd.daily.temperature_2m_min[i]),
+        precipitation: fd.daily.precipitation_sum[i],
+        rain_chance: fd.daily.precipitation_probability_max[i],
+        wind_max: Math.round(fd.daily.windspeed_10m_max[i]),
+        weathercode: fd.daily.weathercode[i],
+        sunrise: fd.daily.sunrise[i],
+        sunset: fd.daily.sunset[i],
+      }));
+
+      // Spraying conditions - check next 3 days hourly
+      const sprayWindows = [];
+      const now = new Date();
+      for (let h = 0; h < Math.min(72, fd.hourly.time.length); h++) {
+        const t = new Date(fd.hourly.time[h]);
+        if (t < now) continue;
+        const wind = fd.hourly.windspeed_10m[h];
+        const humidity = fd.hourly.relativehumidity_2m[h];
+        const rainProb = fd.hourly.precipitation_probability[h];
+        const hour = t.getHours();
+        // Good spraying: wind < 15 km/h, humidity 40-90%, rain < 30%, between 6am-10am or 4pm-6pm
+        if (wind < 15 && humidity >= 40 && humidity <= 90 && rainProb < 30 && ((hour >= 6 && hour <= 10) || (hour >= 16 && hour <= 18))) {
+          sprayWindows.push({ time: fd.hourly.time[h], wind, humidity, rain_chance: rainProb, quality: wind < 8 ? 'excellent' : 'good' });
+        }
+      }
+
+      // AI farming tips based on weather
+      let aiTips = null;
+      try {
+        const Groq = require('groq-sdk');
+        const groqAI = new Groq({ apiKey: process.env.GROQ_API_KEY });
+        const weatherSummary = 'Current: ' + current.temp + 'C, humidity ' + current.humidity + '%, wind ' + current.wind + 'km/h. Next 3 days: max temps ' + daily.slice(0,3).map(d=>d.temp_max).join(',') + 'C, rain chances ' + daily.slice(0,3).map(d=>d.rain_chance).join(',') + '%.';
+        const tipPrompt = 'You are an Indian farming weather advisor. Based on this weather for ' + city + ': ' + weatherSummary + ' Farmer grows: ' + crops.join(', ') + '. Give a JSON object with: summary (2 line weather summary in Hindi-English mix), tips (array of 4 short actionable farming tips), monsoon_status (1 line about current monsoon phase), spray_advice (1 line about best spraying time). Keep it practical for UP/Bihar farmers.';
+        const completion = await groqAI.chat.completions.create({ messages: [{ role: 'user', content: tipPrompt }], model: 'llama-3.3-70b-versatile', max_tokens: 800 });
+        let reply = completion.choices[0].message.content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        aiTips = JSON.parse(reply);
+      } catch(e) { aiTips = { summary: city + " mein aaj " + current.temp + " degree hai. Humidity " + current.humidity + "% hai.", tips: ["Subah 6-10 baje spray karna best hai", "Barish ke baad 2 din ruk kar spray karein", "Zyada hawa mein spray na karein", "Pani dene ka samay subah ya shaam rakhein"], monsoon_status: "Monsoon season active", spray_advice: "Aaj spray ke liye " + (current.wind < 15 ? "sahi" : "galat") + " samay hai" }; }
+
+      res.json({ location: city, lat, lon, current, daily, spray_windows: sprayWindows.slice(0, 10), ai: aiTips });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
   // ====== GOVERNMENT SCHEMES ======
   app.get('/api/v1/farmer/schemes', farmerAuth, async (req, res) => {
     try {
