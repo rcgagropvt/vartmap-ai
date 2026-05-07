@@ -4995,12 +4995,12 @@ Location: ${farmer.village || 'India'}
   app.get('/api/v1/farmer/community/posts', farmerAuth, async (req, res) => {
     try {
       const { search, filter } = req.query;
-      let q = 'SELECT p.*, p.username, (SELECT COUNT(*) FROM community_likes WHERE post_id = p.id) as likes, (SELECT COUNT(*) FROM community_comments WHERE post_id = p.id) as comments_count, EXISTS(SELECT 1 FROM community_likes WHERE post_id = p.id AND farmer_id = ' + D + '1) as liked_by_me FROM community_posts p WHERE 1=1';
+      let q = 'SELECT p.*, p.username, (SELECT COUNT(*) FROM community_likes WHERE post_id = p.id) as likes, (SELECT COUNT(*) FROM community_comments WHERE post_id = p.id) as comments_count, EXISTS(SELECT 1 FROM community_likes WHERE post_id = p.id AND farmer_id = $' + '1) as liked_by_me FROM community_posts p WHERE 1=1';
       const vals = [req.farmer.id]; let idx = 2;
-      if (search) { q += ' AND (p.content ILIKE ' + D + idx + ' OR p.crop ILIKE ' + D + idx + ' OR p.username ILIKE ' + D + idx + ')'; vals.push('%' + search + '%'); idx++; }
+      if (search) { q += ' AND (p.content ILIKE $' + idx + ' OR p.crop ILIKE $' + idx + ' OR p.username ILIKE $' + idx + ')'; vals.push('%' + search + '%'); idx++; }
       if (filter === 'photos') q += ' AND p.image_url IS NOT NULL';
-      if (filter === 'videos') q += ' AND p.image_url LIKE ' + D + idx + ''; vals.push('%.mp4%'); idx++;
-      if (filter === 'questions') q += ' AND p.content LIKE ' + D + idx + ''; vals.push('%?%'); idx++;
+      if (filter === 'videos') { q += ' AND p.image_url LIKE $' + idx; vals.push('%.mp4%'); idx++; }
+      if (filter === 'questions') { q += ' AND p.content LIKE $' + idx; vals.push('%?%'); idx++; }
       q += ' ORDER BY p.created_at DESC LIMIT 50';
       const { rows } = await pool.query(q, vals);
       const posts = rows.map(p => ({ ...p, media_url: p.image_url, media_type: p.image_url ? (p.image_url.match(/\.(mp4|mov|avi|webm)/i) ? 'video' : 'image') : null, tags: p.crop ? [p.crop] : [] }));
@@ -5047,7 +5047,7 @@ Location: ${farmer.village || 'India'}
   // GET single post
   app.get('/api/v1/farmer/community/posts/:id', farmerAuth, async (req, res) => {
     try {
-      const { rows } = await pool.query('SELECT p.*, p.username, (SELECT COUNT(*) FROM community_likes WHERE post_id = p.id) as likes, (SELECT COUNT(*) FROM community_comments WHERE post_id = p.id) as comments_count, EXISTS(SELECT 1 FROM community_likes WHERE post_id = p.id AND farmer_id = ' + D + '1) as liked_by_me FROM community_posts p WHERE p.id = ' + D + '2', [req.farmer.id, req.params.id]);
+      const { rows } = await pool.query('SELECT p.*, p.username, (SELECT COUNT(*) FROM community_likes WHERE post_id = p.id) as likes, (SELECT COUNT(*) FROM community_comments WHERE post_id = p.id) as comments_count, EXISTS(SELECT 1 FROM community_likes WHERE post_id = p.id AND farmer_id = $1) as liked_by_me FROM community_posts p WHERE p.id = $2', [req.farmer.id, req.params.id]);
       if (!rows[0]) return res.status(404).json({ error: 'Post not found' });
       const post = { ...rows[0], media_url: rows[0].image_url, media_type: rows[0].image_url ? (rows[0].image_url.match(/\.(mp4|mov|avi|webm)/i) ? 'video' : 'image') : null, tags: rows[0].crop ? [rows[0].crop] : [] };
       res.json({ post });
@@ -5057,7 +5057,7 @@ Location: ${farmer.village || 'India'}
   // GET comments
   app.get('/api/v1/farmer/community/posts/:id/comments', farmerAuth, async (req, res) => {
     try {
-      const { rows } = await pool.query('SELECT * FROM community_comments WHERE post_id = ' + D + '1 ORDER BY created_at ASC', [req.params.id]);
+      const { rows } = await pool.query('SELECT * FROM community_comments WHERE post_id = $1 ORDER BY created_at ASC', [req.params.id]);
       res.json({ comments: rows });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
@@ -5068,7 +5068,7 @@ Location: ${farmer.village || 'India'}
       const { text, username } = req.body;
       if (!text) return res.status(400).json({ error: 'text required' });
       const uname = username || 'Farmer';
-      const { rows } = await pool.query('INSERT INTO community_comments (post_id, farmer_id, username, text, created_at) VALUES (' + D + '1, ' + D + '2, ' + D + '3, ' + D + '4, NOW()) RETURNING *', [req.params.id, req.farmer.id, uname, text]);
+      const { rows } = await pool.query('INSERT INTO community_comments (post_id, farmer_id, username, text, created_at) VALUES ($1, $2, $3, $4, NOW()) RETURNING *', [req.params.id, req.farmer.id, uname, text]);
       res.json({ comment: rows[0] });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
