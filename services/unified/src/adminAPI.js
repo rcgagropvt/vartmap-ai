@@ -4877,4 +4877,68 @@ Location: ${farmer.village || 'India'}
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
+
+  // ====== SOIL HEALTH ======
+  app.get('/api/v1/farmer/soil-health', farmerAuth, async (req, res) => {
+    try {
+      const farmerId = req.farmer.id;
+      const farmerData = await pool.query('SELECT village, location, pin_code FROM farmers WHERE id = $1', [farmerId]);
+      const farmer = farmerData.rows[0] || {};
+      const district = farmer.location ? farmer.location.district : farmer.village;
+
+      // Try to find soil data from soil_health_cards table
+      const soilCards = await pool.query('SELECT * FROM soil_health_cards WHERE farmer_id = $1 ORDER BY created_at DESC LIMIT 1', [farmerId]);
+      
+      if (soilCards.rows.length > 0) {
+        const card = soilCards.rows[0];
+        return res.json(card.data || card);
+      }
+
+      // Try district-level soil data from knowledge base
+      const Groq = require('groq-sdk');
+      const groqAI = new Groq({ apiKey: process.env.GROQ_API_KEY });
+      const prompt = `Provide typical soil health data for ${district || 'Uttar Pradesh'} district in India. Return JSON with: parameters (array of {name, value, unit, status (good/medium/low), recommendation}), and recommendations (array of strings). Include: pH, Nitrogen, Phosphorus, Potassium, Organic Carbon, Zinc. Use realistic values for this region.`;
+      
+      const completion = await groqAI.chat.completions.create({
+        messages: [{ role: 'user', content: prompt }],
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 1000,
+      });
+      let reply = completion.choices[0].message.content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      try {
+        const parsed = JSON.parse(reply);
+        res.json(parsed);
+      } catch (e) {
+        res.json(null);
+      }
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ====== CROP RECOMMENDATIONS ======
+  app.get('/api/v1/farmer/crop-recommendations', farmerAuth, async (req, res) => {
+    try {
+      const farmerId = req.farmer.id;
+      const farmerData = await pool.query('SELECT crops, village, location, soil_type, land_holding_acres FROM farmers WHERE id = $1', [farmerId]);
+      const farmer = farmerData.rows[0] || {};
+      const district = farmer.location ? farmer.location.district : farmer.village;
+
+      const Groq = require('groq-sdk');
+      const groqAI = new Groq({ apiKey: process.env.GROQ_API_KEY });
+      const prompt = `Based on the soil and climate of ${district || 'UP'} district, India, recommend 5 crops that a farmer with ${farmer.land_holding_acres || 'small'} acres should grow. Current crops: ${(farmer.crops || []).join(', ')}. Return JSON array with fields: crop, reason (1 line why this crop suits this area). Focus on profitable and suitable crops for this region.`;
+      
+      const completion = await groqAI.chat.completions.create({
+        messages: [{ role: 'user', content: prompt }],
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 600,
+      });
+      let reply = completion.choices[0].message.content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      try {
+        const parsed = JSON.parse(reply);
+        res.json({ recommendations: Array.isArray(parsed) ? parsed : parsed.recommendations || [] });
+      } catch (e) {
+        res.json({ recommendations: [] });
+      }
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
 };
