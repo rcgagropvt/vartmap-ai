@@ -4368,21 +4368,28 @@ const XLSX = require('xlsx');
 
   app.put('/api/v1/farmer/profile', farmerAuth, async (req, res) => {
     try {
-      const { name, village, crops, language, district, state, land_acres } = req.body;
-      const { rows } = await pool.query(
-        `UPDATE farmers SET
-          name = COALESCE($2, name),
-          village = COALESCE($3, village),
-          crops = COALESCE($4, crops),
-          language = COALESCE($5, language),
-          district = COALESCE($6, district),
-          state = COALESCE($7, state),
-          land_acres = COALESCE($8, land_acres),
-          updated_at = NOW()
-        WHERE id = $1 RETURNING *`,
-        [req.farmer.id, name, village, crops ? JSON.stringify(crops) : null, language, district, state, land_acres]
-      );
-      res.json({ farmer: rows[0] });
+      const { name, village, crops, language, district, state, land_acres, pin_code } = req.body;
+      const updates = []; const vals = [req.farmer.id]; let idx = 2;
+      if (name) { updates.push('name = $' + idx); vals.push(name); idx++; }
+      if (village) { updates.push('village = $' + idx); vals.push(village); idx++; }
+      if (crops) { updates.push('crops = $' + idx); vals.push(JSON.stringify(crops)); idx++; }
+      if (language) { updates.push('language = $' + idx); vals.push(language); idx++; }
+      if (land_acres) { updates.push('land_holding_acres = $' + idx); vals.push(land_acres); idx++; }
+      if (pin_code) { updates.push('pin_code = $' + idx); vals.push(pin_code); idx++; }
+      if (district || state) {
+        const locObj = {};
+        if (district) locObj.district = district;
+        if (state) locObj.state = state;
+        updates.push("location = COALESCE(location, '{}'::jsonb) || $" + idx + '::jsonb');
+        vals.push(JSON.stringify(locObj)); idx++;
+      }
+      if (updates.length === 0) {
+        const r = await pool.query('SELECT * FROM farmers WHERE id = $1', [req.farmer.id]);
+        return res.json({ farmer: r.rows[0] });
+      }
+      updates.push('updated_at = NOW()');
+      const result = await pool.query('UPDATE farmers SET ' + updates.join(', ') + ' WHERE id = $1 RETURNING *', vals);
+      res.json({ farmer: result.rows[0] });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
