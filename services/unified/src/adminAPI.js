@@ -4833,9 +4833,9 @@ Location: ${farmer.village || 'India'}
   app.get('/api/v1/farmer/weather', farmerAuth, async (req, res) => {
     try {
       const farmerId = req.farmer.id;
-      const farmerData = await pool.query('SELECT village, district, location FROM farmers WHERE id = $1', [farmerId]);
+      const farmerData = await pool.query('SELECT village, location FROM farmers WHERE id = $1', [farmerId]);
       const farmer = farmerData.rows[0] || {};
-      const city = farmer.village || farmer.district || 'Delhi';
+      const city = farmer.village || (farmer.location && farmer.location.district) || 'Delhi';
 
       const axios = require('axios');
       const weatherKey = process.env.OPENWEATHER_API_KEY || '';
