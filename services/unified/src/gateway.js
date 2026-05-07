@@ -1554,7 +1554,7 @@ app.post('/webhook', async (req, res) => {
           if (!pool) { console.error('No database'); continue; }
 
           // 1. Find or create farmer
-          let farmer = await pool.query('SELECT * FROM farmers WHERE phone = $1', [from]);
+          let farmer = await pool.query('SELECT * FROM farmers WHERE phone = $1 OR phone = $2', [from, from.startsWith('+') ? from.slice(1) : '+' + from]);
           if (farmer.rows.length === 0) {
             farmer = await pool.query(
               "INSERT INTO farmers (id, name, phone, language, status, onboarding_stage, profile_complete, total_interactions, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, 'hi', 'active', 'new', false, 1, NOW(), NOW()) RETURNING *",
