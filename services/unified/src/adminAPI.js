@@ -4889,37 +4889,77 @@ Location: ${farmer.village || 'India'}
   app.get('/api/v1/farmer/soil-health', farmerAuth, async (req, res) => {
     try {
       const farmerId = req.farmer.id;
-      const farmerData = await pool.query('SELECT village, location, pin_code FROM farmers WHERE id = $1', [farmerId]);
+      const farmerData = await pool.query('SELECT village, location, pin_code, crops FROM farmers WHERE id = $1', [farmerId]);
       const farmer = farmerData.rows[0] || {};
       const district = (farmer.location && farmer.location.district) || farmer.village || '';
 
-      // Query soil_nutrient_data by district
       const soilData = await pool.query(
-        'SELECT * FROM soil_nutrient_data WHERE UPPER(district_name) = UPPER($1) ORDER BY sample_year DESC LIMIT 5',
+        'SELECT * FROM soil_nutrient_data WHERE UPPER(district_name) = UPPER($1) ORDER BY sample_year DESC LIMIT 10',
         [district]
       );
 
-      if (soilData.rows.length > 0) {
-        const row = soilData.rows[0];
-        const parameters = [
-          { name: 'Nitrogen (N)', low: row.nitrogen_low_pct, medium: row.nitrogen_medium_pct, high: row.nitrogen_high_pct, status: parseFloat(row.nitrogen_high_pct) > 30 ? 'good' : parseFloat(row.nitrogen_medium_pct) > 50 ? 'medium' : 'low' },
-          { name: 'Phosphorus (P)', low: row.phosphorus_low_pct, medium: row.phosphorus_medium_pct, high: row.phosphorus_high_pct, status: parseFloat(row.phosphorus_high_pct) > 30 ? 'good' : parseFloat(row.phosphorus_medium_pct) > 50 ? 'medium' : 'low' },
-          { name: 'Potassium (K)', low: row.potassium_low_pct, medium: row.potassium_medium_pct, high: row.potassium_high_pct, status: parseFloat(row.potassium_high_pct) > 30 ? 'good' : parseFloat(row.potassium_medium_pct) > 50 ? 'medium' : 'low' },
-          { name: 'Organic Carbon', low: row.organic_carbon_low_pct, medium: row.organic_carbon_medium_pct, high: row.organic_carbon_high_pct, status: parseFloat(row.organic_carbon_high_pct) > 30 ? 'good' : parseFloat(row.organic_carbon_medium_pct) > 50 ? 'medium' : 'low' },
-          { name: 'pH', value: row.avg_ph, status: (parseFloat(row.avg_ph) >= 6.5 && parseFloat(row.avg_ph) <= 7.5) ? 'good' : 'medium' },
-        ];
-        return res.json({
-          district: row.district_name,
-          block: row.block_name,
-          sample_year: row.sample_year,
-          total_samples: row.total_samples,
-          soil_type: row.soil_type,
-          parameters,
-          all_blocks: soilData.rows.map(r => ({ block: r.block_name, samples: r.total_samples, year: r.sample_year })),
-        });
+      if (soilData.rows.length === 0) {
+        return res.json({ message: 'No soil data available for your district', district });
       }
 
-      res.json({ message: 'No soil data available for your district', district });
+      const row = soilData.rows[0];
+      const macronutrients = [
+        { name: 'Nitrogen (N)', low: row.nitrogen_low_pct, medium: row.nitrogen_medium_pct, high: row.nitrogen_high_pct, status: parseFloat(row.nitrogen_high_pct) > 30 ? 'good' : parseFloat(row.nitrogen_medium_pct) > 50 ? 'medium' : 'low' },
+        { name: 'Phosphorus (P)', low: row.phosphorus_low_pct, medium: row.phosphorus_medium_pct, high: row.phosphorus_high_pct, status: parseFloat(row.phosphorus_high_pct) > 30 ? 'good' : parseFloat(row.phosphorus_medium_pct) > 50 ? 'medium' : 'low' },
+        { name: 'Potassium (K)', low: row.potassium_low_pct, medium: row.potassium_medium_pct, high: row.potassium_high_pct, status: parseFloat(row.potassium_high_pct) > 30 ? 'good' : parseFloat(row.potassium_medium_pct) > 50 ? 'medium' : 'low' },
+        { name: 'Organic Carbon', low: row.organic_carbon_low_pct, medium: row.organic_carbon_medium_pct, high: row.organic_carbon_high_pct, status: parseFloat(row.organic_carbon_high_pct) > 30 ? 'good' : parseFloat(row.organic_carbon_medium_pct) > 50 ? 'medium' : 'low' },
+      ];
+
+      const micronutrients = [
+        { name: 'Zinc (Zn)', sufficient: row.zinc_sufficient_pct, deficient: row.zinc_deficient_pct, status: parseFloat(row.zinc_sufficient_pct) > 50 ? 'good' : parseFloat(row.zinc_sufficient_pct) > 25 ? 'medium' : 'low' },
+        { name: 'Iron (Fe)', sufficient: row.iron_sufficient_pct, deficient: row.iron_deficient_pct, status: parseFloat(row.iron_sufficient_pct) > 50 ? 'good' : 'low' },
+        { name: 'Copper (Cu)', sufficient: row.copper_sufficient_pct, deficient: row.copper_deficient_pct, status: parseFloat(row.copper_sufficient_pct) > 50 ? 'good' : 'low' },
+        { name: 'Manganese (Mn)', sufficient: row.manganese_sufficient_pct, deficient: row.manganese_deficient_pct, status: parseFloat(row.manganese_sufficient_pct) > 50 ? 'good' : 'low' },
+        { name: 'Boron (B)', sufficient: row.boron_sufficient_pct, deficient: row.boron_deficient_pct, status: parseFloat(row.boron_sufficient_pct) > 50 ? 'good' : parseFloat(row.boron_sufficient_pct) > 25 ? 'medium' : 'low' },
+        { name: 'Sulphur (S)', sufficient: row.sulphur_sufficient_pct, deficient: row.sulphur_deficient_pct, status: parseFloat(row.sulphur_sufficient_pct) > 50 ? 'good' : parseFloat(row.sulphur_sufficient_pct) > 25 ? 'medium' : 'low' },
+      ];
+
+      const phData = { value: row.avg_ph, acidic: row.ph_acidic_pct, neutral: row.ph_neutral_pct, alkaline: row.ph_alkaline_pct, status: (parseFloat(row.avg_ph) >= 6.5 && parseFloat(row.avg_ph) <= 7.5) ? 'good' : 'medium' };
+      const ecData = { saline: row.ec_saline_pct, nonSaline: row.ec_non_saline_pct };
+
+      // Get stored recommendations
+      let recommendations = row.recommendations || {};
+      if (typeof recommendations === 'string') { try { recommendations = JSON.parse(recommendations); } catch(e) {} }
+
+      // Generate crop-specific recommendations if farmer has crops
+      let cropRecommendations = [];
+      const farmerCrops = farmer.crops || [];
+      if (farmerCrops.length > 0 && process.env.GROQ_API_KEY) {
+        try {
+          const Groq = require('groq-sdk');
+          const groqAI = new Groq({ apiKey: process.env.GROQ_API_KEY });
+          const soilSummary = 'Nitrogen: ' + row.nitrogen_low_pct + '% low, Phosphorus: ' + row.phosphorus_medium_pct + '% medium, Potassium: ' + row.potassium_medium_pct + '% medium, OC: ' + row.organic_carbon_low_pct + '% low, Zinc: ' + row.zinc_deficient_pct + '% deficient, pH: ' + row.avg_ph + ', Soil: ' + (row.soil_type || 'Neutral');
+          const completion = await groqAI.chat.completions.create({
+            messages: [{ role: 'user', content: 'Given this soil data for ' + district + ' district: ' + soilSummary + '. The farmer grows: ' + farmerCrops.join(', ') + '. Give 5 specific fertilizer/soil management recommendations for these crops based on this soil data. Return JSON array of objects with fields: crop, recommendation, fertilizer, dosage. Keep recommendations practical and in simple language.' }],
+            model: 'llama-3.3-70b-versatile',
+            max_tokens: 800,
+          });
+          let reply = completion.choices[0].message.content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+          try { cropRecommendations = JSON.parse(reply); } catch(e) {}
+        } catch(e) { console.log('Crop recs AI error:', e.message); }
+      }
+
+      res.json({
+        district: row.district_name,
+        block: row.block_name,
+        sample_year: row.sample_year,
+        cycle: row.cycle,
+        total_samples: row.total_samples,
+        soil_type: row.soil_type,
+        source: row.source,
+        macronutrients,
+        micronutrients,
+        ph: phData,
+        ec: ecData,
+        recommendations,
+        crop_recommendations: cropRecommendations,
+        all_blocks: soilData.rows.map(r => ({ block: r.block_name, samples: r.total_samples, year: r.sample_year })),
+      });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
