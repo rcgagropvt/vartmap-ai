@@ -3501,7 +3501,7 @@ const XLSX = require('xlsx');
       const wheel = w.rows[0];
       
       // Find or create farmer
-      let farmer = await pool.query('SELECT * FROM farmers WHERE phone=$1', [cleanPhone]);
+      let farmer = await pool.query('SELECT * FROM farmers WHERE phone=$1 OR phone=$2', [cleanPhone, cleanPhone.startsWith(String.fromCharCode(43)) ? cleanPhone.slice(1) : String.fromCharCode(43) + cleanPhone]);
       if (!farmer.rows.length) {
         farmer = await pool.query(
           `INSERT INTO farmers (id, name, phone, language, status, onboarding_stage, profile_complete, total_interactions, created_at, updated_at)
@@ -3699,7 +3699,7 @@ const XLSX = require('xlsx');
       const rc = await pool.query("SELECT rc.*, f.name as referrer_name, f.phone as referrer_phone FROM referral_codes rc JOIN farmers f ON f.id = rc.farmer_id WHERE UPPER(rc.code)=$1 AND rc.status='active'", [referral_code.toUpperCase()]);
       if (!rc.rows.length) return res.status(400).json({ error: 'Invalid or expired referral code' });
       if (rc.rows[0].current_uses >= rc.rows[0].max_uses) return res.status(400).json({ error: 'Referral code has reached max uses' });
-      const existingFarmer = await pool.query('SELECT * FROM farmers WHERE phone=$1', [cleanPhone]);
+      const existingFarmer = await pool.query('SELECT * FROM farmers WHERE phone=$1 OR phone=$2', [cleanPhone, cleanPhone.startsWith(String.fromCharCode(43)) ? cleanPhone.slice(1) : String.fromCharCode(43) + cleanPhone]);
       if (existingFarmer.rows.length) return res.status(400).json({ error: 'This phone number is already registered' });
       const settings = {};
       const s = await pool.query('SELECT * FROM app_settings');
@@ -4318,7 +4318,7 @@ const XLSX = require('xlsx');
 
       // Find or create farmer
       let farmer;
-      const { rows: existing } = await pool.query(`SELECT * FROM farmers WHERE phone = $1`, [cleanPhone]);
+      const { rows: existing } = await pool.query(`SELECT * FROM farmers WHERE phone = $1 OR phone = $2`, [cleanPhone, cleanPhone.startsWith(String.fromCharCode(43)) ? cleanPhone.slice(1) : String.fromCharCode(43) + cleanPhone]);
       
       if (existing.length) {
         farmer = existing[0];
