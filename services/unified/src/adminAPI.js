@@ -4687,19 +4687,26 @@ const XLSX = require('xlsx');
       // Build context with farmer info
       const context = `Farmer: ${farmer.name || 'Unknown'}, Crops: ${(farmer.crops || []).join(', ') || 'Not specified'}, Village: ${farmer.village || 'Unknown'}, District: ${farmer.district || 'Unknown'}`;
 
-      // Use Gemini AI (same as WhatsApp bot)
-      const { GoogleGenerativeAI } = require('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
-
-      const systemPrompt = `You are a helpful Indian farming assistant (Krishi Sahayak). You help farmers with crop advice, pest management, weather guidance, government schemes, organic farming, and market information. Answer in simple language. Mix Hindi and English if helpful. Keep answers concise and actionable.
-
-Farmer context: ${context}
-
-Answer the following question:`;
-
-      const result = await model.generateContent(systemPrompt + '\n\n' + message);
-      const reply = result.response.text();
+      // Route through gateway's AI endpoint (handles region/model issues)
+      const axios = require('axios');
+      let reply;
+      try {
+        const aiRes = await axios.post('http://localhost:10000/api/v1/farmer/ai-chat', { farmer_id: farmerId, message, context }, { timeout: 30000 });
+        reply = aiRes.data.reply;
+      } catch (aiErr) {
+        // Fallback: use Groq
+        const Groq = require('groq-sdk');
+        const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+        const completion = await groq.chat.completions.create({
+          messages: [
+            { role: 'system', content: 'You are a helpful Indian farming assistant (Krishi Sahayak). Help farmers with crop advice, pest management, weather, government schemes, organic farming, market info. Answer in simple language. Mix Hindi and English if helpful. Keep answers concise. Farmer context: ' + context },
+            { role: 'user', content: message }
+          ],
+          model: 'llama-3.3-70b-versatile',
+          max_tokens: 1024,
+        });
+        reply = completion.choices[0].message.content;
+      }
 
       // Store message in wa_messages for sync
       try {
@@ -4722,9 +4729,8 @@ Answer the following question:`;
       const { symptoms, image } = req.body;
       if (!symptoms && !image) return res.status(400).json({ error: 'Provide symptoms or image' });
 
-      const { GoogleGenerativeAI } = require('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+      const Groq = require('groq-sdk');
+      const groqAI = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
       const farmerId = req.farmer.id;
       const farmerData = await pool.query('SELECT crops, village FROM farmers WHERE id = $1', [farmerId]);
@@ -4743,8 +4749,8 @@ Location: ${farmer.village || 'India'}
         prompt += `The farmer has uploaded an image of the affected crop. Based on common diseases, provide diagnosis. Symptoms from image analysis needed.`;
       }
 
-      const result = await model.generateContent(prompt);
-      let reply = result.response.text();
+      const completion = await groqAI.chat.completions.create({ messages: [{ role: 'user', content: prompt }], model: 'llama-3.3-70b-versatile', max_tokens: 1500 });
+      let reply = completion.choices[0].message.content;
 
       // Try to parse as JSON
       try {
@@ -4789,14 +4795,13 @@ Location: ${farmer.village || 'India'}
       }
 
       // Fallback: AI-generated estimate
-      const { GoogleGenerativeAI } = require('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+      const Groq = require('groq-sdk');
+      const groqAI = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
       const prompt = `Provide current estimated mandi prices for ${commodity} in ${stateName}${district ? ', ' + district : ''} in India. Return as JSON array with fields: market, commodity, min_price (number), max_price (number), modal_price (number), date (YYYY-MM-DD). Include 3-5 nearby mandis. Use realistic current prices in INR per quintal.`;
 
-      const result = await model.generateContent(prompt);
-      let reply = result.response.text().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const completion = await groqAI.chat.completions.create({ messages: [{ role: 'user', content: prompt }], model: 'llama-3.3-70b-versatile', max_tokens: 1500 });
+      let reply = completion.choices[0].message.content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       try {
         const parsed = JSON.parse(reply);
         res.json({ prices: Array.isArray(parsed) ? parsed : parsed.prices || [], source: 'ai-estimate' });
@@ -4813,15 +4818,14 @@ Location: ${farmer.village || 'India'}
       const farmerData = await pool.query('SELECT crops, village FROM farmers WHERE id = $1', [farmerId]);
       const farmer = farmerData.rows[0] || {};
 
-      const { GoogleGenerativeAI } = require('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+      const Groq = require('groq-sdk');
+      const groqAI = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
       const month = new Date().toLocaleString('en-IN', { month: 'long' });
       const prompt = `Give one short actionable farming tip for the month of ${month} for a farmer growing ${(farmer.crops || ['general crops']).join(', ')} in ${farmer.village || 'North India'}. Keep it under 2 sentences. Mix Hindi words if natural.`;
 
-      const result = await model.generateContent(prompt);
-      res.json({ tip: result.response.text() });
+      const completion = await groqAI.chat.completions.create({ messages: [{ role: 'user', content: prompt }], model: 'llama-3.3-70b-versatile', max_tokens: 200 });
+      res.json({ tip: completion.choices[0].message.content });
     } catch (e) { res.json({ tip: 'Keep your fields well-irrigated and monitor for pests regularly.' }); }
   });
 
@@ -4853,9 +4857,8 @@ Location: ${farmer.village || 'India'}
   // ====== GOVERNMENT SCHEMES ======
   app.get('/api/v1/farmer/schemes', farmerAuth, async (req, res) => {
     try {
-      const { GoogleGenerativeAI } = require('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+      const Groq = require('groq-sdk');
+      const groqAI = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
       const farmerId = req.farmer.id;
       const farmerData = await pool.query('SELECT crops, village, land_holding_acres FROM farmers WHERE id = $1', [farmerId]);
@@ -4863,8 +4866,8 @@ Location: ${farmer.village || 'India'}
 
       const prompt = `List 5 current Indian government schemes available for a farmer growing ${(farmer.crops || ['crops']).join(', ')} with ${farmer.land_holding_acres || 'small'} acres land in ${farmer.village || 'Uttar Pradesh'}. Return JSON array with fields: name, description (1 line), benefit (monetary or other), eligibility (short), how_to_apply (1 line). Include PM-KISAN, PM Fasal Bima if relevant.`;
 
-      const result = await model.generateContent(prompt);
-      let reply = result.response.text().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const completion = await groqAI.chat.completions.create({ messages: [{ role: 'user', content: prompt }], model: 'llama-3.3-70b-versatile', max_tokens: 1500 });
+      let reply = completion.choices[0].message.content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       try {
         const parsed = JSON.parse(reply);
         res.json({ schemes: Array.isArray(parsed) ? parsed : parsed.schemes || [] });
