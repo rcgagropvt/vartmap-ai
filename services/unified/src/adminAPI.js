@@ -4891,33 +4891,35 @@ Location: ${farmer.village || 'India'}
       const farmerId = req.farmer.id;
       const farmerData = await pool.query('SELECT village, location, pin_code FROM farmers WHERE id = $1', [farmerId]);
       const farmer = farmerData.rows[0] || {};
-      const district = farmer.location ? farmer.location.district : farmer.village;
+      const district = (farmer.location && farmer.location.district) || farmer.village || '';
 
-      // Try to find soil data from soil_health_cards table
-      const soilCards = await pool.query('SELECT * FROM soil_health_cards WHERE farmer_id = $1 ORDER BY created_at DESC LIMIT 1', [farmerId]);
-      
-      if (soilCards.rows.length > 0) {
-        const card = soilCards.rows[0];
-        return res.json(card.data || card);
+      // Query soil_nutrient_data by district
+      const soilData = await pool.query(
+        'SELECT * FROM soil_nutrient_data WHERE UPPER(district_name) = UPPER($1) ORDER BY sample_year DESC LIMIT 5',
+        [district]
+      );
+
+      if (soilData.rows.length > 0) {
+        const row = soilData.rows[0];
+        const parameters = [
+          { name: 'Nitrogen (N)', low: row.nitrogen_low_pct, medium: row.nitrogen_medium_pct, high: row.nitrogen_high_pct, status: parseFloat(row.nitrogen_high_pct) > 30 ? 'good' : parseFloat(row.nitrogen_medium_pct) > 50 ? 'medium' : 'low' },
+          { name: 'Phosphorus (P)', low: row.phosphorus_low_pct, medium: row.phosphorus_medium_pct, high: row.phosphorus_high_pct, status: parseFloat(row.phosphorus_high_pct) > 30 ? 'good' : parseFloat(row.phosphorus_medium_pct) > 50 ? 'medium' : 'low' },
+          { name: 'Potassium (K)', low: row.potassium_low_pct, medium: row.potassium_medium_pct, high: row.potassium_high_pct, status: parseFloat(row.potassium_high_pct) > 30 ? 'good' : parseFloat(row.potassium_medium_pct) > 50 ? 'medium' : 'low' },
+          { name: 'Organic Carbon', low: row.organic_carbon_low_pct, medium: row.organic_carbon_medium_pct, high: row.organic_carbon_high_pct, status: parseFloat(row.organic_carbon_high_pct) > 30 ? 'good' : parseFloat(row.organic_carbon_medium_pct) > 50 ? 'medium' : 'low' },
+          { name: 'pH', value: row.avg_ph, status: (parseFloat(row.avg_ph) >= 6.5 && parseFloat(row.avg_ph) <= 7.5) ? 'good' : 'medium' },
+        ];
+        return res.json({
+          district: row.district_name,
+          block: row.block_name,
+          sample_year: row.sample_year,
+          total_samples: row.total_samples,
+          soil_type: row.soil_type,
+          parameters,
+          all_blocks: soilData.rows.map(r => ({ block: r.block_name, samples: r.total_samples, year: r.sample_year })),
+        });
       }
 
-      // Try district-level soil data from knowledge base
-      const Groq = require('groq-sdk');
-      const groqAI = new Groq({ apiKey: process.env.GROQ_API_KEY });
-      const prompt = `Provide typical soil health data for ${district || 'Uttar Pradesh'} district in India. Return JSON with: parameters (array of {name, value, unit, status (good/medium/low), recommendation}), and recommendations (array of strings). Include: pH, Nitrogen, Phosphorus, Potassium, Organic Carbon, Zinc. Use realistic values for this region.`;
-      
-      const completion = await groqAI.chat.completions.create({
-        messages: [{ role: 'user', content: prompt }],
-        model: 'llama-3.3-70b-versatile',
-        max_tokens: 1000,
-      });
-      let reply = completion.choices[0].message.content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      try {
-        const parsed = JSON.parse(reply);
-        res.json(parsed);
-      } catch (e) {
-        res.json(null);
-      }
+      res.json({ message: 'No soil data available for your district', district });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
