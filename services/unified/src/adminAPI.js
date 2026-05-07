@@ -4519,7 +4519,7 @@ const XLSX = require('xlsx');
   app.get('/api/v1/farmer/products', farmerAuth, async (req, res) => {
     try {
       const { category } = req.query;
-      let query = `SELECT * FROM products WHERE active = true`;
+      let query = `SELECT * FROM brand_products WHERE is_active = true`;
       const params = [];
       if (category) { query += ` AND category = $1`; params.push(category); }
       query += ` ORDER BY created_at DESC`;
@@ -4530,7 +4530,7 @@ const XLSX = require('xlsx');
 
   app.get('/api/v1/farmer/products/:id', farmerAuth, async (req, res) => {
     try {
-      const { rows } = await pool.query(`SELECT * FROM products WHERE id = $1`, [req.params.id]);
+      const { rows } = await pool.query(`SELECT * FROM brand_products WHERE id = $1`, [req.params.id]);
       if (!rows.length) return res.status(404).json({ error: 'Product not found' });
       res.json({ product: rows[0] });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -4987,6 +4987,95 @@ Location: ${farmer.village || 'India'}
       } catch (e) {
         res.json({ recommendations: [] });
       }
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+
+  // ====== COMMUNITY ======
+  app.get('/api/v1/farmer/community/posts', farmerAuth, async (req, res) => {
+    try {
+      const { rows } = await pool.query(`SELECT p.*, f.name as author_name, f.village as author_village,
+        (SELECT COUNT(*) FROM community_likes WHERE post_id = p.id) as likes,
+        (SELECT COUNT(*) FROM community_comments WHERE post_id = p.id) as comments
+        FROM community_posts p LEFT JOIN farmers f ON p.farmer_id = f.id
+        ORDER BY p.created_at DESC LIMIT 50`);
+      res.json({ posts: rows });
+    } catch (e) {
+      // Table might not exist yet, create it
+      try {
+        await pool.query(`CREATE TABLE IF NOT EXISTS community_posts (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), farmer_id UUID REFERENCES farmers(id), username VARCHAR(100), content TEXT NOT NULL, image_url TEXT, category VARCHAR(50) DEFAULT 'general', crop VARCHAR(100), created_at TIMESTAMP DEFAULT NOW())`);
+        await pool.query(`CREATE TABLE IF NOT EXISTS community_likes (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), post_id UUID, farmer_id UUID, created_at TIMESTAMP DEFAULT NOW())`);
+        await pool.query(`CREATE TABLE IF NOT EXISTS community_comments (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), post_id UUID, farmer_id UUID, username VARCHAR(100), content TEXT, created_at TIMESTAMP DEFAULT NOW())`);
+        res.json({ posts: [] });
+      } catch (e2) { res.json({ posts: [] }); }
+    }
+  });
+
+  app.post('/api/v1/farmer/community/posts', farmerAuth, async (req, res) => {
+    try {
+      const { content, category, crop, image_url, username } = req.body;
+      if (!content) return res.status(400).json({ error: 'Content required' });
+      // Update username if provided
+      if (username) { await pool.query('UPDATE farmers SET community_username = $1 WHERE id = $2', [username, req.farmer.id]).catch(() => {}); }
+      const { rows } = await pool.query(
+        `INSERT INTO community_posts (farmer_id, username, content, image_url, category, crop, created_at) VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING *`,
+        [req.farmer.id, username || req.farmer.name || 'Farmer', content, image_url || null, category || 'general', crop || null]
+      );
+      res.json({ post: rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/v1/farmer/community/posts/:id/like', farmerAuth, async (req, res) => {
+    try {
+      const existing = await pool.query('SELECT * FROM community_likes WHERE post_id = $1 AND farmer_id = $2', [req.params.id, req.farmer.id]);
+      if (existing.rows.length > 0) {
+        await pool.query('DELETE FROM community_likes WHERE post_id = $1 AND farmer_id = $2', [req.params.id, req.farmer.id]);
+        res.json({ liked: false });
+      } else {
+        await pool.query('INSERT INTO community_likes (post_id, farmer_id) VALUES ($1, $2)', [req.params.id, req.farmer.id]);
+        res.json({ liked: true });
+      }
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post('/api/v1/farmer/community/posts/:id/comment', farmerAuth, async (req, res) => {
+    try {
+      const { content, username } = req.body;
+      if (!content) return res.status(400).json({ error: 'Content required' });
+      const { rows } = await pool.query(
+        'INSERT INTO community_comments (post_id, farmer_id, username, content) VALUES ($1, $2, $3, $4) RETURNING *',
+        [req.params.id, req.farmer.id, username || 'Farmer', content]
+      );
+      res.json({ comment: rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get('/api/v1/farmer/community/posts/:id/comments', farmerAuth, async (req, res) => {
+    try {
+      const { rows } = await pool.query('SELECT * FROM community_comments WHERE post_id = $1 ORDER BY created_at ASC', [req.params.id]);
+      res.json({ comments: rows });
+    } catch (e) { res.json({ comments: [] }); }
+  });
+
+  // ====== FARMER PRODUCT CATALOG (from brand_products + crop_recommendations) ======
+  app.get('/api/v1/farmer/catalog', farmerAuth, async (req, res) => {
+    try {
+      const farmerId = req.farmer.id;
+      const farmerData = await pool.query('SELECT crops, location FROM farmers WHERE id = $1', [farmerId]);
+      const farmer = farmerData.rows[0] || {};
+      const crops = farmer.crops || [];
+
+      // Get all active products
+      const products = await pool.query('SELECT * FROM brand_products WHERE is_active = true ORDER BY sort_order, product_name');
+
+      // Get crop recommendations for farmer's crops
+      let recommendations = [];
+      if (crops.length > 0) {
+        const cropList = crops.map(c => c.toLowerCase());
+        recommendations = (await pool.query(`SELECT cr.*, bp.product_name, bp.product_code, bp.image_url, bp.composition, bp.dosage_per_acre, bp.benefits, bp.benefits_hi FROM crop_recommendations cr JOIN brand_products bp ON cr.product_id = bp.id WHERE cr.is_active = true AND LOWER(cr.crop_name) = ANY($1) ORDER BY cr.priority DESC`, [cropList])).rows;
+      }
+
+      res.json({ products: products.rows, recommendations, farmer_crops: crops });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
