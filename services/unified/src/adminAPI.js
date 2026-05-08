@@ -5381,7 +5381,7 @@ app.get('/api/v1/farmer/reels', farmerAuth, async (req, res) => {
 
 
 // DELETE community post (admin)
-app.delete('/api/v1/farmer/community/posts/:id', auth, async (req, res) => {
+app.delete('/api/v1/farmer/community/posts/:id', communityAuth, async (req, res) => {
   try {
     await pool.query('DELETE FROM community_comments WHERE post_id = $1', [req.params.id]);
     await pool.query('DELETE FROM community_likes WHERE post_id = $1', [req.params.id]);
@@ -5391,7 +5391,7 @@ app.delete('/api/v1/farmer/community/posts/:id', auth, async (req, res) => {
 });
 
 // DELETE reel (admin)
-app.delete('/api/v1/farmer/reels/:id', auth, async (req, res) => {
+app.delete('/api/v1/farmer/reels/:id', communityAuth, async (req, res) => {
   try {
     await pool.query('DELETE FROM reels WHERE id = $1', [req.params.id]);
     res.json({ success: true });
@@ -5399,7 +5399,7 @@ app.delete('/api/v1/farmer/reels/:id', auth, async (req, res) => {
 });
 
 // POST reel (admin)
-app.post('/api/v1/farmer/reels', auth, upload.single('video'), async (req, res) => {
+app.post('/api/v1/farmer/reels', communityAuth, upload.single('video'), async (req, res) => {
   try {
     const { video_url, caption, thumbnail, crop } = req.body;
     if (!video_url) return res.status(400).json({ error: 'video_url required' });
