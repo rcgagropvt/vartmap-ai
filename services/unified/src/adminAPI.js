@@ -5,6 +5,45 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+const communityAuth = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: 'No token' });
+  const token = authHeader.replace('Bearer ', '');
+  const jwt = require('jsonwebtoken');
+  const secret = process.env.JWT_SECRET || 'vartmap-farmer-secret-2024';
+  const adminSecret = process.env.JWT_SECRET || 'vartmap-secret-2024';
+  
+  // Try farmer token first
+  try {
+    const decoded = jwt.verify(token, secret);
+    if (decoded.role === 'farmer') {
+      req.farmer = decoded;
+      req.isAdmin = false;
+      return next();
+    }
+  } catch(e) {}
+  
+  // Try admin token
+  try {
+    const decoded = jwt.verify(token, adminSecret);
+    req.farmer = { id: decoded.id || decoded.userId, phone: 'admin' };
+    req.isAdmin = true;
+    return next();
+  } catch(e) {}
+  
+  // Try raw admin verification (same as auth middleware)
+  try {
+    const { rows } = await pool.query('SELECT * FROM admin_users WHERE id = $1 OR email = $1', [token]);
+    if (rows.length) {
+      req.farmer = { id: rows[0].id, phone: 'admin' };
+      req.isAdmin = true;
+      return next();
+    }
+  } catch(e) {}
+  
+  res.status(403).json({ error: 'Invalid token' });
+};
 const QRCode = require('qrcode');
 const XLSX = require('xlsx');
 
@@ -5106,44 +5145,7 @@ Location: ${farmer.village || 'India'}
   // ====== COMMUNITY ======
   
 // Middleware that accepts both admin and farmer tokens
-const communityAuth = async (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: 'No token' });
-  const token = authHeader.replace('Bearer ', '');
-  const jwt = require('jsonwebtoken');
-  const secret = process.env.JWT_SECRET || 'vartmap-farmer-secret-2024';
-  const adminSecret = process.env.JWT_SECRET || 'vartmap-secret-2024';
-  
-  // Try farmer token first
-  try {
-    const decoded = jwt.verify(token, secret);
-    if (decoded.role === 'farmer') {
-      req.farmer = decoded;
-      req.isAdmin = false;
-      return next();
-    }
-  } catch(e) {}
-  
-  // Try admin token
-  try {
-    const decoded = jwt.verify(token, adminSecret);
-    req.farmer = { id: decoded.id || decoded.userId, phone: 'admin' };
-    req.isAdmin = true;
-    return next();
-  } catch(e) {}
-  
-  // Try raw admin verification (same as auth middleware)
-  try {
-    const { rows } = await pool.query('SELECT * FROM admin_users WHERE id = $1 OR email = $1', [token]);
-    if (rows.length) {
-      req.farmer = { id: rows[0].id, phone: 'admin' };
-      req.isAdmin = true;
-      return next();
-    }
-  } catch(e) {}
-  
-  res.status(403).json({ error: 'Invalid token' });
-};
+
 
 app.get('/api/v1/farmer/community/posts', communityAuth, async (req, res) => {
     try {
