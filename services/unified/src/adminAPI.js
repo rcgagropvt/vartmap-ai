@@ -5005,7 +5005,9 @@ Location: ${farmer.village || 'India'}
   app.post('/api/v1/farmer/reels', farmerAuth, async (req, res) => {
     try {
       const { video_url, thumbnail, caption, crop } = req.body;
-      if (!video_url) return res.status(400).json({ error: 'video_url required' });
+      const fileUrl = req.file ? ('data:' + req.file.mimetype + ';base64,' + req.file.buffer.toString('base64')) : null;
+    const finalUrl = fileUrl || video_url;
+    if (!finalUrl) return res.status(400).json({ error: 'video_url or file required' });
       const username = req.farmer.name || 'Farmer';
       await pool.query(`CREATE TABLE IF NOT EXISTS reels (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), title TEXT, video_url TEXT NOT NULL, thumbnail TEXT, username TEXT, caption TEXT, crop TEXT, likes INT DEFAULT 0, comments INT DEFAULT 0, active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW())`).catch(()=>{});
       const { rows } = await pool.query('INSERT INTO reels (video_url, thumbnail, username, caption, crop) VALUES ($1, $2, $3, $4, $5) RETURNING *', [video_url, thumbnail || null, username, caption || '', crop || null]);
@@ -5397,7 +5399,7 @@ app.delete('/api/v1/farmer/reels/:id', auth, async (req, res) => {
 });
 
 // POST reel (admin)
-app.post('/api/v1/farmer/reels', auth, async (req, res) => {
+app.post('/api/v1/farmer/reels', auth, upload.single('video'), async (req, res) => {
   try {
     const { video_url, caption, thumbnail, crop } = req.body;
     if (!video_url) return res.status(400).json({ error: 'video_url required' });
@@ -5410,7 +5412,7 @@ app.post('/api/v1/farmer/reels', auth, async (req, res) => {
     )`);
     const { rows } = await pool.query(
       'INSERT INTO reels (title, video_url, thumbnail, username, caption, crop, active) VALUES ($1, $2, $3, $4, $5, $6, true) RETURNING *',
-      [caption || '', video_url, thumbnail || '', 'VartMap Official', caption || '', crop || '']
+      [caption || '', finalUrl, thumbnail || '', 'VartMap Official', caption || '', crop || '']
     );
     res.json({ reel: rows[0] });
   } catch(e) { res.status(500).json({ error: e.message }); }

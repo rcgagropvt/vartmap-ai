@@ -385,6 +385,11 @@ function openCreatePostModal(type) {
       <input id="postCrop" placeholder="e.g. Wheat, Sugarcane, Rice" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:14px">
     </div>
     <div class="form-group">
+      <label>Upload Image/Video</label>
+      <input type="file" id="postFile" accept="image/*,video/*" style="width:100%;padding:10px;border:2px solid var(--border);border-radius:10px;font-size:14px">
+      <small style="color:var(--text-light)">Or paste a URL below:</small>
+    </div>
+    <div class="form-group">
       <label>Image URL (optional)</label>
       <input id="postImage" placeholder="https://..." style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:14px">
     </div>
@@ -395,6 +400,8 @@ async function submitPost(category) {
   const content = document.getElementById('postContent').value;
   const crop = document.getElementById('postCrop').value;
   const image_url = document.getElementById('postImage').value;
+  const fileInput = document.getElementById('postFile');
+  const file = fileInput && fileInput.files[0];
   if (!content) return alert('Content is required');
   try {
     const res = await fetch('/api/v1/farmer/community/posts', {
@@ -505,6 +512,11 @@ async function loadReels() {
 function openAddReelModal() {
   openModal('Add Reel', `
     <div class="form-group">
+      <label>Upload Video</label>
+      <input type="file" id="reelFile" accept="video/*" style="width:100%;padding:10px;border:2px solid var(--border);border-radius:10px;font-size:14px">
+      <small style="color:var(--text-light)">Or paste a YouTube Shorts URL below:</small>
+    </div>
+    <div class="form-group">
       <label>Video URL (YouTube Shorts link)</label>
       <input id="reelUrl" placeholder="https://www.youtube.com/shorts/..." style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:14px">
     </div>
@@ -528,7 +540,9 @@ async function submitReel() {
   const caption = document.getElementById('reelCaption').value;
   let thumbnail = document.getElementById('reelThumb').value;
   const crop = document.getElementById('reelCrop').value;
-  if (!video_url) return alert('Video URL is required');
+  const reelFileInput = document.getElementById('reelFile');
+  const reelFile = reelFileInput && reelFileInput.files[0];
+  if (!video_url && !reelFile) return alert('Video URL or file is required');
   
   // Auto-generate YouTube thumbnail
   if (!thumbnail) {
