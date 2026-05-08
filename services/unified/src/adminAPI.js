@@ -27,6 +27,8 @@ module.exports = function setupAdminAPI(app, pool) {
     if (!token) return res.status(401).json({ error: 'No token' });
     try { req.user = jwt.verify(token, process.env.JWT_SECRET); next(); }
     catch { res.status(401).json({ error: 'Invalid token' }); }
+  };
+  };
 
   // Community auth - accepts both admin and farmer tokens
   const communityAuth = async (req, res, next) => {
@@ -57,9 +59,7 @@ module.exports = function setupAdminAPI(app, pool) {
       }
     } catch(e) {}
     res.status(403).json({ error: 'Invalid token' });
-  };
 
-  };
   
   // ---
   app.get('/health', async (req, res) => {
