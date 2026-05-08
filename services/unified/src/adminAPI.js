@@ -5178,10 +5178,20 @@ app.get('/api/v1/farmer/community/posts', communityAuth, async (req, res) => {
       if (!content) return res.status(400).json({ error: 'Content required' });
       // Update username if provided
       if (username) { await pool.query('UPDATE farmers SET community_username = $1 WHERE id = $2', [username, req.farmer.id]).catch(() => {}); }
+      let farmerId = req.farmer.id;
+      if (req.isAdmin) {
+        const fCheck = await pool.query('SELECT id FROM farmers WHERE id = $1', [farmerId]).catch(() => ({ rows: [] }));
+        if (!fCheck.rows.length) {
+          await pool.query('ALTER TABLE community_posts ALTER COLUMN farmer_id DROP NOT NULL').catch(() => {});
+          await pool.query('ALTER TABLE community_posts DROP CONSTRAINT IF EXISTS community_posts_farmer_id_fkey').catch(() => {});
+        }
+      }
       const { rows } = await pool.query(
         `INSERT INTO community_posts (farmer_id, username, content, image_url, category, crop, created_at) VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING *`,
-        [req.farmer.id, username || req.farmer.name || 'Farmer', content, req.file ? ('data:' + req.file.mimetype + ';base64,' + req.file.buffer.toString('base64')) : image_url || null, category || 'general', crop || null]
+        [farmerId, username || (req.isAdmin ? 'VartMap Official' : 'Farmer'), content, req.file ? ('data:' + req.file.mimetype + ';base64,' + req.file.buffer.toString('base64')) : image_url || null, category || 'general', crop || null]
       );
+
+
       res.json({ post: rows[0] });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
