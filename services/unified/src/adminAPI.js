@@ -5216,3 +5216,111 @@ Location: ${farmer.village || 'India'}
   });
 
 };
+// ===== YOUTUBE SHORTS AUTO-SYNC =====
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || '';
+const YOUTUBE_CHANNEL_ID = process.env.YOUTUBE_CHANNEL_ID || '';
+
+async function syncYouTubeShorts() {
+  if (!YOUTUBE_API_KEY || !YOUTUBE_CHANNEL_ID) {
+    console.log('[YouTube Sync] Missing API key or Channel ID, skipping');
+    return;
+  }
+  try {
+    // Create reels table if not exists
+    await pool.query(`CREATE TABLE IF NOT EXISTS reels (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      title TEXT,
+      video_url TEXT NOT NULL,
+      thumbnail TEXT,
+      username TEXT DEFAULT 'VartMap Official',
+      caption TEXT,
+      crop TEXT DEFAULT '',
+      likes INT DEFAULT 0,
+      comments INT DEFAULT 0,
+      active BOOLEAN DEFAULT true,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+
+    // UUSH prefix = Shorts playlist
+    const playlistId = YOUTUBE_CHANNEL_ID.replace('UC', 'UUSH');
+    const ytRes = await axios.get('https://www.googleapis.com/youtube/v3/playlistItems', {
+      params: {
+        part: 'snippet,contentDetails',
+        playlistId: playlistId,
+        maxResults: 20,
+        key: YOUTUBE_API_KEY
+      }
+    });
+
+    let added = 0;
+    for (const item of (ytRes.data.items || [])) {
+      const videoId = item.contentDetails.videoId;
+      const snippet = item.snippet;
+      const existing = await pool.query('SELECT id FROM reels WHERE video_url LIKE $1', ['%' + videoId + '%']);
+      if (existing.rows.length === 0) {
+        await pool.query(
+          'INSERT INTO reels (title, video_url, thumbnail, username, caption, crop, active) VALUES ($1, $2, $3, $4, $5, $6, true)',
+          [
+            snippet.title || 'VartMap Short',
+            'https://www.youtube.com/shorts/' + videoId,
+            (snippet.thumbnails && snippet.thumbnails.high && snippet.thumbnails.high.url) || (snippet.thumbnails && snippet.thumbnails.default && snippet.thumbnails.default.url) || '',
+            'VartMap Official',
+            (snippet.description || snippet.title || '').substring(0, 200),
+            ''
+          ]
+        );
+        added++;
+      }
+    }
+    console.log('[YouTube Sync] Done. Added ' + added + ' new shorts.');
+  } catch (e) {
+    console.error('[YouTube Sync] Error:', e.message);
+  }
+}
+
+// Sync on startup and every 30 minutes
+if (YOUTUBE_API_KEY && YOUTUBE_CHANNEL_ID) {
+  setTimeout(syncYouTubeShorts, 10000); // 10s after startup
+  setInterval(syncYouTubeShorts, 30 * 60 * 1000);
+}
+
+// Manual sync endpoint (admin)
+app.post('/api/v1/admin/sync-youtube', auth, async (req, res) => {
+  try {
+    await syncYouTubeShorts();
+    res.json({ success: true, message: 'YouTube Shorts sync completed' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET reels endpoint for farmer app
+app.get('/api/v1/farmer/reels', farmerAuth, async (req, res) => {
+  try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS reels (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      title TEXT,
+      video_url TEXT NOT NULL,
+      thumbnail TEXT,
+      username TEXT DEFAULT 'VartMap Official',
+      caption TEXT,
+      crop TEXT DEFAULT '',
+      likes INT DEFAULT 0,
+      comments INT DEFAULT 0,
+      active BOOLEAN DEFAULT true,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    const { rows } = await pool.query('SELECT * FROM reels WHERE active = true ORDER BY created_at DESC LIMIT 50');
+    if (rows.length === 0) {
+      // Return sample data if no reels yet
+      return res.json({ reels: [
+        { id: '1', title: 'Sugarcane Farming Tips', video_url: 'https://www.youtube.com/shorts/sample1', thumbnail: 'https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=400', username: 'VartMap Official', caption: 'Best practices for sugarcane', crop: 'Sugarcane', likes: 12, comments: 3 },
+        { id: '2', title: 'Wheat Harvest Season', video_url: 'https://www.youtube.com/shorts/sample2', thumbnail: 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=400', username: 'VartMap Official', caption: 'Wheat harvesting guide', crop: 'Wheat', likes: 8, comments: 1 }
+      ]});
+    }
+    res.json({ reels: rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+// ===== END YOUTUBE SHORTS SYNC =====
