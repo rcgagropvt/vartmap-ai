@@ -4933,7 +4933,7 @@ Location: ${farmer.village || 'India'}
 
 
   // ====== REELS ======
-  app.get('/api/v1/farmer/reels', farmerAuth, async (req, res) => {
+  app.get('/api/v1/farmer/reels', communityAuth, async (req, res) => {
     try {
       // Try to get reels from database
       let reels = [];
@@ -5104,7 +5104,48 @@ Location: ${farmer.village || 'India'}
 
 
   // ====== COMMUNITY ======
-  app.get('/api/v1/farmer/community/posts', farmerAuth, async (req, res) => {
+  
+// Middleware that accepts both admin and farmer tokens
+const communityAuth = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: 'No token' });
+  const token = authHeader.replace('Bearer ', '');
+  const jwt = require('jsonwebtoken');
+  const secret = process.env.JWT_SECRET || 'vartmap-farmer-secret-2024';
+  const adminSecret = process.env.JWT_SECRET || 'vartmap-secret-2024';
+  
+  // Try farmer token first
+  try {
+    const decoded = jwt.verify(token, secret);
+    if (decoded.role === 'farmer') {
+      req.farmer = decoded;
+      req.isAdmin = false;
+      return next();
+    }
+  } catch(e) {}
+  
+  // Try admin token
+  try {
+    const decoded = jwt.verify(token, adminSecret);
+    req.farmer = { id: decoded.id || decoded.userId, phone: 'admin' };
+    req.isAdmin = true;
+    return next();
+  } catch(e) {}
+  
+  // Try raw admin verification (same as auth middleware)
+  try {
+    const { rows } = await pool.query('SELECT * FROM admin_users WHERE id = $1 OR email = $1', [token]);
+    if (rows.length) {
+      req.farmer = { id: rows[0].id, phone: 'admin' };
+      req.isAdmin = true;
+      return next();
+    }
+  } catch(e) {}
+  
+  res.status(403).json({ error: 'Invalid token' });
+};
+
+app.get('/api/v1/farmer/community/posts', communityAuth, async (req, res) => {
     try {
       const { search, filter } = req.query;
       let q = 'SELECT p.*, p.username, (SELECT COUNT(*) FROM community_likes WHERE post_id = p.id) as likes, (SELECT COUNT(*) FROM community_comments WHERE post_id = p.id) as comments_count, EXISTS(SELECT 1 FROM community_likes WHERE post_id = p.id AND farmer_id = $' + '1) as liked_by_me FROM community_posts p WHERE 1=1';
@@ -5129,7 +5170,7 @@ Location: ${farmer.village || 'India'}
     }
   });
 
-  app.post('/api/v1/farmer/community/posts', farmerAuth, upload.single('media'), async (req, res) => {
+  app.post('/api/v1/farmer/community/posts', communityAuth, upload.single('media'), async (req, res) => {
     try {
       const { content, category, crop, image_url, username } = req.body;
       if (!content) return res.status(400).json({ error: 'Content required' });
@@ -5143,7 +5184,7 @@ Location: ${farmer.village || 'India'}
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
-  app.post('/api/v1/farmer/community/posts/:id/like', farmerAuth, async (req, res) => {
+  app.post('/api/v1/farmer/community/posts/:id/like', communityAuth, async (req, res) => {
     try {
       const existing = await pool.query('SELECT * FROM community_likes WHERE post_id = $1 AND farmer_id = $2', [req.params.id, req.farmer.id]);
       if (existing.rows.length > 0) {
@@ -5157,7 +5198,7 @@ Location: ${farmer.village || 'India'}
   });
 
   // GET single post
-  app.get('/api/v1/farmer/community/posts/:id', farmerAuth, async (req, res) => {
+  app.get('/api/v1/farmer/community/posts/:id', communityAuth, async (req, res) => {
     try {
       const { rows } = await pool.query('SELECT p.*, p.username, (SELECT COUNT(*) FROM community_likes WHERE post_id = p.id) as likes, (SELECT COUNT(*) FROM community_comments WHERE post_id = p.id) as comments_count, EXISTS(SELECT 1 FROM community_likes WHERE post_id = p.id AND farmer_id = $1) as liked_by_me FROM community_posts p WHERE p.id = $2', [req.farmer.id, req.params.id]);
       if (!rows[0]) return res.status(404).json({ error: 'Post not found' });
@@ -5167,7 +5208,7 @@ Location: ${farmer.village || 'India'}
   });
 
   // GET comments
-  app.get('/api/v1/farmer/community/posts/:id/comments', farmerAuth, async (req, res) => {
+  app.get('/api/v1/farmer/community/posts/:id/comments', communityAuth, async (req, res) => {
     try {
       const { rows } = await pool.query('SELECT * FROM community_comments WHERE post_id = $1 ORDER BY created_at ASC', [req.params.id]);
       res.json({ comments: rows });
@@ -5175,7 +5216,7 @@ Location: ${farmer.village || 'India'}
   });
 
   // POST comment
-  app.post('/api/v1/farmer/community/posts/:id/comments', farmerAuth, async (req, res) => {
+  app.post('/api/v1/farmer/community/posts/:id/comments', communityAuth, async (req, res) => {
     try {
       const { text, username } = req.body;
       if (!text) return res.status(400).json({ error: 'text required' });
