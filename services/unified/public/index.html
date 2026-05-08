@@ -333,7 +333,7 @@ async function loadCommunity() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div style="text-align:center;padding:40px"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
   try {
-    const res = await fetch('/api/v1/farmer/community/posts?limit=50', { headers: authHeaders() });
+    const res = await fetch('/api/v1/farmer/community/posts?limit=50', { headers: { 'Authorization': 'Bearer ' + TOKEN } });
     const data = await res.json();
     const posts = data.posts || [];
     
@@ -399,7 +399,7 @@ async function submitPost(category) {
   try {
     const res = await fetch('/api/v1/farmer/community/posts', {
       method: 'POST',
-      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      headers: { ...{ 'Authorization': 'Bearer ' + TOKEN }, 'Content-Type': 'application/json' },
       body: JSON.stringify({ content, crop, image_url, username: 'VartMap Official', category })
     });
     if (res.ok) { closeModal(); loadCommunity(); } 
@@ -410,17 +410,17 @@ async function submitPost(category) {
 async function deletePost(id) {
   if (!confirm('Delete this post?')) return;
   try {
-    await fetch('/api/v1/farmer/community/posts/' + id, { method: 'DELETE', headers: authHeaders() });
+    await fetch('/api/v1/farmer/community/posts/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + TOKEN } });
     loadCommunity();
   } catch(e) { alert('Error: ' + e.message); }
 }
 
 async function viewPost(id) {
   try {
-    const res = await fetch('/api/v1/farmer/community/posts/' + id, { headers: authHeaders() });
+    const res = await fetch('/api/v1/farmer/community/posts/' + id, { headers: { 'Authorization': 'Bearer ' + TOKEN } });
     const data = await res.json();
     const post = data.post || data;
-    const commRes = await fetch('/api/v1/farmer/community/posts/' + id + '/comments', { headers: authHeaders() });
+    const commRes = await fetch('/api/v1/farmer/community/posts/' + id + '/comments', { headers: { 'Authorization': 'Bearer ' + TOKEN } });
     const commData = await commRes.json();
     const comments = commData.comments || commData || [];
     
@@ -454,7 +454,7 @@ async function postAdminComment(postId) {
   try {
     await fetch('/api/v1/farmer/community/posts/' + postId + '/comments', {
       method: 'POST',
-      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      headers: { ...{ 'Authorization': 'Bearer ' + TOKEN }, 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, username: 'VartMap Admin' })
     });
     viewPost(postId);
@@ -466,7 +466,7 @@ async function loadReels() {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div style="text-align:center;padding:40px"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
   try {
-    const res = await fetch('/api/v1/farmer/reels', { headers: authHeaders() });
+    const res = await fetch('/api/v1/farmer/reels', { headers: { 'Authorization': 'Bearer ' + TOKEN } });
     const data = await res.json();
     const reels = data.reels || [];
     
@@ -539,7 +539,7 @@ async function submitReel() {
   try {
     const res = await fetch('/api/v1/farmer/reels', {
       method: 'POST',
-      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      headers: { ...{ 'Authorization': 'Bearer ' + TOKEN }, 'Content-Type': 'application/json' },
       body: JSON.stringify({ video_url, caption, thumbnail, crop })
     });
     if (res.ok) { closeModal(); loadReels(); }
@@ -550,14 +550,14 @@ async function submitReel() {
 async function deleteReel(id) {
   if (!confirm('Delete this reel?')) return;
   try {
-    await fetch('/api/v1/farmer/reels/' + id, { method: 'DELETE', headers: authHeaders() });
+    await fetch('/api/v1/farmer/reels/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + TOKEN } });
     loadReels();
   } catch(e) { alert('Error: ' + e.message); }
 }
 
 async function syncYouTube() {
   try {
-    const res = await fetch('/api/v1/admin/sync-youtube', { method: 'POST', headers: authHeaders() });
+    const res = await fetch('/api/v1/admin/sync-youtube', { method: 'POST', headers: { 'Authorization': 'Bearer ' + TOKEN } });
     const data = await res.json();
     alert(data.message || 'Sync completed!');
     loadReels();
