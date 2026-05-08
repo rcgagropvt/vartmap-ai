@@ -5323,6 +5323,46 @@ app.get('/api/v1/farmer/reels', farmerAuth, async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+
+// DELETE community post (admin)
+app.delete('/api/v1/farmer/community/posts/:id', auth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM community_comments WHERE post_id = $1', [req.params.id]);
+    await pool.query('DELETE FROM community_likes WHERE post_id = $1', [req.params.id]);
+    await pool.query('DELETE FROM community_posts WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE reel (admin)
+app.delete('/api/v1/farmer/reels/:id', auth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM reels WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST reel (admin)
+app.post('/api/v1/farmer/reels', auth, async (req, res) => {
+  try {
+    const { video_url, caption, thumbnail, crop } = req.body;
+    if (!video_url) return res.status(400).json({ error: 'video_url required' });
+    await pool.query(`CREATE TABLE IF NOT EXISTS reels (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      title TEXT, video_url TEXT NOT NULL, thumbnail TEXT,
+      username TEXT DEFAULT 'VartMap Official', caption TEXT,
+      crop TEXT DEFAULT '', likes INT DEFAULT 0, comments INT DEFAULT 0,
+      active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    const { rows } = await pool.query(
+      'INSERT INTO reels (title, video_url, thumbnail, username, caption, crop, active) VALUES ($1, $2, $3, $4, $5, $6, true) RETURNING *',
+      [caption || '', video_url, thumbnail || '', 'VartMap Official', caption || '', crop || '']
+    );
+    res.json({ reel: rows[0] });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ===== END YOUTUBE SHORTS SYNC =====
 
 

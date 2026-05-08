@@ -216,6 +216,8 @@ tr:hover{background:rgba(76,175,80,.03)}
       <div class="nav-section-title">Data & Intelligence</div>
       <div class="nav-item" onclick="navigate('soil-data')"><i class="fas fa-globe-asia"></i> Soil Database</div>
       <div class="nav-item" onclick="navigate('schemes')"><i class="fas fa-university"></i> Govt Schemes</div>
+      <div class="nav-item" onclick="navigate('community')"><i class="fas fa-comments"></i> Community</div>
+      <div class="nav-item" onclick="navigate('reels')"><i class="fas fa-film"></i> Reels</div>
       <div class="nav-item" onclick="navigate('settings')"><i class="fas fa-cog"></i> Settings</div>
       <div class="nav-item" onclick="navigate('products')"><i class="fas fa-box"></i> Products</div>
       <div class="nav-item" onclick="navigate('catalog')"><i class="fas fa-seedling"></i> Product Catalog</div>
@@ -325,6 +327,244 @@ function api(path, opts = {}) {
 }
 
 // ------
+
+// ===== COMMUNITY MANAGEMENT =====
+async function loadCommunity() {
+  const el = document.getElementById('pageContent');
+  el.innerHTML = '<div style="text-align:center;padding:40px"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+  try {
+    const res = await fetch('/api/v1/farmer/community/posts?limit=50', { headers: authHeaders() });
+    const data = await res.json();
+    const posts = data.posts || [];
+    
+    el.innerHTML = `
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-icon"><i class="fas fa-newspaper"></i></div><div class="stat-value">${posts.length}</div><div class="stat-label">Total Posts</div></div>
+        <div class="stat-card accent"><div class="stat-icon"><i class="fas fa-heart"></i></div><div class="stat-value">${posts.reduce((a,p)=>a+(parseInt(p.likes)||0),0)}</div><div class="stat-label">Total Likes</div></div>
+        <div class="stat-card info"><div class="stat-icon"><i class="fas fa-comment"></i></div><div class="stat-value">${posts.reduce((a,p)=>a+(parseInt(p.comments_count)||0),0)}</div><div class="stat-label">Total Comments</div></div>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="openCreatePostModal()"><i class="fas fa-plus"></i> Create Post</button>
+        <button class="btn btn-accent" onclick="openCreatePostModal('announcement')"><i class="fas fa-bullhorn"></i> Announcement</button>
+      </div>
+      <div class="table-wrap">
+        <table class="table" style="width:100%">
+          <thead><tr><th>User</th><th>Content</th><th>Media</th><th>Crop</th><th>Likes</th><th>Comments</th><th>Date</th><th>Actions</th></tr></thead>
+          <tbody>
+            ${posts.map(p => `<tr>
+              <td><strong>${p.username || 'Anonymous'}</strong></td>
+              <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.content || ''}</td>
+              <td>${p.image_url || p.media_url ? '<i class="fas fa-image" style="color:var(--primary)"></i>' : '-'}</td>
+              <td><span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:8px;font-size:11px">${p.crop || '-'}</span></td>
+              <td>${p.likes || 0}</td>
+              <td>${p.comments_count || 0}</td>
+              <td style="font-size:12px;color:var(--text-light)">${timeAgo(p.created_at)}</td>
+              <td>
+                <button class="btn btn-sm btn-outline" onclick="viewPost('${p.id}')"><i class="fas fa-eye"></i></button>
+                <button class="btn btn-sm btn-danger" onclick="deletePost('${p.id}')"><i class="fas fa-trash"></i></button>
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch(e) {
+    el.innerHTML = '<div class="empty"><i class="fas fa-exclamation-triangle"></i><p>Error loading community: ' + e.message + '</p></div>';
+  }
+}
+
+function openCreatePostModal(type) {
+  const isAnnouncement = type === 'announcement';
+  openModal(isAnnouncement ? 'Create Announcement' : 'Create Community Post', `
+    <div class="form-group">
+      <label>Content</label>
+      <textarea id="postContent" rows="4" placeholder="${isAnnouncement ? 'Write your announcement...' : 'Write your post...'}" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:14px;font-family:inherit;resize:vertical"></textarea>
+    </div>
+    <div class="form-group">
+      <label>Crop Tag (optional)</label>
+      <input id="postCrop" placeholder="e.g. Wheat, Sugarcane, Rice" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:14px">
+    </div>
+    <div class="form-group">
+      <label>Image URL (optional)</label>
+      <input id="postImage" placeholder="https://..." style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:14px">
+    </div>
+  `, `<button class="btn btn-primary" onclick="submitPost('${type || 'general'}')"><i class="fas fa-paper-plane"></i> Post</button>`);
+}
+
+async function submitPost(category) {
+  const content = document.getElementById('postContent').value;
+  const crop = document.getElementById('postCrop').value;
+  const image_url = document.getElementById('postImage').value;
+  if (!content) return alert('Content is required');
+  try {
+    const res = await fetch('/api/v1/farmer/community/posts', {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, crop, image_url, username: 'VartMap Official', category })
+    });
+    if (res.ok) { closeModal(); loadCommunity(); } 
+    else { const d = await res.json(); alert(d.error || 'Failed to create post'); }
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function deletePost(id) {
+  if (!confirm('Delete this post?')) return;
+  try {
+    await fetch('/api/v1/farmer/community/posts/' + id, { method: 'DELETE', headers: authHeaders() });
+    loadCommunity();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function viewPost(id) {
+  try {
+    const res = await fetch('/api/v1/farmer/community/posts/' + id, { headers: authHeaders() });
+    const data = await res.json();
+    const post = data.post || data;
+    const commRes = await fetch('/api/v1/farmer/community/posts/' + id + '/comments', { headers: authHeaders() });
+    const commData = await commRes.json();
+    const comments = commData.comments || commData || [];
+    
+    openModal('Post by ' + (post.username || 'Anonymous'), `
+      <div style="margin-bottom:16px">
+        <p style="font-size:15px;line-height:1.6">${post.content}</p>
+        ${post.image_url ? '<img src="' + post.image_url + '" style="max-width:100%;border-radius:8px;margin-top:12px">' : ''}
+        <div style="margin-top:12px;display:flex;gap:16px;color:var(--text-light);font-size:13px">
+          <span><i class="fas fa-heart"></i> ${post.likes || 0}</span>
+          <span><i class="fas fa-comment"></i> ${post.comments_count || comments.length || 0}</span>
+          <span><i class="fas fa-leaf"></i> ${post.crop || '-'}</span>
+          <span><i class="fas fa-clock"></i> ${timeAgo(post.created_at)}</span>
+        </div>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+      <h4 style="margin-bottom:12px">Comments (${comments.length})</h4>
+      <div style="max-height:200px;overflow-y:auto">
+        ${comments.length ? comments.map(cm => '<div style="padding:8px 0;border-bottom:1px solid var(--border)"><strong>' + (cm.username||'Farmer') + '</strong> <span style="color:var(--text-light);font-size:11px">' + timeAgo(cm.created_at) + '</span><p style="margin-top:4px;font-size:13px">' + cm.text + '</p></div>').join('') : '<p style="color:var(--text-light)">No comments yet</p>'}
+      </div>
+      <div style="margin-top:16px;display:flex;gap:8px">
+        <input id="adminComment" placeholder="Reply as admin..." style="flex:1;padding:10px;border:2px solid var(--border);border-radius:8px;font-size:13px">
+        <button class="btn btn-primary btn-sm" onclick="postAdminComment('${id}')">Reply</button>
+      </div>
+    `, '');
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function postAdminComment(postId) {
+  const text = document.getElementById('adminComment').value;
+  if (!text) return;
+  try {
+    await fetch('/api/v1/farmer/community/posts/' + postId + '/comments', {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, username: 'VartMap Admin' })
+    });
+    viewPost(postId);
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+// ===== REELS MANAGEMENT =====
+async function loadReels() {
+  const el = document.getElementById('pageContent');
+  el.innerHTML = '<div style="text-align:center;padding:40px"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+  try {
+    const res = await fetch('/api/v1/farmer/reels', { headers: authHeaders() });
+    const data = await res.json();
+    const reels = data.reels || [];
+    
+    el.innerHTML = `
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-icon"><i class="fas fa-film"></i></div><div class="stat-value">${reels.length}</div><div class="stat-label">Total Reels</div></div>
+        <div class="stat-card accent"><div class="stat-icon"><i class="fab fa-youtube"></i></div><div class="stat-value">${reels.filter(r=>r.video_url.includes('youtube')).length}</div><div class="stat-label">From YouTube</div></div>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="openAddReelModal()"><i class="fas fa-plus"></i> Add Reel</button>
+        <button class="btn btn-accent" onclick="syncYouTube()"><i class="fab fa-youtube"></i> Sync YouTube Now</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px">
+        ${reels.map(r => `
+          <div style="background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden">
+            <div style="position:relative;padding-top:56%">
+              <img src="${r.thumbnail || 'https://via.placeholder.com/300x200/111/fff?text=No+Thumbnail'}" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover">
+              <a href="${r.video_url}" target="_blank" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(255,0,0,0.8);width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;text-decoration:none"><i class="fas fa-play" style="color:#fff;font-size:14px;padding-left:2px"></i></a>
+            </div>
+            <div style="padding:12px">
+              <p style="font-size:13px;font-weight:600;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.caption || r.title || 'Untitled'}</p>
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="font-size:11px;color:var(--text-light)">${timeAgo(r.created_at)}</span>
+                <button class="btn btn-sm btn-danger" onclick="deleteReel('${r.id}')"><i class="fas fa-trash"></i></button>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } catch(e) {
+    el.innerHTML = '<div class="empty"><i class="fas fa-exclamation-triangle"></i><p>Error loading reels: ' + e.message + '</p></div>';
+  }
+}
+
+function openAddReelModal() {
+  openModal('Add Reel', `
+    <div class="form-group">
+      <label>Video URL (YouTube Shorts link)</label>
+      <input id="reelUrl" placeholder="https://www.youtube.com/shorts/..." style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:14px">
+    </div>
+    <div class="form-group">
+      <label>Caption</label>
+      <input id="reelCaption" placeholder="Short description..." style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:14px">
+    </div>
+    <div class="form-group">
+      <label>Thumbnail URL (optional - auto-generated for YouTube)</label>
+      <input id="reelThumb" placeholder="https://..." style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:14px">
+    </div>
+    <div class="form-group">
+      <label>Crop Tag (optional)</label>
+      <input id="reelCrop" placeholder="e.g. Wheat, Sugarcane" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:14px">
+    </div>
+  `, '<button class="btn btn-primary" onclick="submitReel()"><i class="fas fa-upload"></i> Add Reel</button>');
+}
+
+async function submitReel() {
+  const video_url = document.getElementById('reelUrl').value;
+  const caption = document.getElementById('reelCaption').value;
+  let thumbnail = document.getElementById('reelThumb').value;
+  const crop = document.getElementById('reelCrop').value;
+  if (!video_url) return alert('Video URL is required');
+  
+  // Auto-generate YouTube thumbnail
+  if (!thumbnail) {
+    const ytMatch = video_url.match(/(?:shorts\/|watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
+    if (ytMatch) thumbnail = 'https://i.ytimg.com/vi/' + ytMatch[1] + '/hqdefault.jpg';
+  }
+  
+  try {
+    const res = await fetch('/api/v1/farmer/reels', {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ video_url, caption, thumbnail, crop })
+    });
+    if (res.ok) { closeModal(); loadReels(); }
+    else { const d = await res.json(); alert(d.error || 'Failed to add reel'); }
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function deleteReel(id) {
+  if (!confirm('Delete this reel?')) return;
+  try {
+    await fetch('/api/v1/farmer/reels/' + id, { method: 'DELETE', headers: authHeaders() });
+    loadReels();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function syncYouTube() {
+  try {
+    const res = await fetch('/api/v1/admin/sync-youtube', { method: 'POST', headers: authHeaders() });
+    const data = await res.json();
+    alert(data.message || 'Sync completed!');
+    loadReels();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+// ===== END COMMUNITY & REELS =====
+
 function navigate(page) {
   currentPage = page;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -337,7 +577,7 @@ function navigate(page) {
     'assignment-rules':'Assignment Rules','sla-dashboard':'SLA Dashboard','chat-analytics':'Chat Analytics','soil-data':'Soil Nutrient Database','schemes':'Government Schemes','products':'Products',
     'mandi-prices':'Mandi Prices','dealers':'Dealers','field-agents':'Field Agents','orders':'Orders',
     'moderation':'Moderation Queue','notifications':'Notification Logs','analytics':'Analytics',
-    'services':'Service Health','admin-users':'Admin Users','audit-log':'Audit Log','settings':'Settings','catalog':'Product Catalog','bot-builder':'Bot Builder'
+    'services':'Service Health','admin-users':'Admin Users','audit-log':'Audit Log','community':'Community Management','reels':'Reels Management','settings':'Settings','catalog':'Product Catalog','bot-builder':'Bot Builder'
   };
   document.getElementById('pageTitle').textContent = titles[page] || page;
   const loaders = {
@@ -346,7 +586,7 @@ function navigate(page) {
     'loyalty':loadLoyaltyProgram,'coupons':loadCoupons,'rewards':loadRewards,'referrals':loadReferrals,
     'assignment-rules':loadAssignmentRules,'sla-dashboard':loadSLADashboard,'chat-analytics':loadChatAnalytics,'soil-data':loadSoilData,'schemes':loadSchemes,'products':loadProducts,
     'mandi-prices':loadMandi,'dealers':loadDealers,'field-agents':loadFieldAgents,'orders':loadOrders,
-    'moderation':loadModeration,'notifications':loadNotifications,'analytics':loadAnalytics,'services':loadServices,'admin-users':loadAdminUsers,'audit-log':loadAuditLog,'settings':loadSettings,'catalog':loadProductCatalog,'bot-builder':loadBotBuilder};
+    'moderation':loadModeration,'notifications':loadNotifications,'analytics':loadAnalytics,'services':loadServices,'admin-users':loadAdminUsers,'audit-log':loadAuditLog,'community':loadCommunity,'reels':loadReels,'settings':loadSettings,'catalog':loadProductCatalog,'bot-builder':loadBotBuilder};
   const loader = loaders[page];
   if (loader) loader(); else document.getElementById('pageContent').innerHTML = '<div class="empty"><i class="fas fa-construction"></i><p>Coming soon</p></div>';
 }
