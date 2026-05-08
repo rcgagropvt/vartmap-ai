@@ -5215,7 +5215,7 @@ Location: ${farmer.village || 'India'}
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
-};
+
 // ===== YOUTUBE SHORTS AUTO-SYNC =====
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || '';
 const YOUTUBE_CHANNEL_ID = process.env.YOUTUBE_CHANNEL_ID || '';
@@ -5324,3 +5324,6 @@ app.get('/api/v1/farmer/reels', farmerAuth, async (req, res) => {
   }
 });
 // ===== END YOUTUBE SHORTS SYNC =====
+
+
+};
