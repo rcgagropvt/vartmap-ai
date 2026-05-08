@@ -4931,6 +4931,48 @@ Location: ${farmer.village || 'India'}
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
+
+  // ====== REELS ======
+  app.get('/api/v1/farmer/reels', farmerAuth, async (req, res) => {
+    try {
+      // Try to get reels from database
+      let reels = [];
+      try {
+        const { rows } = await pool.query('SELECT * FROM reels WHERE active = true ORDER BY created_at DESC LIMIT 20');
+        reels = rows;
+      } catch(e) {
+        // Table might not exist, create it and return defaults
+        await pool.query(`CREATE TABLE IF NOT EXISTS reels (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), title TEXT, video_url TEXT NOT NULL, thumbnail TEXT, username TEXT, caption TEXT, crop TEXT, likes INT DEFAULT 0, comments INT DEFAULT 0, active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW())`).catch(()=>{});
+      }
+
+      if (reels.length === 0) {
+        // Return curated farming reels
+        reels = [
+          { id: '1', video_url: 'https://www.w3schools.com/html/mov_bbb.mp4', thumbnail: 'https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=400', username: 'KisanHelper', caption: 'Ganna ki fasal mein urea ka sahi tarika - 50kg per acre', likes: 234, comments: 18, crop: 'Ganna' },
+          { id: '2', video_url: 'https://www.w3schools.com/html/movie.mp4', thumbnail: 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=400', username: 'AgriExpert', caption: 'Gehu ki buwai November mein kaise karein - step by step', likes: 456, comments: 32, crop: 'Gehu' },
+          { id: '3', video_url: 'https://www.w3schools.com/html/mov_bbb.mp4', thumbnail: 'https://images.unsplash.com/photo-1592982537447-6f2a6a0c7c18?w=400', username: 'OrganicFarm', caption: 'Vermicompost banane ka aasan tarika - 30 din mein taiyaar', likes: 789, comments: 56, crop: 'Organic' },
+          { id: '4', video_url: 'https://www.w3schools.com/html/movie.mp4', thumbnail: 'https://images.unsplash.com/photo-1464226184884-fa280b87c399?w=400', username: 'SoilDoctor', caption: 'Mitti ki jaanch ghar pe - pH test simple trick', likes: 321, comments: 24, crop: 'General' },
+          { id: '5', video_url: 'https://www.w3schools.com/html/mov_bbb.mp4', thumbnail: 'https://images.unsplash.com/photo-1530836369250-ef72a3f5cda8?w=400', username: 'CropGuard', caption: 'Neem ka tel - best organic pest control spray', likes: 567, comments: 41, crop: 'Sabji' },
+          { id: '6', video_url: 'https://www.w3schools.com/html/movie.mp4', thumbnail: 'https://images.unsplash.com/photo-1595855759920-86582396756a?w=400', username: 'MandiGuru', caption: 'Mandi mein best rate kaise milega - 5 tips', likes: 892, comments: 67, crop: 'General' },
+          { id: '7', video_url: 'https://www.w3schools.com/html/mov_bbb.mp4', thumbnail: 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=400', username: 'IrrigationPro', caption: 'Drip irrigation lagane ka kharcha aur fayda', likes: 445, comments: 29, crop: 'Ganna' },
+          { id: '8', video_url: 'https://www.w3schools.com/html/movie.mp4', thumbnail: 'https://images.unsplash.com/photo-1523348837708-15d4a09cfac2?w=400', username: 'GovSchemes', caption: 'PM Kisan Yojana - online apply kaise karein 2025', likes: 1234, comments: 89, crop: 'General' },
+        ];
+      }
+      res.json({ reels });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // POST - Admin add reel
+  app.post('/api/v1/farmer/reels', farmerAuth, async (req, res) => {
+    try {
+      const { video_url, thumbnail, caption, crop } = req.body;
+      if (!video_url) return res.status(400).json({ error: 'video_url required' });
+      const username = req.farmer.name || 'Farmer';
+      await pool.query(`CREATE TABLE IF NOT EXISTS reels (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), title TEXT, video_url TEXT NOT NULL, thumbnail TEXT, username TEXT, caption TEXT, crop TEXT, likes INT DEFAULT 0, comments INT DEFAULT 0, active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW())`).catch(()=>{});
+      const { rows } = await pool.query('INSERT INTO reels (video_url, thumbnail, username, caption, crop) VALUES ($1, $2, $3, $4, $5) RETURNING *', [video_url, thumbnail || null, username, caption || '', crop || null]);
+      res.json({ reel: rows[0] });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
   // ====== GOVERNMENT SCHEMES ======
   app.get('/api/v1/farmer/schemes', farmerAuth, async (req, res) => {
     try {
