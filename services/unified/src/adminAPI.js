@@ -5356,7 +5356,9 @@ app.delete('/api/v1/farmer/reels/:id', communityAuth, async (req, res) => {
 app.post('/api/v1/farmer/reels', communityAuth, upload.single('video'), async (req, res) => {
   try {
     const { video_url, caption, thumbnail, crop } = req.body;
-    if (!video_url) return res.status(400).json({ error: 'video_url required' });
+    const fileUrl = req.file ? ('data:' + req.file.mimetype + ';base64,' + req.file.buffer.toString('base64')) : null;
+    const finalUrl = fileUrl || video_url;
+    if (!finalUrl) return res.status(400).json({ error: 'video_url or file required' });
     await pool.query(`CREATE TABLE IF NOT EXISTS reels (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       title TEXT, video_url TEXT NOT NULL, thumbnail TEXT,
