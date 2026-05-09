@@ -404,12 +404,19 @@ async function submitPost(category) {
   const file = fileInput && fileInput.files[0];
   if (!content) return alert('Content is required');
   try {
-    const res = await fetch('/api/v1/farmer/community/posts', {
-      method: 'POST',
-      headers: { ...{ 'Authorization': 'Bearer ' + TOKEN }, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content, crop, image_url, username: 'VartMap Official', category })
-    });
-    if (res.ok) { closeModal(); loadCommunity(); } 
+    let res;
+    if (file) {
+      const fd = new FormData();
+      fd.append('media', file);
+      fd.append('content', content);
+      fd.append('crop', crop || '');
+      fd.append('username', 'VartMap Official');
+      fd.append('category', category || 'general');
+      res = await fetch('/api/v1/farmer/community/posts', { method: 'POST', headers: { 'Authorization': 'Bearer ' + TOKEN }, body: fd });
+    } else {
+      res = await fetch('/api/v1/farmer/community/posts', { method: 'POST', headers: { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ content: content, crop: crop, image_url: image_url, username: 'VartMap Official', category: category || 'general' }) });
+    }
+    if (res.ok) { closeModal(); loadCommunity(); }
     else { const d = await res.json(); alert(d.error || 'Failed to create post'); }
   } catch(e) { alert('Error: ' + e.message); }
 }
@@ -535,7 +542,7 @@ function openAddReelModal() {
   `, '<button class="btn btn-primary" onclick="submitReel()"><i class="fas fa-upload"></i> Add Reel</button>');
 }
 
-async async function submitReel() {
+async async async function submitReel() {
   const video_url = document.getElementById('reelUrl').value;
   const caption = document.getElementById('reelCaption').value;
   let thumbnail = document.getElementById('reelThumb').value;
@@ -543,24 +550,21 @@ async async function submitReel() {
   const reelFileInput = document.getElementById('reelFile');
   const reelFile = reelFileInput && reelFileInput.files[0];
   if (!video_url && !reelFile) return alert('Video URL or file is required');
-  
-  // Auto-generate YouTube thumbnail
-  if (!thumbnail) {
+  if (!thumbnail && video_url) {
     const ytMatch = video_url.match(/(?:shorts\/|watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
     if (ytMatch) thumbnail = 'https://i.ytimg.com/vi/' + ytMatch[1] + '/hqdefault.jpg';
   }
-  
   try {
     let res;
     if (reelFile) {
-      const formData = new FormData();
-      formData.append('video', reelFile);
-      formData.append('caption', caption || '');
-      formData.append('thumbnail', thumbnail || '');
-      formData.append('crop', crop || '');
-      res = await fetch('/api/v1/farmer/reels', { method: 'POST', headers: { 'Authorization': 'Bearer ' + TOKEN }, body: formData });
+      const fd = new FormData();
+      fd.append('video', reelFile);
+      fd.append('caption', caption || '');
+      fd.append('thumbnail', thumbnail || '');
+      fd.append('crop', crop || '');
+      res = await fetch('/api/v1/farmer/reels', { method: 'POST', headers: { 'Authorization': 'Bearer ' + TOKEN }, body: fd });
     } else {
-      res = await fetch('/api/v1/farmer/reels', { method: 'POST', headers: { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ video_url, caption, thumbnail, crop }) });
+      res = await fetch('/api/v1/farmer/reels', { method: 'POST', headers: { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ video_url: video_url, caption: caption, thumbnail: thumbnail, crop: crop }) });
     }
     if (res.ok) { closeModal(); loadReels(); }
     else { const d = await res.json(); alert(d.error || 'Failed to add reel'); }
