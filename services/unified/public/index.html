@@ -542,7 +542,7 @@ function openAddReelModal() {
   `, '<button class="btn btn-primary" onclick="submitReel()"><i class="fas fa-upload"></i> Add Reel</button>');
 }
 
-async function submitReel() {
+async async function submitReel() {
   const video_url = document.getElementById('reelUrl').value;
   const caption = document.getElementById('reelCaption').value;
   let thumbnail = document.getElementById('reelThumb').value;
