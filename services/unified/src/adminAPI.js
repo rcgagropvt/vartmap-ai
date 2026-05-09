@@ -4996,18 +4996,6 @@ Location: ${farmer.village || 'India'}
   });
 
   // POST - Admin add reel
-  app.post('/api/v1/farmer/reels', farmerAuth, async (req, res) => {
-    try {
-      const { video_url, thumbnail, caption, crop } = req.body;
-      const fileUrl = req.file ? ('data:' + req.file.mimetype + ';base64,' + req.file.buffer.toString('base64')) : null;
-    const finalUrl = fileUrl || video_url;
-    if (!finalUrl) return res.status(400).json({ error: 'video_url or file required' });
-      const username = req.farmer.name || 'Farmer';
-      await pool.query(`CREATE TABLE IF NOT EXISTS reels (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), title TEXT, video_url TEXT NOT NULL, thumbnail TEXT, username TEXT, caption TEXT, crop TEXT, likes INT DEFAULT 0, comments INT DEFAULT 0, active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT NOW())`).catch(()=>{});
-      const { rows } = await pool.query('INSERT INTO reels (video_url, thumbnail, username, caption, crop) VALUES ($1, $2, $3, $4, $5) RETURNING *', [video_url, thumbnail || null, username, caption || '', crop || null]);
-      res.json({ reel: rows[0] });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-  });
   // ====== GOVERNMENT SCHEMES ======
   app.get('/api/v1/farmer/schemes', farmerAuth, async (req, res) => {
     try {
@@ -5344,34 +5332,6 @@ app.post('/api/v1/admin/sync-youtube', auth, async (req, res) => {
 });
 
 // GET reels endpoint for farmer app
-app.get('/api/v1/farmer/reels', farmerAuth, async (req, res) => {
-  try {
-    await pool.query(`CREATE TABLE IF NOT EXISTS reels (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      title TEXT,
-      video_url TEXT NOT NULL,
-      thumbnail TEXT,
-      username TEXT DEFAULT 'VartMap Official',
-      caption TEXT,
-      crop TEXT DEFAULT '',
-      likes INT DEFAULT 0,
-      comments INT DEFAULT 0,
-      active BOOLEAN DEFAULT true,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )`);
-    const { rows } = await pool.query('SELECT * FROM reels WHERE active = true ORDER BY created_at DESC LIMIT 50');
-    if (rows.length === 0) {
-      // Return sample data if no reels yet
-      return res.json({ reels: [
-        { id: '1', title: 'Sugarcane Farming Tips', video_url: 'https://www.youtube.com/shorts/sample1', thumbnail: 'https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=400', username: 'VartMap Official', caption: 'Best practices for sugarcane', crop: 'Sugarcane', likes: 12, comments: 3 },
-        { id: '2', title: 'Wheat Harvest Season', video_url: 'https://www.youtube.com/shorts/sample2', thumbnail: 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=400', username: 'VartMap Official', caption: 'Wheat harvesting guide', crop: 'Wheat', likes: 8, comments: 1 }
-      ]});
-    }
-    res.json({ reels: rows });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
 
 
 // DELETE community post (admin)
