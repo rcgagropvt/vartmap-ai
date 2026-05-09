@@ -535,7 +535,7 @@ function openAddReelModal() {
   `, '<button class="btn btn-primary" onclick="submitReel()"><i class="fas fa-upload"></i> Add Reel</button>');
 }
 
-async function submitReel() {
+async async function submitReel() {
   const video_url = document.getElementById('reelUrl').value;
   const caption = document.getElementById('reelCaption').value;
   let thumbnail = document.getElementById('reelThumb').value;
@@ -551,11 +551,17 @@ async function submitReel() {
   }
   
   try {
-    const res = await fetch('/api/v1/farmer/reels', {
-      method: 'POST',
-      headers: { ...{ 'Authorization': 'Bearer ' + TOKEN }, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ video_url, caption, thumbnail, crop })
-    });
+    let res;
+    if (reelFile) {
+      const formData = new FormData();
+      formData.append('video', reelFile);
+      formData.append('caption', caption || '');
+      formData.append('thumbnail', thumbnail || '');
+      formData.append('crop', crop || '');
+      res = await fetch('/api/v1/farmer/reels', { method: 'POST', headers: { 'Authorization': 'Bearer ' + TOKEN }, body: formData });
+    } else {
+      res = await fetch('/api/v1/farmer/reels', { method: 'POST', headers: { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ video_url, caption, thumbnail, crop }) });
+    }
     if (res.ok) { closeModal(); loadReels(); }
     else { const d = await res.json(); alert(d.error || 'Failed to add reel'); }
   } catch(e) { alert('Error: ' + e.message); }
