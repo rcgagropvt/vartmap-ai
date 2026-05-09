@@ -7,6 +7,25 @@ const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const QRCode = require('qrcode');
+const cloudinary = require('cloudinary').v2;
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+function uploadToCloudinary(buffer, options = {}) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { resource_type: 'auto', folder: 'vartmap', ...options },
+      (error, result) => {
+        if (error) reject(error);
+        else resolve(result);
+      }
+    );
+    stream.end(buffer);
+  });
+}
 const XLSX = require('xlsx');
 
 module.exports = function setupAdminAPI(app, pool) {
@@ -5172,7 +5191,7 @@ app.get('/api/v1/farmer/community/posts', communityAuth, async (req, res) => {
       }
       const { rows } = await pool.query(
         `INSERT INTO community_posts (farmer_id, username, content, image_url, category, crop, created_at) VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING *`,
-        [farmerId, username || (req.isAdmin ? 'VartMap Official' : 'Farmer'), content, req.file ? ('data:' + req.file.mimetype + ';base64,' + req.file.buffer.toString('base64')) : image_url || null, category || 'general', crop || null]
+        [farmerId, username || (req.isAdmin ? 'VartMap Official' : 'Farmer'), content, req.file ? (await uploadToCloudinary(req.file.buffer, { folder: 'vartmap/community' })).secure_url : image_url || null, category || 'general', crop || null]
       );
 
 
@@ -5356,7 +5375,11 @@ app.delete('/api/v1/farmer/reels/:id', communityAuth, async (req, res) => {
 app.post('/api/v1/farmer/reels', communityAuth, upload.single('video'), async (req, res) => {
   try {
     const { video_url, caption, thumbnail, crop } = req.body;
-    const fileUrl = req.file ? ('data:' + req.file.mimetype + ';base64,' + req.file.buffer.toString('base64')) : null;
+    let fileUrl = null;
+    if (req.file) {
+      const result = await uploadToCloudinary(req.file.buffer, { resource_type: 'video', folder: 'vartmap/reels' });
+      fileUrl = result.secure_url;
+    }
     const finalUrl = fileUrl || video_url;
     if (!finalUrl) return res.status(400).json({ error: 'video_url or file required' });
     await pool.query(`CREATE TABLE IF NOT EXISTS reels (

@@ -1,0 +1,163 @@
+{
+  "version": "6.0",
+  "screens": [
+    {
+      "id": "WELCOME_SCREEN",
+      "title": "VartMap Krishi Sahayak",
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextHeading",
+            "text": "Namaste! VartMap mein swagat hai"
+          },
+          {
+            "type": "TextBody",
+            "text": "VartMap aapko mandi bhav, mausam, fasal salah aur mitti ki jaankari deta hai. Kripya apni bhasha chunein."
+          },
+          {
+            "type": "RadioButtonsGroup",
+            "name": "language",
+            "label": "Bhasha / Language",
+            "required": true,
+            "data-source": [
+              {"id": "hi", "title": "Hindi"},
+              {"id": "en", "title": "English"}
+            ]
+          },
+          {
+            "type": "Footer",
+            "label": "Next",
+            "on-click-action": {
+              "name": "navigate",
+              "next": {"type": "screen", "name": "DETAILS_SCREEN"},
+              "payload": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "DETAILS_SCREEN",
+      "title": "Your Details",
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextSubheading",
+            "text": "Kripya apni details bharein"
+          },
+          {
+            "type": "TextInput",
+            "name": "farmer_name",
+            "label": "Aapka Naam (Name)",
+            "required": true,
+            "input-type": "text",
+            "min-chars": 2,
+            "max-chars": 50,
+            "helper-text": "Poora naam likhein"
+          },
+          {
+            "type": "TextInput",
+            "name": "pin_code",
+            "label": "Pin Code",
+            "required": false,
+            "input-type": "number",
+            "min-chars": 6,
+            "max-chars": 6,
+            "helper-text": "6 digit pin code"
+          },
+          {
+            "type": "Dropdown",
+            "name": "primary_crop",
+            "label": "Mukhya Fasal (Main Crop)",
+            "required": true,
+            "data-source": [
+              {"id": "rice", "title": "Dhaan (Rice)"},
+              {"id": "wheat", "title": "Gehun (Wheat)"},
+              {"id": "cotton", "title": "Kapas (Cotton)"},
+              {"id": "sugarcane", "title": "Ganna (Sugarcane)"},
+              {"id": "soybean", "title": "Soyabean (Soybean)"},
+              {"id": "maize", "title": "Makka (Maize)"},
+              {"id": "tomato", "title": "Tamatar (Tomato)"},
+              {"id": "onion", "title": "Pyaaz (Onion)"},
+              {"id": "potato", "title": "Aloo (Potato)"},
+              {"id": "banana", "title": "Kela (Banana)"}
+            ]
+          },
+          {
+            "type": "TextInput",
+            "name": "land_acres",
+            "label": "Zameen (Acres)",
+            "required": false,
+            "input-type": "number",
+            "helper-text": "Jaise 2, 5, 10.5"
+          },
+          {
+            "type": "Footer",
+            "label": "Next",
+            "on-click-action": {
+              "name": "navigate",
+              "next": {"type": "screen", "name": "TERMS_SCREEN"},
+              "payload": {
+                "language": "${screen.WELCOME_SCREEN.form.language}",
+                "farmer_name": "${form.farmer_name}",
+                "pin_code": "${form.pin_code}",
+                "primary_crop": "${form.primary_crop}",
+                "land_acres": "${form.land_acres}"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "TERMS_SCREEN",
+      "title": "Terms",
+      "terminal": true,
+      "success": true,
+      "data": {
+        "language": {"type": "string", "__example__": "hi"},
+        "farmer_name": {"type": "string", "__example__": "Devashish"},
+        "pin_code": {"type": "number", "__example__": 302001},
+        "primary_crop": {"type": "string", "__example__": "wheat"},
+        "land_acres": {"type": "number", "__example__": 5}
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextSubheading",
+            "text": "Niyam & Shartein (Terms)"
+          },
+          {
+            "type": "TextBody",
+            "text": "VartMap Krishi Sahayak ek free seva hai. Aapka data surakshit rahega aur kisi ke saath share nahi hoga. Kabhi bhi stop likh kar seva band kar sakte hain."
+          },
+          {
+            "type": "OptIn",
+            "name": "terms_accepted",
+            "label": "Main niyam sweekar karta hoon (I accept)",
+            "required": true
+          },
+          {
+            "type": "Footer",
+            "label": "Complete Registration",
+            "on-click-action": {
+              "name": "complete",
+              "payload": {
+                "language": "${data.language}",
+                "farmer_name": "${data.farmer_name}",
+                "pin_code": "${data.pin_code}",
+                "primary_crop": "${data.primary_crop}",
+                "land_acres": "${data.land_acres}",
+                "terms_accepted": "${form.terms_accepted}",
+                "source": "onboarding_v1"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
