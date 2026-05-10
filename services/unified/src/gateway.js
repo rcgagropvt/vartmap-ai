@@ -1738,75 +1738,6 @@ app.post('/webhook', async (req, res) => {
           }
 
 
-      // --- CROP CALENDAR COMMANDS ---
-      if (lowerMsg.includes('fasal register') || lowerMsg.includes('crop register') || lowerMsg === 'register crop' || lowerMsg === 'meri fasal' || lowerMsg.includes('calendar register') || lowerMsg === 'fasal calendar' || lowerMsg === 'fasal_calendar') {
-        const lang = farmerData.language || 'hi';
-        const crops = ['wheat', 'rice', 'sugarcane', 'mustard', 'potato'];
-        const cropLabels = lang === 'hi' 
-          ? ['Gehun (Wheat)', 'Dhaan (Rice)', 'Ganna (Sugarcane)', 'Sarson (Mustard)', 'Aalu (Potato)']
-          : ['Wheat', 'Rice', 'Sugarcane', 'Mustard', 'Potato'];
-        
-        const sections = [{
-          title: lang === 'hi' ? 'Fasal chunein' : 'Select Crop',
-          rows: crops.map((c, i) => ({ id: 'crop_reg_' + c, title: cropLabels[i], description: lang === 'hi' ? 'Calendar shuru karein' : 'Start calendar' }))
-        }];
-
-        await sendWhatsAppList(from,
-          lang === 'hi' ? '\u{1F33E} Fasal Calendar Registration\n\nKonsi fasal ka calendar shuru karna chahte hain? Buwai ki taareekh dene ke baad har stage pe automatic reminder milega.' : '\u{1F33E} Crop Calendar Registration\n\nWhich crop? After sowing date, you get automatic stage reminders.',
-          lang === 'hi' ? 'Fasal chunein' : 'Select Crop',
-          sections
-        );
-        setPendingAction(farmerId, 'crop_calendar_select');
-        continue;
-      }
-
-      if (lowerMsg === 'mera calendar' || lowerMsg === 'my calendar' || lowerMsg === 'crop status' || lowerMsg === 'mera fasal') {
-        const lang = farmerData.language || 'hi';
-        const { rows: regs } = await pool.query("SELECT * FROM farmer_crop_registrations WHERE farmer_id=" + D + "1 AND status='active' ORDER BY created_at DESC", [farmerId]);
-        
-        if (regs.length === 0) {
-          await sendWhatsAppMessage(from, lang === 'hi' ? 'Aapne abhi koi fasal register nahi ki. "fasal register" likhen shuru karne ke liye.' : 'No crops registered. Type "crop register" to start.');
-        } else {
-          let msg = lang === 'hi' ? '\u{1F4CB} *Aapki Registered Fasalein:*\n\n' : '\u{1F4CB} *Your Registered Crops:*\n\n';
-          for (const r of regs) {
-            const sowDate = new Date(r.sow_date);
-            const days = Math.floor((new Date() - sowDate) / (1000 * 60 * 60 * 24));
-            const { rows: nextStage } = await pool.query(
-              "SELECT stage_name, day_offset FROM crop_calendar_templates WHERE LOWER(crop)=LOWER(" + D + "1) AND day_offset > " + D + "2 ORDER BY day_offset LIMIT 1",
-              [r.crop, days]
-            );
-            msg += '\u{1F33E} *' + r.crop.charAt(0).toUpperCase() + r.crop.slice(1) + '*\n';
-            msg += '   Buwai: ' + sowDate.toLocaleDateString('en-IN') + ' (' + days + ' din)\n';
-            if (nextStage.length > 0) {
-              const daysUntil = nextStage[0].day_offset - days;
-              msg += '   Next: ' + nextStage[0].stage_name + ' (' + (daysUntil > 0 ? daysUntil + ' din mein' : 'aaj') + ')\n';
-            }
-            msg += '\n';
-          }
-          msg += lang === 'hi' ? 'Nayi fasal: "fasal register"' : 'Add more: "crop register"';
-          await sendWhatsAppMessage(from, msg);
-        }
-        continue;
-      }
-
-      // Handle "done"/"skip" for crop reminders
-      if (lowerMsg === 'done' || lowerMsg === 'ho gaya' || lowerMsg === 'kar liya') {
-        const { rows: lastRem } = await pool.query("SELECT id FROM crop_reminders_log WHERE farmer_id=" + D + "1 AND farmer_response IS NULL ORDER BY sent_at DESC LIMIT 1", [farmerId]);
-        if (lastRem.length > 0) {
-          await pool.query("UPDATE crop_reminders_log SET farmer_response='done', responded_at=NOW() WHERE id=" + D + "1", [lastRem[0].id]);
-          await sendWhatsAppMessage(from, farmerData.language === 'en' ? 'Great! Marked complete.' : '\u2705 Bahut achha! Complete mark ho gaya.');
-          continue;
-        }
-      }
-      if (lowerMsg === 'skip' || lowerMsg === 'nahi hua') {
-        const { rows: lastRem } = await pool.query("SELECT id FROM crop_reminders_log WHERE farmer_id=" + D + "1 AND farmer_response IS NULL ORDER BY sent_at DESC LIMIT 1", [farmerId]);
-        if (lastRem.length > 0) {
-          await pool.query("UPDATE crop_reminders_log SET farmer_response='skipped', responded_at=NOW() WHERE id=" + D + "1", [lastRem[0].id]);
-          await sendWhatsAppMessage(from, farmerData.language === 'en' ? 'OK, skipped.' : '\u23ED Theek hai, skip. Kal yaad dilayenge.');
-          continue;
-        }
-      }
-
           if (lowerMsg === 'menu' || lowerMsg === 'help' || lowerMsg === 'options' || lowerMsg === 'start' || lowerMsg === 'hi' || lowerMsg === 'hello' || lowerMsg === 'hey' || lowerMsg === 'namaste' || lowerMsg === 'namaskar') {
             await sendMenuMessage(from, botConfig, farmerData.language || 'hi');
             await pool.query(
@@ -1815,6 +1746,77 @@ app.post('/webhook', async (req, res) => {
             );
             continue;
           }
+
+          // --- CROP CALENDAR COMMANDS ---
+          if (lowerMsg.includes('fasal register') || lowerMsg.includes('crop register') || lowerMsg === 'register crop' || lowerMsg === 'meri fasal' || lowerMsg.includes('calendar register') || lowerMsg === 'fasal calendar' || lowerMsg === 'fasal_calendar') {
+            const lang = farmerData.language || 'hi';
+            const crops = ['wheat', 'rice', 'sugarcane', 'mustard', 'potato'];
+            const cropLabels = lang === 'hi' 
+              ? ['Gehun (Wheat)', 'Dhaan (Rice)', 'Ganna (Sugarcane)', 'Sarson (Mustard)', 'Aalu (Potato)']
+              : ['Wheat', 'Rice', 'Sugarcane', 'Mustard', 'Potato'];
+
+            const sections = [{
+              title: lang === 'hi' ? 'Fasal chunein' : 'Select Crop',
+              rows: crops.map((c, i) => ({ id: 'crop_reg_' + c, title: cropLabels[i], description: lang === 'hi' ? 'Calendar shuru karein' : 'Start calendar' }))
+            }];
+
+            await sendWhatsAppList(from,
+              lang === 'hi' ? '\u{1F33E} Fasal Calendar Registration\n\nKonsi fasal ka calendar shuru karna chahte hain? Buwai ki taareekh dene ke baad har stage pe automatic reminder milega.' : '\u{1F33E} Crop Calendar Registration\n\nWhich crop? After sowing date, you get automatic stage reminders.',
+              lang === 'hi' ? 'Fasal chunein' : 'Select Crop',
+              sections
+            );
+            setPendingAction(farmerId, 'crop_calendar_select');
+            continue;
+          }
+
+          if (lowerMsg === 'mera calendar' || lowerMsg === 'my calendar' || lowerMsg === 'crop status' || lowerMsg === 'mera fasal') {
+            const lang = farmerData.language || 'hi';
+            const { rows: regs } = await pool.query("SELECT * FROM farmer_crop_registrations WHERE farmer_id=" + D + "1 AND status='active' ORDER BY created_at DESC", [farmerId]);
+
+            if (regs.length === 0) {
+              await sendWhatsAppMessage(from, lang === 'hi' ? 'Aapne abhi koi fasal register nahi ki. "fasal register" likhen shuru karne ke liye.' : 'No crops registered. Type "crop register" to start.');
+            } else {
+              let msg = lang === 'hi' ? '\u{1F4CB} *Aapki Registered Fasalein:*\n\n' : '\u{1F4CB} *Your Registered Crops:*\n\n';
+              for (const r of regs) {
+                const sowDate = new Date(r.sow_date);
+                const days = Math.floor((new Date() - sowDate) / (1000 * 60 * 60 * 24));
+                const { rows: nextStage } = await pool.query(
+                  "SELECT stage_name, day_offset FROM crop_calendar_templates WHERE LOWER(crop)=LOWER(" + D + "1) AND day_offset > " + D + "2 ORDER BY day_offset LIMIT 1",
+                  [r.crop, days]
+                );
+                msg += '\u{1F33E} *' + r.crop.charAt(0).toUpperCase() + r.crop.slice(1) + '*\n';
+                msg += '   Buwai: ' + sowDate.toLocaleDateString('en-IN') + ' (' + days + ' din)\n';
+                if (nextStage.length > 0) {
+                  const daysUntil = nextStage[0].day_offset - days;
+                  msg += '   Next: ' + nextStage[0].stage_name + ' (' + (daysUntil > 0 ? daysUntil + ' din mein' : 'aaj') + ')\n';
+                }
+                msg += '\n';
+              }
+              msg += lang === 'hi' ? 'Nayi fasal: "fasal register"' : 'Add more: "crop register"';
+              await sendWhatsAppMessage(from, msg);
+            }
+            continue;
+          }
+
+          // Handle "done"/"skip" for crop reminders
+          if (lowerMsg === 'done' || lowerMsg === 'ho gaya' || lowerMsg === 'kar liya') {
+            const { rows: lastRem } = await pool.query("SELECT id FROM crop_reminders_log WHERE farmer_id=" + D + "1 AND farmer_response IS NULL ORDER BY sent_at DESC LIMIT 1", [farmerId]);
+            if (lastRem.length > 0) {
+              await pool.query("UPDATE crop_reminders_log SET farmer_response='done', responded_at=NOW() WHERE id=" + D + "1", [lastRem[0].id]);
+              await sendWhatsAppMessage(from, farmerData.language === 'en' ? 'Great! Marked complete.' : '\u2705 Bahut achha! Complete mark ho gaya.');
+              continue;
+            }
+          }
+          if (lowerMsg === 'skip' || lowerMsg === 'nahi hua') {
+            const { rows: lastRem } = await pool.query("SELECT id FROM crop_reminders_log WHERE farmer_id=" + D + "1 AND farmer_response IS NULL ORDER BY sent_at DESC LIMIT 1", [farmerId]);
+            if (lastRem.length > 0) {
+              await pool.query("UPDATE crop_reminders_log SET farmer_response='skipped', responded_at=NOW() WHERE id=" + D + "1", [lastRem[0].id]);
+              await sendWhatsAppMessage(from, farmerData.language === 'en' ? 'OK, skipped.' : '\u23ED Theek hai, skip. Kal yaad dilayenge.');
+              continue;
+            }
+          }
+
+
 
           // 7. FLOW ENGINE (check if message matches a menu item / flow)
           const flowHandled = await handleFlow(farmerId, farmerData, from, msgBody, sessionId, botConfig);
