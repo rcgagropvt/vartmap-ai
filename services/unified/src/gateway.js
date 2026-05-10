@@ -847,7 +847,7 @@ async function sendWhatsAppList(to, bodyText, buttonLabel, sections) {
 }
 
 // --- BUILD MENU MESSAGE ---
-async async function sendMenuMessage(to, botConfig, language) {
+async function sendMenuMessage(to, botConfig, language) {
   const items = (botConfig.menu_items || [])
     .filter(m => m.is_active !== false)
     .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
