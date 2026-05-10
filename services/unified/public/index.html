@@ -782,6 +782,104 @@ async function loadFinance() {
   }
 }
 
+
+// ===== CROP CALENDAR =====
+async function loadCropCalendar() {
+  const el = document.getElementById('pageContent');
+  el.innerHTML = '<div style="text-align:center;padding:40px"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+  try {
+    const res = await fetch('/api/v1/crop-calendar/overview', { headers: { 'Authorization': 'Bearer ' + TOKEN } });
+    const data = await res.json();
+    const s = data.stats || {};
+    
+    let h = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px">';
+    h += '<div class="stat-card"><div class="stat-value">' + (s.total_registrations || 0) + '</div><div class="stat-label">Total Registrations</div></div>';
+    h += '<div class="stat-card accent"><div class="stat-value">' + (s.active || 0) + '</div><div class="stat-label">Active Calendars</div></div>';
+    h += '<div class="stat-card"><div class="stat-value">' + (s.unique_farmers || 0) + '</div><div class="stat-label">Farmers Enrolled</div></div>';
+    h += '<div class="stat-card accent"><div class="stat-value">' + (s.unique_crops || 0) + '</div><div class="stat-label">Crops Tracked</div></div>';
+    h += '</div>';
+
+    // By crop breakdown
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">';
+    h += '<div style="background:var(--card);border-radius:14px;padding:24px;border:1px solid var(--border)">';
+    h += '<h3 style="margin:0 0 16px;font-size:16px"><i class="fas fa-seedling" style="color:var(--primary)"></i> Registrations by Crop</h3>';
+    if ((data.byCrop || []).length) {
+      data.byCrop.forEach(function(c) {
+        h += '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><span style="font-weight:600;text-transform:capitalize">' + c.crop + '</span><span>' + c.count + ' (' + c.active + ' active)</span></div>';
+      });
+    } else { h += '<p style="color:var(--text-secondary)">No registrations yet</p>'; }
+    h += '</div>';
+
+    // Upcoming reminders
+    h += '<div style="background:var(--card);border-radius:14px;padding:24px;border:1px solid var(--border)">';
+    h += '<h3 style="margin:0 0 16px;font-size:16px"><i class="fas fa-bell" style="color:#f59e0b"></i> Upcoming Reminders (3 days)</h3>';
+    if ((data.upcoming || []).length) {
+      data.upcoming.forEach(function(u) {
+        h += '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px"><div><strong>' + (u.farmer_name || 'Unknown') + '</strong><br><span style="color:var(--text-secondary)">' + u.crop + ' - ' + (u.next_stage || 'Next stage') + '</span></div><div style="text-align:right"><span style="color:var(--primary)">' + (u.next_reminder_date ? new Date(u.next_reminder_date).toLocaleDateString('en-IN') : '') + '</span></div></div>';
+      });
+    } else { h += '<p style="color:var(--text-secondary)">No upcoming reminders</p>'; }
+    h += '</div></div>';
+
+    // Recent reminder logs
+    h += '<div style="background:var(--card);border-radius:14px;padding:24px;border:1px solid var(--border)">';
+    h += '<h3 style="margin:0 0 16px;font-size:16px"><i class="fas fa-history" style="color:var(--primary)"></i> Recent Reminders Sent</h3>';
+    if ((data.recentLogs || []).length) {
+      h += '<div style="overflow-x:auto"><table style="width:100%;font-size:13px;border-collapse:collapse"><thead><tr style="border-bottom:2px solid var(--border)"><th style="text-align:left;padding:8px">Farmer</th><th style="text-align:left;padding:8px">Crop</th><th style="text-align:left;padding:8px">Stage</th><th style="text-align:left;padding:8px">Sent</th><th style="text-align:left;padding:8px">Response</th></tr></thead><tbody>';
+      data.recentLogs.forEach(function(l) {
+        h += '<tr style="border-bottom:1px solid var(--border)"><td style="padding:8px">' + (l.farmer_name || '-') + '</td><td style="padding:8px;text-transform:capitalize">' + (l.crop || '-') + '</td><td style="padding:8px">' + (l.stage_name || '-') + '</td><td style="padding:8px">' + (l.sent_at ? new Date(l.sent_at).toLocaleString('en-IN') : '-') + '</td><td style="padding:8px"><span style="background:' + (l.farmer_response === 'done' ? '#ecfdf5' : l.farmer_response === 'skipped' ? '#fef2f2' : '#f3f4f6') + ';color:' + (l.farmer_response === 'done' ? '#059669' : l.farmer_response === 'skipped' ? '#dc2626' : '#6b7280') + ';padding:2px 8px;border-radius:12px;font-size:11px">' + (l.farmer_response || 'pending') + '</span></td></tr>';
+      });
+      h += '</tbody></table></div>';
+    } else { h += '<p style="color:var(--text-secondary)">No reminders sent yet</p>'; }
+    h += '</div>';
+
+    // Templates management link
+    h += '<div style="margin-top:20px;text-align:center"><button class="btn btn-primary" onclick="loadCalendarTemplates()"><i class="fas fa-cog"></i> Manage Templates</button></div>';
+
+    el.innerHTML = h;
+  } catch(e) { el.innerHTML = '<div class="empty"><p>Error: ' + e.message + '</p></div>'; }
+}
+
+async function loadCalendarTemplates() {
+  const el = document.getElementById('pageContent');
+  el.innerHTML = '<div style="text-align:center;padding:40px"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+  try {
+    const res = await fetch('/api/v1/crop-calendar/templates', { headers: { 'Authorization': 'Bearer ' + TOKEN } });
+    const data = await res.json();
+    const templates = data.templates || [];
+    const crops = [...new Set(templates.map(t => t.crop))];
+
+    let h = '<button onclick="loadCropCalendar()" style="background:none;border:none;color:var(--primary);cursor:pointer;margin-bottom:16px"><i class="fas fa-arrow-left"></i> Back to Overview</button>';
+    h += '<h3 style="margin:0 0 20px">Crop Calendar Templates (' + templates.length + ' stages across ' + crops.length + ' crops)</h3>';
+
+    crops.forEach(function(crop) {
+      const ct = templates.filter(t => t.crop === crop);
+      h += '<div style="background:var(--card);border-radius:14px;padding:20px;margin-bottom:16px;border:1px solid var(--border)">';
+      h += '<h4 style="margin:0 0 12px;text-transform:capitalize"><i class="fas fa-seedling" style="color:var(--primary)"></i> ' + crop + ' (' + ct.length + ' stages)</h4>';
+      h += '<div style="display:grid;gap:8px">';
+      ct.forEach(function(t) {
+        h += '<div style="display:flex;align-items:center;gap:12px;padding:8px;background:var(--bg);border-radius:8px;font-size:13px">';
+        h += '<span style="background:var(--primary);color:#fff;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">D' + t.day_offset + '</span>';
+        h += '<div style="flex:1"><strong>' + t.stage_name + '</strong>';
+        h += '<div style="color:var(--text-secondary);font-size:12px;margin-top:2px">' + t.message_hi.substring(0, 80) + '...</div></div>';
+        h += '<span style="background:#f3f4f6;padding:2px 8px;border-radius:12px;font-size:11px">' + t.task_type + '</span>';
+        if (t.product_suggestion) h += '<span style="background:#ecfdf5;color:#059669;padding:2px 8px;border-radius:12px;font-size:11px">' + t.product_suggestion + '</span>';
+        h += '<button onclick="deleteTemplate(\'' + t.id + '\')" class="btn btn-sm btn-danger" style="flex-shrink:0"><i class="fas fa-trash"></i></button>';
+        h += '</div>';
+      });
+      h += '</div></div>';
+    });
+
+    el.innerHTML = h;
+  } catch(e) { el.innerHTML = '<div class="empty"><p>Error: ' + e.message + '</p></div>'; }
+}
+
+async function deleteTemplate(id) {
+  if (!confirm('Delete this template?')) return;
+  await fetch('/api/v1/crop-calendar/templates/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + TOKEN } });
+  loadCalendarTemplates();
+}
+
+
 // ===== END COMMUNITY & REELS =====
 
 function navigate(page) {

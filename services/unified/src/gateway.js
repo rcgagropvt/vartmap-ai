@@ -1333,6 +1333,173 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
 
 
   // GOVERNMENT SCHEMES
+
+      // --- CROP CALENDAR REGISTRATION FLOW ---
+      const lowerMsg = (msgBody || '').toLowerCase().trim();
+      if (lowerMsg.includes('fasal register') || lowerMsg.includes('crop register') || lowerMsg === 'register crop' || lowerMsg === 'meri fasal' || lowerMsg.includes('calendar register')) {
+        const lang = farmerData.language || 'hi';
+        const crops = ['wheat', 'rice', 'sugarcane', 'mustard', 'potato'];
+        const cropLabels = lang === 'hi' 
+          ? ['Gehun (Wheat)', 'Dhaan (Rice)', 'Ganna (Sugarcane)', 'Sarson (Mustard)', 'Aalu (Potato)']
+          : ['Wheat', 'Rice', 'Sugarcane', 'Mustard', 'Potato'];
+        
+        const sections = [{
+          title: lang === 'hi' ? 'Fasal chunein' : 'Select Crop',
+          rows: crops.map((c, i) => ({ id: 'crop_reg_' + c, title: cropLabels[i], description: lang === 'hi' ? 'Is fasal ka calendar shuru karein' : 'Start calendar for this crop' }))
+        }];
+
+        await sendWhatsAppList(
+          from,
+          lang === 'hi' ? '?? Fasal Calendar Registration\n\nKonsi fasal ka calendar shuru karna chahte hain? Buwai ki taareekh dene ke baad aapko har stage pe automatic yaad-dhaani milegi.' : '?? Crop Calendar Registration\n\nWhich crop calendar do you want to start? After providing sowing date, you will get automatic reminders at each growth stage.',
+          lang === 'hi' ? 'Fasal chunein' : 'Select Crop',
+          sections
+        );
+        
+        setPendingAction(farmerId, 'crop_calendar_select');
+        
+        await pool.query(
+          "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), " + D + "1, " + D + "2, 'outbound', 'system', 'text', 'Crop calendar registration menu sent', 'sent', NOW())",
+          [sessionId, farmerId]
+        );
+        return;
+      }
+
+      // Handle crop calendar pending actions
+      const pendingAction = getPendingAction(farmerId);
+      
+      if (pendingAction === 'crop_calendar_select') {
+        const selectedCrop = (msgBody || '').replace('crop_reg_', '').toLowerCase().trim();
+        const validCrops = ['wheat', 'rice', 'sugarcane', 'mustard', 'potato', 'gehun', 'dhaan', 'ganna', 'sarson', 'aalu'];
+        const cropMap = { gehun: 'wheat', dhaan: 'rice', ganna: 'sugarcane', sarson: 'mustard', aalu: 'potato' };
+        const crop = cropMap[selectedCrop] || (validCrops.includes(selectedCrop) ? selectedCrop : null);
+        
+        if (crop) {
+          setPendingAction(farmerId, 'crop_calendar_date', { crop: crop });
+          const lang = farmerData.language || 'hi';
+          await sendWhatsAppMessage(from,
+            lang === 'hi' 
+              ? '?? ' + crop.charAt(0).toUpperCase() + crop.slice(1) + ' select hua!\n\nAb buwai ki taareekh batayen (format: DD/MM/YYYY)\n\nJaise: 15/11/2024'
+              : '?? ' + crop.charAt(0).toUpperCase() + crop.slice(1) + ' selected!\n\nNow tell me the sowing date (format: DD/MM/YYYY)\n\nExample: 15/11/2024'
+          );
+        } else {
+          const lang = farmerData.language || 'hi';
+          await sendWhatsAppMessage(from, lang === 'hi' ? 'Kripya list mein se fasal chunein.' : 'Please select a crop from the list.');
+        }
+        return;
+      }
+
+      if (pendingAction === 'crop_calendar_date') {
+        const pendingData = getPendingData(farmerId);
+        const crop = pendingData ? pendingData.crop : null;
+        const dateStr = (msgBody || '').trim();
+        
+        // Parse date (DD/MM/YYYY or YYYY-MM-DD)
+        let sowDate = null;
+        const ddmmyyyy = dateStr.match(/(d{1,2})[/-](d{1,2})[/-](d{4})/);
+        if (ddmmyyyy) {
+          sowDate = new Date(parseInt(ddmmyyyy[3]), parseInt(ddmmyyyy[2]) - 1, parseInt(ddmmyyyy[1]));
+        } else {
+          const yyyymmdd = dateStr.match(/(d{4})[/-](d{1,2})[/-](d{1,2})/);
+          if (yyyymmdd) sowDate = new Date(parseInt(yyyymmdd[1]), parseInt(yyyymmdd[2]) - 1, parseInt(yyyymmdd[3]));
+        }
+
+        // Also try "aaj" (today) or "kal" (yesterday)
+        if (!sowDate && (dateStr === 'aaj' || dateStr === 'today')) sowDate = new Date();
+        if (!sowDate && (dateStr === 'kal' || dateStr === 'yesterday')) { sowDate = new Date(); sowDate.setDate(sowDate.getDate() - 1); }
+
+        if (sowDate && !isNaN(sowDate.getTime()) && crop) {
+          clearPendingAction(farmerId);
+          const lang = farmerData.language || 'hi';
+          
+          // Register via API
+          try {
+            const axios2 = require('axios');
+            const regResp = await axios2.post((process.env.ADMIN_API_URL || 'http://localhost:' + (process.env.PORT || 10000)) + '/api/v1/crop-calendar/register', {
+              farmer_id: farmerId,
+              crop: crop,
+              sow_date: sowDate.toISOString().split('T')[0],
+              land_area: farmerData.land_acres || null
+            });
+
+            const { rows: templates } = await pool.query(
+              "SELECT COUNT(*) as cnt FROM crop_calendar_templates WHERE LOWER(crop)=LOWER(" + D + "1)", [crop]
+            );
+            const stageCount = templates[0] ? templates[0].cnt : 0;
+
+            await sendWhatsAppMessage(from,
+              lang === 'hi'
+                ? '? *Fasal Calendar Registered!*\n\n?? Fasal: ' + crop.charAt(0).toUpperCase() + crop.slice(1) + '\n?? Buwai: ' + sowDate.toLocaleDateString('en-IN') + '\n?? ' + stageCount + ' stages ka calendar set ho gaya\n\n?? Aapko har zaroori stage pe WhatsApp pe yaad-dhaani milegi - sinchai, khaad, keetnashak, katai sab!\n\nApni fasal ka progress dekhne ke liye "mera calendar" likhen.'
+                : '? *Crop Calendar Registered!*\n\n?? Crop: ' + crop.charAt(0).toUpperCase() + crop.slice(1) + '\n?? Sown: ' + sowDate.toLocaleDateString('en-IN') + '\n?? ' + stageCount + ' stage calendar set\n\n?? You will receive WhatsApp reminders at each important stage - irrigation, fertilizer, pest watch, harvest!\n\nType "my calendar" to see progress.'
+            );
+          } catch(regErr) {
+            await sendWhatsAppMessage(from, lang === 'hi' ? '? Registration mein error aaya. Kripya dobara try karein.' : '? Registration error. Please try again.');
+            console.log('Crop registration error:', regErr.message);
+          }
+        } else {
+          const lang = farmerData.language || 'hi';
+          await sendWhatsAppMessage(from,
+            lang === 'hi' ? '? Taareekh samajh nahi aayi. Kripya DD/MM/YYYY format mein likhen.\nJaise: 15/11/2024\n\nYa "aaj" likhen agar aaj buwai ki hai.' : '? Could not understand the date. Please use DD/MM/YYYY format.\nExample: 15/11/2024\n\nOr type "today" if sown today.'
+          );
+        }
+        return;
+      }
+
+      // "mera calendar" / "my calendar" command
+      if (lowerMsg === 'mera calendar' || lowerMsg === 'my calendar' || lowerMsg === 'crop status') {
+        const lang = farmerData.language || 'hi';
+        const { rows: regs } = await pool.query(
+          "SELECT * FROM farmer_crop_registrations WHERE farmer_id=" + D + "1 AND status='active' ORDER BY created_at DESC", [farmerId]
+        );
+        
+        if (regs.length === 0) {
+          await sendWhatsAppMessage(from, lang === 'hi' ? 'Aapne abhi tak koi fasal register nahi ki. "fasal register" likhen shuru karne ke liye.' : 'No crops registered yet. Type "crop register" to start.');
+        } else {
+          let msg = lang === 'hi' ? '?? *Aapki Registered Fasalein:*\n\n' : '?? *Your Registered Crops:*\n\n';
+          for (const r of regs) {
+            const sowDate = new Date(r.sow_date);
+            const days = Math.floor((new Date() - sowDate) / (1000 * 60 * 60 * 24));
+            const { rows: nextStage } = await pool.query(
+              "SELECT stage_name, day_offset FROM crop_calendar_templates WHERE LOWER(crop)=LOWER(" + D + "1) AND day_offset > " + D + "2 ORDER BY day_offset LIMIT 1",
+              [r.crop, days]
+            );
+            msg += '?? *' + r.crop.charAt(0).toUpperCase() + r.crop.slice(1) + '*\n';
+            msg += '   ?? Buwai: ' + sowDate.toLocaleDateString('en-IN') + ' (' + days + ' din)\n';
+            if (nextStage.length > 0) {
+              const daysUntil = nextStage[0].day_offset - days;
+              msg += '   ? Next: ' + nextStage[0].stage_name + ' (' + (daysUntil > 0 ? daysUntil + ' din mein' : 'aaj') + ')\n';
+            }
+            msg += '\n';
+          }
+          msg += lang === 'hi' ? 'Nayi fasal add karne ke liye "fasal register" likhen.' : 'Type "crop register" to add more.';
+          await sendWhatsAppMessage(from, msg);
+        }
+        return;
+      }
+
+      // Handle "done"/"skip" responses to reminders
+      if (lowerMsg === 'done' || lowerMsg === 'ho gaya' || lowerMsg === 'kar liya') {
+        const { rows: lastReminder } = await pool.query(
+          "SELECT id FROM crop_reminders_log WHERE farmer_id=" + D + "1 AND farmer_response IS NULL ORDER BY sent_at DESC LIMIT 1", [farmerId]
+        );
+        if (lastReminder.length > 0) {
+          await pool.query("UPDATE crop_reminders_log SET farmer_response='done', responded_at=NOW() WHERE id=" + D + "1", [lastReminder[0].id]);
+          const lang = farmerData.language || 'hi';
+          await sendWhatsAppMessage(from, lang === 'hi' ? '? Bahut achha! Kaam complete mark ho gaya. Agli stage pe yaad dilayenge!' : '? Great! Marked as complete. Will remind you at the next stage!');
+          return;
+        }
+      }
+      if (lowerMsg === 'skip' || lowerMsg === 'nahi' || lowerMsg === 'nhi') {
+        const { rows: lastReminder } = await pool.query(
+          "SELECT id FROM crop_reminders_log WHERE farmer_id=" + D + "1 AND farmer_response IS NULL ORDER BY sent_at DESC LIMIT 1", [farmerId]
+        );
+        if (lastReminder.length > 0) {
+          await pool.query("UPDATE crop_reminders_log SET farmer_response='skipped', responded_at=NOW() WHERE id=" + D + "1", [lastReminder[0].id]);
+          const lang = farmerData.language || 'hi';
+          await sendWhatsAppMessage(from, lang === 'hi' ? '?? Theek hai, skip kar diya. Kal phir yaad dilayenge.' : '?? OK, skipped. Will remind again tomorrow.');
+          return;
+        }
+      }
+
   if (menuKey === 'govt_schemes' || menuKey === 'government_schemes' || menuKey === 'sarkari_yojana') {
     await sendWhatsAppMessage(from, lang === 'hi' ? '🏛️ Sarkari yojanayen dhundh raha hoon...' : 'Looking up government schemes...');
     const schemes = await getGovtSchemes(farmerData.state_name || '');

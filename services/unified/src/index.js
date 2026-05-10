@@ -90,6 +90,128 @@ app.get('*', (req, res) => {
 });
 
 // --- START ---
+
+// ===== CROP REMINDER SCHEDULER =====
+async function runCropReminderScheduler() {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Find registrations with reminders due today
+    const { rows: dueRegs } = await pool.query(
+      "SELECT r.*, f.name as farmer_name, f.phone, f.language FROM farmer_crop_registrations r JOIN farmers f ON f.id = r.farmer_id WHERE r.status='active' AND r.next_reminder_date <= " + D + "1",
+      [today]
+    );
+
+    if (dueRegs.length === 0) return;
+    console.log('[Scheduler] ' + dueRegs.length + ' crop reminders due today');
+
+    const axios = require('axios');
+    const phoneNumberId = process.env.WA_PHONE_NUMBER_ID;
+
+    for (const reg of dueRegs) {
+      try {
+        const sowDate = new Date(reg.sow_date);
+        const daysSinceSow = Math.floor((new Date() - sowDate) / (1000 * 60 * 60 * 24));
+
+        // Find the template for today's stage
+        const { rows: templates } = await pool.query(
+          "SELECT * FROM crop_calendar_templates WHERE LOWER(crop)=LOWER(" + D + "1) AND day_offset <= " + D + "2 AND id NOT IN (SELECT template_id FROM crop_reminders_log WHERE registration_id=" + D + "3 AND template_id IS NOT NULL) ORDER BY day_offset DESC LIMIT 1",
+          [reg.crop, daysSinceSow, reg.id]
+        );
+
+        if (templates.length === 0) {
+          // All reminders sent for this crop, mark as completed
+          await pool.query("UPDATE farmer_crop_registrations SET status='completed', updated_at=NOW() WHERE id=" + D + "1", [reg.id]);
+          continue;
+        }
+
+        const template = templates[0];
+        const lang = reg.language || 'hi';
+        let message = lang === 'hi' ? template.message_hi : template.message_en;
+
+        // Weather check if template is weather-sensitive
+        if (template.is_weather_sensitive || template.skip_if_rain) {
+          try {
+            const weatherResp = await axios.get('https://api.openweathermap.org/data/2.5/weather?q=' + (reg.district || 'Delhi') + ',IN&appid=' + process.env.OPENWEATHER_API_KEY + '&units=metric').catch(() => null);
+            if (weatherResp && weatherResp.data) {
+              const weather = weatherResp.data;
+              const isRaining = weather.weather && weather.weather[0] && ['Rain', 'Drizzle', 'Thunderstorm'].includes(weather.weather[0].main);
+              
+              if (template.skip_if_rain && isRaining) {
+                message = (lang === 'hi') 
+                  ? '??? Aaj baarish ho rahi hai, isliye sinchai ki zaroorat nahi hai. Kal ka mausam dekhein.'
+                  : '??? It is raining today, so no irrigation needed. Check weather tomorrow.';
+              } else if (template.is_weather_sensitive && weather.main) {
+                const temp = Math.round(weather.main.temp);
+                message += (lang === 'hi')
+                  ? '\n\n??? Aaj ka mausam: ' + temp + '�C, ' + (weather.weather[0].description || '')
+                  : '\n\n??? Today\'s weather: ' + temp + '�C, ' + (weather.weather[0].description || '');
+              }
+            }
+          } catch(wErr) { /* weather check failed, send without it */ }
+        }
+
+        // Add product suggestion if available
+        if (template.product_suggestion) {
+          message += (lang === 'hi')
+            ? '\n\n?? Suggested: ' + template.product_suggestion + ' - Zyada jankari ke liye "product" likhen.'
+            : '\n\n?? Suggested: ' + template.product_suggestion + ' - Type "product" for more info.';
+        }
+
+        // Add completion prompt
+        message += (lang === 'hi')
+          ? '\n\n? Kaam ho gaya? "done" likhen | ? Nahi hua? "skip" likhen'
+          : '\n\nDone? Reply "done" | Not yet? Reply "skip"';
+
+        // Send WhatsApp message
+        const sendResp = await axios.post(
+          'https://graph.facebook.com/v21.0/' + phoneNumberId + '/messages',
+          {
+            messaging_product: 'whatsapp',
+            to: reg.phone,
+            type: 'text',
+            text: { body: '?? *Crop Calendar - ' + reg.crop.charAt(0).toUpperCase() + reg.crop.slice(1) + '*\n(' + template.stage_name + ')\n\n' + message }
+          },
+          { headers: { 'Authorization': 'Bearer ' + process.env.WA_ACCESS_TOKEN, 'Content-Type': 'application/json' } }
+        );
+
+        // Log the reminder
+        await pool.query(
+          "INSERT INTO crop_reminders_log (registration_id, farmer_id, template_id, stage_name, message_sent, weather_context) VALUES (" + D + "1," + D + "2," + D + "3," + D + "4," + D + "5," + D + "6)",
+          [reg.id, reg.farmer_id, template.id, template.stage_name, message, null]
+        );
+
+        // Update next reminder date
+        const { rows: nextTemplate } = await pool.query(
+          "SELECT day_offset FROM crop_calendar_templates WHERE LOWER(crop)=LOWER(" + D + "1) AND day_offset > " + D + "2 ORDER BY day_offset LIMIT 1",
+          [reg.crop, template.day_offset]
+        );
+        
+        if (nextTemplate.length > 0) {
+          const nextDate = new Date(reg.sow_date);
+          nextDate.setDate(nextDate.getDate() + nextTemplate[0].day_offset);
+          await pool.query("UPDATE farmer_crop_registrations SET next_reminder_date=" + D + "1, updated_at=NOW() WHERE id=" + D + "2", [nextDate.toISOString().split('T')[0], reg.id]);
+        } else {
+          await pool.query("UPDATE farmer_crop_registrations SET status='completed', updated_at=NOW() WHERE id=" + D + "1", [reg.id]);
+        }
+
+        console.log('[Scheduler] Sent reminder to ' + reg.farmer_name + ' (' + reg.crop + ' - ' + template.stage_name + ')');
+      } catch(regErr) {
+        console.log('[Scheduler] Error for reg ' + reg.id + ':', regErr.message);
+      }
+    }
+  } catch(e) {
+    console.log('[Scheduler] Error:', e.message);
+  }
+}
+
+// Run scheduler every hour
+setInterval(runCropReminderScheduler, 60 * 60 * 1000);
+// Also run once 30 seconds after startup
+setTimeout(runCropReminderScheduler, 30000);
+console.log('[Scheduler] Crop reminder scheduler initialized (runs hourly)');
+
+
 app.listen(PORT, () => {
   console.log(`VartMap Unified Service running on port ${PORT}`);
   console.log(`Dashboard: http://localhost:${PORT}`);
