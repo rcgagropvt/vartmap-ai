@@ -1335,8 +1335,8 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
   // GOVERNMENT SCHEMES
 
       // --- CROP CALENDAR REGISTRATION FLOW ---
-      const lowerMsg = (msgBody || '').toLowerCase().trim();
-      if (lowerMsg.includes('fasal register') || lowerMsg.includes('crop register') || lowerMsg === 'register crop' || lowerMsg === 'meri fasal' || lowerMsg.includes('calendar register')) {
+      const cropMsg = (msgBody || '').toLowerCase().trim();
+      if (cropMsg.includes('fasal register') || cropMsg.includes('crop register') || cropMsg === 'register crop' || cropMsg === 'meri fasal' || cropMsg.includes('calendar register')) {
         const lang = farmerData.language || 'hi';
         const crops = ['wheat', 'rice', 'sugarcane', 'mustard', 'potato'];
         const cropLabels = lang === 'hi' 
@@ -1445,7 +1445,7 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
       }
 
       // "mera calendar" / "my calendar" command
-      if (lowerMsg === 'mera calendar' || lowerMsg === 'my calendar' || lowerMsg === 'crop status') {
+      if (cropMsg === 'mera calendar' || cropMsg === 'my calendar' || cropMsg === 'crop status') {
         const lang = farmerData.language || 'hi';
         const { rows: regs } = await pool.query(
           "SELECT * FROM farmer_crop_registrations WHERE farmer_id=" + D + "1 AND status='active' ORDER BY created_at DESC", [farmerId]
