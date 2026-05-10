@@ -5901,6 +5901,16 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
 
   
   // Manual table init endpoint (call once after deploy)
+  // One-time: deactivate expert menu item
+  app.get("/api/v1/crop-calendar/fix-menu", async (req, res) => {
+    try {
+      await pool.query("UPDATE bot_menu_items SET is_active = false WHERE menu_key = 'talk_to_expert'");
+      const { rows } = await pool.query("SELECT menu_key, title_hi, is_active FROM bot_menu_items ORDER BY sort_order");
+      res.json({ success: true, items: rows });
+    } catch(e) { res.status(500).json({ error: e.message }); }
+  });
+
+
   app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
     try {
       // Create tables
