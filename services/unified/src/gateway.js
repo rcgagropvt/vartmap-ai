@@ -1807,7 +1807,7 @@ app.post('/webhook', async (req, res) => {
         }
       }
 
-          if (lowerMsg === 'menu' || lowerMsg === 'help' || lowerMsg === 'options' || lowerMsg === 'start') {
+          if (lowerMsg === 'menu' || lowerMsg === 'help' || lowerMsg === 'options' || lowerMsg === 'start' || lowerMsg === 'hi' || lowerMsg === 'hello' || lowerMsg === 'hey' || lowerMsg === 'namaste' || lowerMsg === 'namaskar') {
             await sendMenuMessage(from, botConfig, farmerData.language || 'hi');
             await pool.query(
               "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
