@@ -5400,7 +5400,7 @@ app.post('/api/v1/farmer/reels', communityAuth, upload.single('video'), async (r
 // ===== END YOUTUBE SHORTS SYNC =====
 
 // ===== VIDEO MANAGEMENT =====
-app.get('/api/v1/videos', authMiddleware, async (req, res) => {
+app.get('/api/v1/videos', auth, async (req, res) => {
   try {
     await pool.query(`CREATE TABLE IF NOT EXISTS videos (
       id SERIAL PRIMARY KEY, video_id VARCHAR(20) NOT NULL, title VARCHAR(255) NOT NULL,
@@ -5426,7 +5426,7 @@ app.get('/api/v1/videos/public', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/v1/videos', authMiddleware, async (req, res) => {
+app.post('/api/v1/videos', auth, async (req, res) => {
   try {
     const { video_id, title, duration, type, category, order_num } = req.body;
     if (!video_id || !title) return res.status(400).json({ error: 'video_id and title required' });
@@ -5438,7 +5438,7 @@ app.post('/api/v1/videos', authMiddleware, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.put('/api/v1/videos/:id', authMiddleware, async (req, res) => {
+app.put('/api/v1/videos/:id', auth, async (req, res) => {
   try {
     const { id } = req.params;
     const { video_id, title, duration, type, category, is_active, order_num } = req.body;
@@ -5454,7 +5454,7 @@ app.put('/api/v1/videos/:id', authMiddleware, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.delete('/api/v1/videos/:id', authMiddleware, async (req, res) => {
+app.delete('/api/v1/videos/:id', auth, async (req, res) => {
   try {
     const { rows } = await pool.query('DELETE FROM videos WHERE id=$1 RETURNING *', [req.params.id]);
     if (!rows.length) return res.status(404).json({ error: 'Video not found' });
@@ -5462,7 +5462,7 @@ app.delete('/api/v1/videos/:id', authMiddleware, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/v1/videos/:id/toggle', authMiddleware, async (req, res) => {
+app.post('/api/v1/videos/:id/toggle', auth, async (req, res) => {
   try {
     const { rows } = await pool.query('UPDATE videos SET is_active = NOT is_active, updated_at=NOW() WHERE id=$1 RETURNING *', [req.params.id]);
     if (!rows.length) return res.status(404).json({ error: 'Video not found' });
