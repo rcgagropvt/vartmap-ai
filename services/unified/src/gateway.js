@@ -1739,7 +1739,7 @@ app.post('/webhook', async (req, res) => {
 
 
       // --- CROP CALENDAR COMMANDS ---
-      if (lowerMsg.includes('fasal register') || lowerMsg.includes('crop register') || lowerMsg === 'register crop' || lowerMsg === 'meri fasal' || lowerMsg.includes('calendar register') || lowerMsg === 'fasal calendar') {
+      if (lowerMsg.includes('fasal register') || lowerMsg.includes('crop register') || lowerMsg === 'register crop' || lowerMsg === 'meri fasal' || lowerMsg.includes('calendar register') || lowerMsg === 'fasal calendar' || cropMsg === 'fasal_calendar') {
         const lang = farmerData.language || 'hi';
         const crops = ['wheat', 'rice', 'sugarcane', 'mustard', 'potato'];
         const cropLabels = lang === 'hi' 

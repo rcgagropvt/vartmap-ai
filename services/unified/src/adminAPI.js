@@ -5896,7 +5896,82 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
     } catch(e) { res.status(500).json({ error: e.message }); }
   });
 
-  // Register farmer crop (from app or bot)
+  
+  // Manual table init endpoint (call once)
+  app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS crop_calendar_templates (
+          id SERIAL PRIMARY KEY,
+          crop VARCHAR(100) NOT NULL,
+          stage_name VARCHAR(200) NOT NULL,
+          day_offset INTEGER NOT NULL,
+          message_hi TEXT,
+          message_en TEXT,
+          activity TEXT,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS farmer_crop_registrations (
+          id SERIAL PRIMARY KEY,
+          farmer_id UUID REFERENCES farmers(id),
+          crop VARCHAR(100) NOT NULL,
+          sow_date DATE NOT NULL,
+          land_area DECIMAL,
+          next_reminder_date DATE,
+          status VARCHAR(20) DEFAULT 'active',
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS crop_reminders_log (
+          id SERIAL PRIMARY KEY,
+          registration_id INTEGER REFERENCES farmer_crop_registrations(id),
+          farmer_id UUID REFERENCES farmers(id),
+          stage_name VARCHAR(200),
+          message_sent TEXT,
+          sent_at TIMESTAMP DEFAULT NOW()
+        );
+      `);
+      
+      // Also seed menu item
+      const { rows: bc } = await pool.query("SELECT id, menu_items FROM bot_configs LIMIT 1");
+      if (bc.length > 0) {
+        let mi = bc[0].menu_items || [];
+        if (typeof mi === 'string') mi = JSON.parse(mi);
+        if (!mi.some(m => m.menu_key === 'fasal_calendar')) {
+          mi.push({ menu_key: 'fasal_calendar', title_hi: 'Fasal Calendar', title_en: 'Crop Calendar', description_hi: 'Fasal register karein, growth reminders paayein', description_en: 'Register crop, get growth stage reminders', is_active: true, sort_order: mi.length + 1 });
+          await pool.query("UPDATE bot_configs SET menu_items=$1 WHERE id=$2", [JSON.stringify(mi), bc[0].id]);
+        }
+      }
+      // Seed templates if empty
+      const { rows: tCount } = await pool.query("SELECT COUNT(*) as cnt FROM crop_calendar_templates");
+      if (parseInt(tCount[0].cnt) === 0) {
+        const seeds = [
+          ['wheat','Beej Upchar (Seed Treatment)',0,'Gehu ke beej ko Bavistin 2g/kg se upcharit karein.','Treat wheat seeds with Bavistin 2g/kg before sowing.','seed_treatment'],
+          ['wheat','Pehli Sinchai (First Irrigation)',21,'Gehu mein pehli sinchai 21 din baad karein (Crown Root stage).','First irrigation at 21 days (Crown Root stage).','irrigation'],
+          ['wheat','Kharpatwar Niyantran',30,'Sulfosulfuron 25g/ha spray karein ya haath se nirai karein.','Spray Sulfosulfuron 25g/ha or do manual weeding.','weed_control'],
+          ['wheat','Doosri Sinchai',42,'Doosri sinchai 40-45 din par karein. Urea 1/3 bhi dalein.','Second irrigation at 40-45 days. Apply 1/3 Urea.','irrigation'],
+          ['wheat','Teesri Sinchai',65,'Teesri sinchai 60-65 din par. Potash spray se dane bhari honge.','Third irrigation at 60-65 days. Potash spray helps.','irrigation'],
+          ['wheat','Rog Nighrani',75,'Peelay/bhure dhabe dikhein? Propiconazole 0.1% spray karein.','Yellow/brown spots? Spray Propiconazole 0.1%.','disease_watch'],
+          ['wheat','Katai Taiyari',115,'Gehu 115-120 din mein taiyar. Nami 14% ho to katai karein.','Wheat ready in 115-120 days. Harvest at 14% moisture.','harvest'],
+          ['rice','Nursery Taiyari',0,'Dhaan ki nursery taiyar karein. Beej ko 24 ghante bhigoye rakhein.','Prepare rice nursery. Soak seeds 24 hours.','nursery'],
+          ['rice','Ropai (Transplanting)',25,'25-30 din ki paudh ropai ke liye taiyar. 20x15cm spacing.','Seedlings ready at 25-30 days. 20x15cm spacing.','transplanting'],
+          ['rice','Kharpatwar Niyantran',35,'Ropai ke 7-10 din baad Butachlor 1.5kg/ha dalein.','Apply Butachlor 1.5kg/ha within 7-10 days.','weed_control'],
+          ['rice','Flowering Dekhbhal',85,'Paani ki kami na ho. Tricyclazole spray karein agar blast dikhe.','No water stress. Spray Tricyclazole if blast appears.','flowering_care'],
+          ['rice','Katai',120,'80% dane golden ho jayein tab katai karein.','Harvest when 80% grains turn golden.','harvest'],
+          ['sugarcane','Ropai/Buwai',0,'Sets ko Bavistin se upcharit karein. 90cm spacing.','Treat sets with Bavistin. 90cm row spacing.','planting'],
+          ['sugarcane','Mitti Chadhana',45,'Pehla kharpatwar niyantran aur halka mitti chadhana.','First weeding and light earthing up.','earthing_up'],
+          ['sugarcane','Borer Niyantran',120,'5%+ infestation ho to Coragen spray karein.','If >5% infestation, spray Coragen.','pest_control'],
+          ['sugarcane','Katai',330,'Ganna 11-12 mahine mein taiyar. Jaldi mill bhejein.','Sugarcane ready in 11-12 months. Send to mill quickly.','harvest']
+        ];
+        for (const s of seeds) {
+          await pool.query("INSERT INTO crop_calendar_templates (crop, stage_name, day_offset, message_hi, message_en, activity) VALUES ($1,$2,$3,$4,$5,$6)", s);
+        }
+      }
+
+      res.json({ success: true, message: "Tables created" });
+    } catch(e) { res.status(500).json({ error: e.message }); }
+  });
+
+// Register farmer crop (from app or bot)
   app.post("/api/v1/crop-calendar/register", async (req, res) => {
     try {
       const { farmer_id, crop, sow_date, land_area } = req.body;
