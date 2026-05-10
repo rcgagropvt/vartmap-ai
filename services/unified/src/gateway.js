@@ -873,18 +873,11 @@ async function sendMenuMessage(to, botConfig, language) {
       description: (language === 'hi' ? (m.description_hi || m.description_en || '') : (m.description_en || m.description_hi || '')).substring(0, 72)
     }));
     
-    // Split into sections of max 10
-    const sections = [];
-    for (let i = 0; i < rows.length; i += 10) {
-      const chunk = rows.slice(i, i + 10);
-      sections.push({
-        title: sections.length === 0 ? (language === 'hi' ? 'Services' : 'Services') : (language === 'hi' ? 'Aur Options' : 'More Options'),
-        rows: chunk
-      });
-    }
+    // WhatsApp limit: max 10 rows total in list
+    const limitedRows = rows.slice(0, 10);
     
     const bodyText2 = language === 'hi' ? (botConfig.menu_hi || 'Aap neeche diye gaye options mein se choose kar sakte hain:') : (botConfig.menu_en || 'You can choose from the options below:');
-    await sendWhatsAppList(to, bodyText2, 'Options', sections);
+    await sendWhatsAppList(to, bodyText2, 'Options', [{ title: 'Services', rows: limitedRows }]);
     return;
   }
 }
