@@ -1647,6 +1647,20 @@ app.post('/webhook', async (req, res) => {
 
           // 6. MENU / HELP trigger
           const lowerMsg = (msgBody || '').toLowerCase().trim();
+          if (lowerMsg === 'hisaab' || lowerMsg === 'finance' || lowerMsg === 'khata' || lowerMsg === 'ledger') {
+            const lang = farmerData.language || 'hi';
+            setPendingAction(farmerId, 'finance_type');
+            await sendWhatsAppButtons(from,
+              lang === 'hi' ? '📒 *Farm Hisaab-Kitaab*\n\nAap kya karna chahte hain?' : '📒 *Farm Finance*\n\nWhat would you like to do?',
+              [{ id: 'finance_income', title: lang === 'hi' ? '💰 Aay Jodein' : '💰 Add Income' }, { id: 'finance_expense', title: lang === 'hi' ? '💸 Kharch Jodein' : '💸 Add Expense' }, { id: 'finance_summary', title: lang === 'hi' ? '📊 Hisaab Dekhein' : '📊 View Summary' }]
+            );
+            await pool.query(
+              "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
+              [sessionId, farmerId, '[finance menu sent]']
+            );
+            continue;
+          }
+
           if (lowerMsg === 'menu' || lowerMsg === 'help' || lowerMsg === 'options' || lowerMsg === 'start') {
             await sendMenuMessage(from, botConfig, farmerData.language || 'hi');
             await pool.query(
@@ -1767,6 +1781,112 @@ const state = pendingData.state || '';
               );
               continue;
             }
+
+            if (pendingAction === 'finance_type') {
+              const lang = farmerData.language || 'hi';
+              const input = msgBody.trim().toLowerCase();
+              if (input === 'finance_income' || input === 'income' || input === 'aay' || input === 'bikri') {
+                pendingActions[farmerId] = { action: 'finance_amount', timestamp: Date.now(), finType: 'income' };
+                await sendWhatsAppMessage(from, lang === 'hi'
+                  ? '💰 Kitni aay (income) hui? Sirf number likhein (jaise: 5000)'
+                  : '💰 How much income? Enter amount (e.g. 5000)');
+              } else if (input === 'finance_expense' || input === 'expense' || input === 'kharch' || input === 'kharcha') {
+                pendingActions[farmerId] = { action: 'finance_amount', timestamp: Date.now(), finType: 'expense' };
+                await sendWhatsAppMessage(from, lang === 'hi'
+                  ? '💸 Kitna kharch hua? Sirf number likhein (jaise: 2000)'
+                  : '💸 How much expense? Enter amount (e.g. 2000)');
+              } else if (input === 'finance_summary' || input === 'summary' || input === 'hisaab') {
+                clearPendingAction(farmerId);
+                try {
+                  await pool.query(`CREATE TABLE IF NOT EXISTS farm_transactions (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), farmer_id UUID NOT NULL,
+                    type VARCHAR(10) NOT NULL, amount NUMERIC(12,2) NOT NULL,
+                    category VARCHAR(50) NOT NULL, crop VARCHAR(50), description TEXT,
+                    date DATE DEFAULT CURRENT_DATE, created_at TIMESTAMPTZ DEFAULT NOW()
+                  )`);
+                  const totals = await pool.query(
+                    "SELECT type, COALESCE(SUM(amount),0) as total FROM farm_transactions WHERE farmer_id=$1 AND date >= DATE_TRUNC('month', CURRENT_DATE) GROUP BY type",
+                    [farmerId]
+                  );
+                  const inc = parseFloat((totals.rows.find(t => t.type === 'income') || {}).total || 0);
+                  const exp = parseFloat((totals.rows.find(t => t.type === 'expense') || {}).total || 0);
+                  const profit = inc - exp;
+                  const summaryMsg = lang === 'hi'
+                    ? '📊 *Is Mahine Ka Hisaab:*\n\n💰 Aay (Income): ₹' + inc.toLocaleString('en-IN') + '\n💸 Kharch (Expense): ₹' + exp.toLocaleString('en-IN') + '\n' + (profit >= 0 ? '✅ Munafa (Profit): ₹' + profit.toLocaleString('en-IN') : '❌ Nuksan (Loss): ₹' + Math.abs(profit).toLocaleString('en-IN')) + '\n\n_"menu" type karein aur options dekhein._'
+                    : '📊 *This Month Summary:*\n\n💰 Income: ₹' + inc.toLocaleString('en-IN') + '\n💸 Expense: ₹' + exp.toLocaleString('en-IN') + '\n' + (profit >= 0 ? '✅ Profit: ₹' + profit.toLocaleString('en-IN') : '❌ Loss: ₹' + Math.abs(profit).toLocaleString('en-IN')) + '\n\n_Type "menu" for options._';
+                  await sendWhatsAppMessage(from, summaryMsg);
+                } catch(fe) {
+                  await sendWhatsAppMessage(from, lang === 'hi' ? 'Kuch galat ho gaya. Kripya phir koshish karein.' : 'Something went wrong. Please try again.');
+                }
+              } else {
+                clearPendingAction(farmerId);
+              }
+              await pool.query(
+                "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
+                [sessionId, farmerId, '[finance: ' + input + ']']
+              );
+              continue;
+            }
+
+            if (pendingAction === 'finance_amount') {
+              const lang = farmerData.language || 'hi';
+              const pendData = getPendingData(farmerId);
+              const amt = parseFloat(msgBody.trim().replace(/[^0-9.]/g, ''));
+              if (isNaN(amt) || amt <= 0) {
+                await sendWhatsAppMessage(from, lang === 'hi' ? '❌ Sahi amount likhein (jaise: 5000)' : '❌ Enter valid amount (e.g. 5000)');
+                continue;
+              }
+              const categories = pendData.finType === 'expense'
+                ? [{ id: 'cat_seeds', title: 'Beej (Seeds)' }, { id: 'cat_fertilizer', title: 'Khad (Fertilizer)' }, { id: 'cat_pesticide', title: 'Dawai (Pesticide)' }, { id: 'cat_labor', title: 'Majdoori (Labor)' }, { id: 'cat_irrigation', title: 'Sinchai (Irrigation)' }, { id: 'cat_transport', title: 'Dhulai (Transport)' }, { id: 'cat_rent', title: 'Kiraya (Rent)' }, { id: 'cat_equipment', title: 'Equipment' }, { id: 'cat_other', title: 'Anya (Other)' }]
+                : [{ id: 'cat_crop_sale', title: 'Fasal Bikri (Crop Sale)' }, { id: 'cat_dairy', title: 'Dairy Income' }, { id: 'cat_labor_income', title: 'Majdoori Income' }, { id: 'cat_subsidy', title: 'Subsidy/Scheme' }, { id: 'cat_other_income', title: 'Anya (Other)' }];
+              pendingActions[farmerId] = { action: 'finance_category', timestamp: Date.now(), finType: pendData.finType, amount: amt };
+              await sendWhatsAppList(from,
+                lang === 'hi' ? '📋 ₹' + amt.toLocaleString('en-IN') + ' kis category mein hai?' : '📋 ₹' + amt.toLocaleString('en-IN') + ' - select category:',
+                'Category Chunein',
+                [{ title: pendData.finType === 'expense' ? 'Kharch Categories' : 'Aay Categories', rows: categories }]
+              );
+              await pool.query(
+                "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
+                [sessionId, farmerId, '[finance amount: ' + amt + ']']
+              );
+              continue;
+            }
+
+            if (pendingAction === 'finance_category') {
+              const lang = farmerData.language || 'hi';
+              const pendData = getPendingData(farmerId);
+              clearPendingAction(farmerId);
+              const catMap = { cat_seeds: 'Seeds', cat_fertilizer: 'Fertilizer', cat_pesticide: 'Pesticide', cat_labor: 'Labor', cat_irrigation: 'Irrigation', cat_transport: 'Transport', cat_rent: 'Rent', cat_equipment: 'Equipment', cat_other: 'Other', cat_crop_sale: 'Crop Sale', cat_dairy: 'Dairy', cat_labor_income: 'Labor Income', cat_subsidy: 'Subsidy', cat_other_income: 'Other' };
+              const category = catMap[msgBody.trim()] || msgBody.trim();
+              const finType = pendData.finType || 'expense';
+              const amount = pendData.amount || 0;
+
+              try {
+                await pool.query(`CREATE TABLE IF NOT EXISTS farm_transactions (
+                  id UUID PRIMARY KEY DEFAULT gen_random_uuid(), farmer_id UUID NOT NULL,
+                  type VARCHAR(10) NOT NULL, amount NUMERIC(12,2) NOT NULL,
+                  category VARCHAR(50) NOT NULL, crop VARCHAR(50), description TEXT,
+                  date DATE DEFAULT CURRENT_DATE, created_at TIMESTAMPTZ DEFAULT NOW()
+                )`);
+                await pool.query(
+                  'INSERT INTO farm_transactions (farmer_id, type, amount, category) VALUES ($1,$2,$3,$4)',
+                  [farmerId, finType, amount, category]
+                );
+                const emoji = finType === 'income' ? '💰' : '💸';
+                const confirmMsg = lang === 'hi'
+                  ? emoji + ' *Saved!*\n\n' + (finType === 'income' ? 'Aay' : 'Kharch') + ': ₹' + amount.toLocaleString('en-IN') + '\nCategory: ' + category + '\n\n_Aur entry karne ke liye "hisaab" likhein ya "menu" dekhein._'
+                  : emoji + ' *Saved!*\n\n' + (finType === 'income' ? 'Income' : 'Expense') + ': ₹' + amount.toLocaleString('en-IN') + '\nCategory: ' + category + '\n\n_Type "hisaab" for more or "menu" for options._';
+                await sendWhatsAppMessage(from, confirmMsg);
+              } catch(fe) {
+                await sendWhatsAppMessage(from, lang === 'hi' ? 'Entry save nahi ho payi. Phir try karein.' : 'Could not save. Try again.');
+              }
+              await pool.query(
+                "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
+                [sessionId, farmerId, '[finance saved: ' + finType + ' ' + amount + ' ' + category + ']']
+              );
+              continue;
+            }
+
 
             if (pendingAction === 'soil_district') {
               clearPendingAction(farmerId);

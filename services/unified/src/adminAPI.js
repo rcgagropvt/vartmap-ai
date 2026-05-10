@@ -5471,6 +5471,226 @@ app.post('/api/v1/videos/:id/toggle', auth, async (req, res) => {
 });
 // ===== END VIDEO MANAGEMENT =====
 
+// ===== FARM FINANCE MANAGEMENT =====
+app.get('/api/v1/farmer/finance/summary', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ error: 'No token' });
+    const jwt = require('jsonwebtoken');
+    let decoded;
+    try { decoded = jwt.verify(token, 'vartmap-farmer-secret-2024'); } catch { try { decoded = jwt.verify(token, process.env.JWT_SECRET); } catch { return res.status(401).json({ error: 'Invalid token' }); } }
+    const farmerId = decoded.farmerId || decoded.id;
+
+    await pool.query(`CREATE TABLE IF NOT EXISTS farm_transactions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      farmer_id UUID NOT NULL,
+      type VARCHAR(10) NOT NULL CHECK (type IN ('income','expense')),
+      amount NUMERIC(12,2) NOT NULL,
+      category VARCHAR(50) NOT NULL,
+      crop VARCHAR(50),
+      description TEXT,
+      date DATE DEFAULT CURRENT_DATE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+
+    const { rows: totals } = await pool.query(
+      "SELECT type, COALESCE(SUM(amount),0) as total FROM farm_transactions WHERE farmer_id=$1 AND date >= DATE_TRUNC('month', CURRENT_DATE) GROUP BY type",
+      [farmerId]
+    );
+    const income = parseFloat((totals.find(t => t.type === 'income') || {}).total || 0);
+    const expense = parseFloat((totals.find(t => t.type === 'expense') || {}).total || 0);
+
+    const { rows: byCategory } = await pool.query(
+      "SELECT category, COALESCE(SUM(amount),0) as total FROM farm_transactions WHERE farmer_id=$1 AND type='expense' AND date >= DATE_TRUNC('month', CURRENT_DATE) GROUP BY category ORDER BY total DESC",
+      [farmerId]
+    );
+
+    const { rows: byCrop } = await pool.query(
+      "SELECT crop, type, COALESCE(SUM(amount),0) as total FROM farm_transactions WHERE farmer_id=$1 AND crop IS NOT NULL AND date >= DATE_TRUNC('year', CURRENT_DATE) GROUP BY crop, type ORDER BY crop",
+      [farmerId]
+    );
+
+    const { rows: recent } = await pool.query(
+      "SELECT * FROM farm_transactions WHERE farmer_id=$1 ORDER BY date DESC, created_at DESC LIMIT 20",
+      [farmerId]
+    );
+
+    res.json({ income, expense, profit: income - expense, byCategory, byCrop, recent });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/v1/farmer/finance/transactions', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ error: 'No token' });
+    const jwt = require('jsonwebtoken');
+    let decoded;
+    try { decoded = jwt.verify(token, 'vartmap-farmer-secret-2024'); } catch { try { decoded = jwt.verify(token, process.env.JWT_SECRET); } catch { return res.status(401).json({ error: 'Invalid token' }); } }
+    const farmerId = decoded.farmerId || decoded.id;
+    const { type, crop, month } = req.query;
+
+    let q = 'SELECT * FROM farm_transactions WHERE farmer_id=$1';
+    const params = [farmerId];
+    let idx = 2;
+    if (type) { q += ' AND type=
+
+
+
+
+};
+ + idx; params.push(type); idx++; }
+    if (crop) { q += ' AND crop=
+
+
+
+
+};
+ + idx; params.push(crop); idx++; }
+    if (month) { q += ' AND TO_CHAR(date, \'YYYY-MM\') = 
+
+
+
+
+};
+ + idx; params.push(month); idx++; }
+    q += ' ORDER BY date DESC, created_at DESC LIMIT 100';
+
+    const { rows } = await pool.query(q, params);
+    res.json({ transactions: rows });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/v1/farmer/finance/transaction', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ error: 'No token' });
+    const jwt = require('jsonwebtoken');
+    let decoded;
+    try { decoded = jwt.verify(token, 'vartmap-farmer-secret-2024'); } catch { try { decoded = jwt.verify(token, process.env.JWT_SECRET); } catch { return res.status(401).json({ error: 'Invalid token' }); } }
+    const farmerId = decoded.farmerId || decoded.id;
+
+    const { type, amount, category, crop, description, date } = req.body;
+    if (!type || !amount || !category) return res.status(400).json({ error: 'type, amount, category required' });
+
+    await pool.query(`CREATE TABLE IF NOT EXISTS farm_transactions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      farmer_id UUID NOT NULL,
+      type VARCHAR(10) NOT NULL CHECK (type IN ('income','expense')),
+      amount NUMERIC(12,2) NOT NULL,
+      category VARCHAR(50) NOT NULL,
+      crop VARCHAR(50),
+      description TEXT,
+      date DATE DEFAULT CURRENT_DATE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+
+    const { rows } = await pool.query(
+      'INSERT INTO farm_transactions (farmer_id, type, amount, category, crop, description, date) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+      [farmerId, type, amount, category, crop || null, description || null, date || new Date().toISOString().split('T')[0]]
+    );
+    res.json({ transaction: rows[0] });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/v1/farmer/finance/transaction/:id', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ error: 'No token' });
+    const jwt = require('jsonwebtoken');
+    let decoded;
+    try { decoded = jwt.verify(token, 'vartmap-farmer-secret-2024'); } catch { try { decoded = jwt.verify(token, process.env.JWT_SECRET); } catch { return res.status(401).json({ error: 'Invalid token' }); } }
+    const farmerId = decoded.farmerId || decoded.id;
+
+    const { rows } = await pool.query('DELETE FROM farm_transactions WHERE id=$1 AND farmer_id=$2 RETURNING *', [req.params.id, farmerId]);
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+// ===== END FARM FINANCE =====
+
+// ===== ADMIN FINANCE OVERVIEW =====
+app.get('/api/v1/finance/overview', auth, async (req, res) => {
+  try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS farm_transactions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(), farmer_id UUID NOT NULL,
+      type VARCHAR(10) NOT NULL, amount NUMERIC(12,2) NOT NULL,
+      category VARCHAR(50) NOT NULL, crop VARCHAR(50), description TEXT,
+      date DATE DEFAULT CURRENT_DATE, created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+
+    const { rows: totals } = await pool.query(
+      "SELECT type, COALESCE(SUM(amount),0) as total, COUNT(*) as count FROM farm_transactions WHERE date >= DATE_TRUNC('month', CURRENT_DATE) GROUP BY type"
+    );
+    const income = parseFloat((totals.find(t => t.type === 'income') || {}).total || 0);
+    const expense = parseFloat((totals.find(t => t.type === 'expense') || {}).total || 0);
+    const incomeCount = parseInt((totals.find(t => t.type === 'income') || {}).count || 0);
+    const expenseCount = parseInt((totals.find(t => t.type === 'expense') || {}).count || 0);
+
+    const { rows: topFarmers } = await pool.query(`
+      SELECT f.name, f.phone, ft.type,
+        COALESCE(SUM(ft.amount),0) as total, COUNT(*) as entries
+      FROM farm_transactions ft
+      JOIN farmers f ON f.id = ft.farmer_id
+      WHERE ft.date >= DATE_TRUNC('month', CURRENT_DATE)
+      GROUP BY f.name, f.phone, ft.type
+      ORDER BY total DESC LIMIT 20
+    `);
+
+    const { rows: byCategory } = await pool.query(
+      "SELECT category, type, COALESCE(SUM(amount),0) as total, COUNT(*) as count FROM farm_transactions WHERE date >= DATE_TRUNC('month', CURRENT_DATE) GROUP BY category, type ORDER BY total DESC"
+    );
+
+    const { rows: recent } = await pool.query(`
+      SELECT ft.*, f.name as farmer_name, f.phone as farmer_phone
+      FROM farm_transactions ft
+      JOIN farmers f ON f.id = ft.farmer_id
+      ORDER BY ft.created_at DESC LIMIT 50
+    `);
+
+    const { rows: monthly } = await pool.query(`
+      SELECT TO_CHAR(date, 'YYYY-MM') as month, type, COALESCE(SUM(amount),0) as total
+      FROM farm_transactions
+      WHERE date >= NOW() - INTERVAL '6 months'
+      GROUP BY TO_CHAR(date, 'YYYY-MM'), type
+      ORDER BY month
+    `);
+
+    const { rows: activeFarmers } = await pool.query(
+      "SELECT COUNT(DISTINCT farmer_id) as count FROM farm_transactions WHERE date >= DATE_TRUNC('month', CURRENT_DATE)"
+    );
+
+    res.json({
+      income, expense, profit: income - expense,
+      incomeCount, expenseCount,
+      activeFarmers: parseInt(activeFarmers[0]?.count || 0),
+      topFarmers, byCategory, recent, monthly
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
+  try {
+    const { farmerId } = req.params;
+    const { rows: farmer } = await pool.query('SELECT name, phone, crops FROM farmers WHERE id=$1', [farmerId]);
+    const { rows: totals } = await pool.query(
+      "SELECT type, COALESCE(SUM(amount),0) as total FROM farm_transactions WHERE farmer_id=$1 AND date >= DATE_TRUNC('month', CURRENT_DATE) GROUP BY type",
+      [farmerId]
+    );
+    const { rows: transactions } = await pool.query(
+      'SELECT * FROM farm_transactions WHERE farmer_id=$1 ORDER BY date DESC LIMIT 50',
+      [farmerId]
+    );
+    const income = parseFloat((totals.find(t => t.type === 'income') || {}).total || 0);
+    const expense = parseFloat((totals.find(t => t.type === 'expense') || {}).total || 0);
+    res.json({ farmer: farmer[0] || {}, income, expense, profit: income - expense, transactions });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+// ===== END ADMIN FINANCE =====
+
+
+
+
+
 
 
 
