@@ -3514,5 +3514,73 @@ app.get('/api/v1/public/knowledge', async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+
+// ─── VIDEO MANAGEMENT ───
+app.get('/api/v1/videos', authMiddleware, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT * FROM videos ORDER BY order_num ASC, created_at DESC');
+    res.json({ videos: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/v1/videos/public', async (req, res) => {
+  try {
+    const r = await pool.query('SELECT * FROM videos WHERE is_active = true ORDER BY order_num ASC, created_at DESC');
+    res.json({ videos: r.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/v1/videos', authMiddleware, async (req, res) => {
+  try {
+    const { video_id, title, duration, type, category, order_num } = req.body;
+    if (!video_id || !title) return res.status(400).json({ error: 'video_id and title required' });
+    const r = await pool.query(
+      'INSERT INTO videos (video_id, title, duration, type, category, order_num) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [video_id, title, duration || '0:00', type || 'short', category || null, order_num || 0]
+    );
+    res.json({ video: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/v1/videos/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { video_id, title, duration, type, category, is_active, order_num } = req.body;
+    const r = await pool.query(
+      `UPDATE videos SET 
+        video_id = COALESCE($1, video_id),
+        title = COALESCE($2, title),
+        duration = COALESCE($3, duration),
+        type = COALESCE($4, type),
+        category = COALESCE($5, category),
+        is_active = COALESCE($6, is_active),
+        order_num = COALESCE($7, order_num),
+        updated_at = NOW()
+      WHERE id = $8 RETURNING *`,
+      [video_id, title, duration, type, category, is_active, order_num, id]
+    );
+    if (r.rows.length === 0) return res.status(404).json({ error: 'Video not found' });
+    res.json({ video: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/v1/videos/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const r = await pool.query('DELETE FROM videos WHERE id = $1 RETURNING *', [id]);
+    if (r.rows.length === 0) return res.status(404).json({ error: 'Video not found' });
+    res.json({ success: true, deleted: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/v1/videos/:id/toggle', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const r = await pool.query('UPDATE videos SET is_active = NOT is_active, updated_at = NOW() WHERE id = $1 RETURNING *', [id]);
+    if (r.rows.length === 0) return res.status(404).json({ error: 'Video not found' });
+    res.json({ video: r.rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── START SERVER ───
 app.listen(PORT, () => console.log(`VartMap Admin API running on port ${PORT}`));
