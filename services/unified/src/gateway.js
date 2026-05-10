@@ -498,6 +498,42 @@ async function getAIResponse(farmerId, sessionId, farmer, messageText, messageTy
         response = await getGeminiResponse(systemPrompt, history, userParts, 'gemini-2.5-flash');
         modelUsed = 'gemini-2.5-flash';
       }
+      // GROQ fallback for audio: transcribe with Whisper then respond with LLM
+      if (!response && messageType === 'audio' && process.env.GROQ_API_KEY) {
+        try {
+          console.log('Gemini failed for audio, trying GROQ Whisper transcription...');
+          const Groq = require('groq-sdk');
+          const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+          const mediaResp2 = await axios.get(mediaUrl, {
+            headers: { 'Authorization': 'Bearer ' + process.env.WA_ACCESS_TOKEN },
+            responseType: 'arraybuffer'
+          });
+          const audioBuf = Buffer.from(mediaResp2.data);
+          const blob = new Blob([audioBuf], { type: 'audio/ogg' });
+          const audioFile = new File([blob], 'voice.ogg', { type: 'audio/ogg' });
+          const transcription = await groq.audio.transcriptions.create({
+            file: audioFile,
+            model: 'whisper-large-v3',
+            language: 'hi',
+            response_format: 'text'
+          });
+          const txt = typeof transcription === 'string' ? transcription : (transcription.text || '');
+          console.log('Whisper transcribed:', txt.substring(0, 100));
+          if (txt.trim()) {
+            response = await getGroqResponse(systemPrompt, history, txt);
+            modelUsed = 'groq-whisper+llama-3.3-70b';
+          }
+        } catch(wErr) { console.log('Whisper fallback error:', wErr.message); }
+      }
+      // GROQ fallback for images: ask farmer to describe
+      if (!response && messageType === 'image') {
+        try {
+          console.log('Gemini failed for image, using text fallback...');
+          const imgPrompt = messageText || 'Farmer sent a crop image but AI cannot view it right now. Ask them to describe what they see - leaf color changes, spots, wilting, pest damage etc.';
+          response = await getGroqResponse(systemPrompt, history, imgPrompt);
+          modelUsed = 'groq-llama-3.3-70b';
+        } catch(iErr) { console.log('Image fallback error:', iErr.message); }
+      }
     } else {
       // Text messages: try Gemini first, then Groq fallback
       const userParts = [{ text: messageText }];

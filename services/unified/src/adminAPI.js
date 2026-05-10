@@ -5703,52 +5703,48 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
     } catch(e) { console.error("Full profile error:", e); res.status(500).json({error:e.message}); }
   });
 
-  // AI Summary - Gemini with GROQ fallback
+  // AI Summary - GROQ primary (Gemini location-blocked on Render)
   app.post("/api/v1/farmers/:id/ai-summary", auth, async (req, res) => {
     try {
       const { profileData } = req.body;
-      const prompt = "You are an agricultural analyst for VartMap (Indian agri-tech). Analyze this farmer and provide 4-5 paragraphs: 1)Overview & engagement 2)Farming activities 3)Financial health 4)Communication patterns 5)Recommendations. Be specific with numbers. Under 300 words. Data: " + JSON.stringify(profileData);
+      const prompt = "You are an agricultural business analyst for VartMap, an Indian agri-tech platform. Analyze this farmer completely and provide a detailed summary in 4-5 paragraphs covering: 1) Farmer Overview & Engagement Level 2) Farming Activities & Crop Focus 3) Financial Health Assessment 4) Communication Patterns & Platform Usage 5) Actionable Recommendations. Be specific with numbers and dates. Keep under 350 words. Farmer Data: " + JSON.stringify(profileData);
       
       let summary = null;
 
-      // Try Gemini first (using gemini-2.5-flash-lite for best free tier limits)
-      if (process.env.GEMINI_API_KEY) {
-        try {
-          const { GoogleGenerativeAI } = require("@google/generative-ai");
-          const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-          const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
-          const result = await model.generateContent(prompt);
-          summary = result.response.text();
-          console.log("AI Summary: Generated via Gemini");
-        } catch(gemErr) {
-          console.log("Gemini failed:", gemErr.message);
-        }
-      }
-
-      // Fallback to GROQ if Gemini failed
+      // Primary: GROQ (fast, reliable, no location restrictions)
       if (!summary && process.env.GROQ_API_KEY) {
         try {
           const Groq = require("groq-sdk");
           const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
           const completion = await groq.chat.completions.create({
-            messages: [{ role: "user", content: prompt }],
+            messages: [{ role: "system", content: "You are a professional agricultural business analyst." }, { role: "user", content: prompt }],
             model: "llama-3.3-70b-versatile",
-            temperature: 0.7,
-            max_tokens: 500
+            temperature: 0.6,
+            max_tokens: 600
           });
           summary = completion.choices[0].message.content;
-          console.log("AI Summary: Generated via GROQ fallback");
+          console.log("AI Summary: Generated via GROQ");
         } catch(groqErr) {
-          console.log("GROQ also failed:", groqErr.message);
+          console.log("GROQ failed:", groqErr.message);
         }
       }
 
-      if (summary) {
-        res.json({ summary });
-      } else {
-        res.json({ summary: "Unable to generate summary. Both Gemini and GROQ APIs are unavailable. Please try again in a minute." });
+      // Fallback: Gemini 2.0 Flash (may work when quota resets)
+      if (!summary && process.env.GEMINI_API_KEY) {
+        try {
+          const { GoogleGenerativeAI } = require("@google/generative-ai");
+          const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+          const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+          const result = await model.generateContent(prompt);
+          summary = result.response.text();
+          console.log("AI Summary: Generated via Gemini fallback");
+        } catch(gemErr) {
+          console.log("Gemini fallback failed:", gemErr.message.substring(0, 100));
+        }
       }
-    } catch(e) { res.json({ summary: "Error generating summary: " + e.message }); }
+
+      res.json({ summary: summary || "AI summary temporarily unavailable. Please try again in a minute." });
+    } catch(e) { res.json({ summary: "Error: " + e.message }); }
   });
 
 };
