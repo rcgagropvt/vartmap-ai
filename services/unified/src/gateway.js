@@ -847,7 +847,7 @@ async function sendWhatsAppList(to, bodyText, buttonLabel, sections) {
 }
 
 // --- BUILD MENU MESSAGE ---
-async function sendMenuMessage(to, botConfig, language) {
+async async function sendMenuMessage(to, botConfig, language) {
   const items = (botConfig.menu_items || [])
     .filter(m => m.is_active !== false)
     .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
@@ -864,15 +864,28 @@ async function sendMenuMessage(to, botConfig, language) {
     }));
     const bodyText = language === 'hi' ? (botConfig.menu_hi || 'Aap neeche diye gaye options mein se choose kar sakte hain:') : (botConfig.menu_en || 'You can choose from the options below:');
     await sendWhatsAppButtons(to, bodyText, buttons);
+    return;
   } else {
-    // Use list for 4+ items
+    // Use list - WhatsApp allows max 10 rows per section
     const rows = items.map(m => ({
       id: m.menu_key || m.id,
       title: (language === 'hi' ? (m.title_hi || m.title_en) : (m.title_en || m.title_hi)).substring(0, 24),
       description: (language === 'hi' ? (m.description_hi || m.description_en || '') : (m.description_en || m.description_hi || '')).substring(0, 72)
     }));
+    
+    // Split into sections of max 10
+    const sections = [];
+    for (let i = 0; i < rows.length; i += 10) {
+      const chunk = rows.slice(i, i + 10);
+      sections.push({
+        title: sections.length === 0 ? (language === 'hi' ? 'Services' : 'Services') : (language === 'hi' ? 'Aur Options' : 'More Options'),
+        rows: chunk
+      });
+    }
+    
     const bodyText2 = language === 'hi' ? (botConfig.menu_hi || 'Aap neeche diye gaye options mein se choose kar sakte hain:') : (botConfig.menu_en || 'You can choose from the options below:');
-    await sendWhatsAppList(to, bodyText2, 'Options', [{ title: 'Services', rows: rows }]);
+    await sendWhatsAppList(to, bodyText2, 'Options', sections);
+    return;
   }
 }
 
