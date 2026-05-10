@@ -5703,17 +5703,52 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
     } catch(e) { console.error("Full profile error:", e); res.status(500).json({error:e.message}); }
   });
 
-  // AI Summary
+  // AI Summary - Gemini with GROQ fallback
   app.post("/api/v1/farmers/:id/ai-summary", auth, async (req, res) => {
     try {
       const { profileData } = req.body;
-      const { GoogleGenerativeAI } = require("@google/generative-ai");
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-      const prompt = "You are an agricultural analyst for VartMap. Analyze this farmer and provide 4-5 paragraphs: Overview, Farming, Finances, Communication, Recommendations. Under 300 words. Data: " + JSON.stringify(profileData);
-      const result = await model.generateContent(prompt);
-      res.json({ summary: result.response.text() });
-    } catch(e) { res.json({ summary: "Unable to generate summary: " + e.message }); }
+      const prompt = "You are an agricultural analyst for VartMap (Indian agri-tech). Analyze this farmer and provide 4-5 paragraphs: 1)Overview & engagement 2)Farming activities 3)Financial health 4)Communication patterns 5)Recommendations. Be specific with numbers. Under 300 words. Data: " + JSON.stringify(profileData);
+      
+      let summary = null;
+
+      // Try Gemini first (using gemini-2.5-flash-lite for best free tier limits)
+      if (process.env.GEMINI_API_KEY) {
+        try {
+          const { GoogleGenerativeAI } = require("@google/generative-ai");
+          const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+          const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+          const result = await model.generateContent(prompt);
+          summary = result.response.text();
+          console.log("AI Summary: Generated via Gemini");
+        } catch(gemErr) {
+          console.log("Gemini failed:", gemErr.message);
+        }
+      }
+
+      // Fallback to GROQ if Gemini failed
+      if (!summary && process.env.GROQ_API_KEY) {
+        try {
+          const Groq = require("groq-sdk");
+          const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+          const completion = await groq.chat.completions.create({
+            messages: [{ role: "user", content: prompt }],
+            model: "llama-3.3-70b-versatile",
+            temperature: 0.7,
+            max_tokens: 500
+          });
+          summary = completion.choices[0].message.content;
+          console.log("AI Summary: Generated via GROQ fallback");
+        } catch(groqErr) {
+          console.log("GROQ also failed:", groqErr.message);
+        }
+      }
+
+      if (summary) {
+        res.json({ summary });
+      } else {
+        res.json({ summary: "Unable to generate summary. Both Gemini and GROQ APIs are unavailable. Please try again in a minute." });
+      }
+    } catch(e) { res.json({ summary: "Error generating summary: " + e.message }); }
   });
 
 };
