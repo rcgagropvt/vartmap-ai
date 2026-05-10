@@ -636,6 +636,45 @@ async function sendWhatsAppImage(to, imageUrl, caption) {
   }
 }
 
+async function sendWhatsAppAudio(to, audioBuffer) {
+  try {
+    // Upload audio to WhatsApp Media API
+    const FormData = require('form-data') || null;
+    const form = new (require('form-data'))();
+    form.append('file', audioBuffer, { filename: 'reply.mp3', contentType: 'audio/mpeg' });
+    form.append('messaging_product', 'whatsapp');
+    form.append('type', 'audio/mpeg');
+    
+    const uploadResp = await axios.post(
+      'https://graph.facebook.com/v21.0/' + phoneNumberId + '/media',
+      form,
+      { headers: { ...form.getHeaders(), 'Authorization': 'Bearer ' + process.env.WA_ACCESS_TOKEN } }
+    );
+    
+    const mediaId = uploadResp.data.id;
+    if (!mediaId) { console.log('Audio upload failed: no media ID'); return false; }
+
+    // Send audio message
+    await axios.post(
+      'https://graph.facebook.com/v21.0/' + phoneNumberId + '/messages',
+      {
+        messaging_product: 'whatsapp',
+        to: to,
+        type: 'audio',
+        audio: { id: mediaId }
+      },
+      { headers: { 'Authorization': 'Bearer ' + process.env.WA_ACCESS_TOKEN, 'Content-Type': 'application/json' } }
+    );
+    console.log('Voice reply sent to', to);
+    return true;
+  } catch(e) {
+    console.log('sendWhatsAppAudio error:', e.message);
+    return false;
+  }
+}
+
+
+
 // --- LOCATION REQUEST --- v2.1
 async function sendLocationRequest(to, bodyText) {
   try {
@@ -2047,6 +2086,31 @@ const state = pendingData.state || '';
             }
           }
           const sendResult = await sendWhatsAppMessage(from, cleanReply);
+
+          // Send voice reply if farmer sent a voice message
+          if (effectiveMsgType === 'audio' && cleanReply && process.env.GROQ_API_KEY) {
+            try {
+              const Groq = require('groq-sdk');
+              const groqTTS = new Groq({ apiKey: process.env.GROQ_API_KEY });
+              // Keep voice reply concise (max 500 chars)
+              const ttsText = cleanReply.length > 500 ? cleanReply.substring(0, 497) + '...' : cleanReply;
+              const ttsResponse = await groqTTS.audio.speech.create({
+                model: 'playai-tts',
+                input: ttsText,
+                voice: 'Arista-PlayAI',
+                response_format: 'mp3',
+                speed: 1.0
+              });
+              const audioArrayBuffer = await ttsResponse.arrayBuffer();
+              const audioBuf = Buffer.from(audioArrayBuffer);
+              if (audioBuf.length > 1000) {
+                await sendWhatsAppAudio(from, audioBuf);
+              }
+            } catch(ttsErr) {
+              console.log('TTS voice reply error:', ttsErr.message);
+            }
+          }
+
 
 
           // 10. Store outbound reply
