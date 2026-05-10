@@ -5532,27 +5532,9 @@ app.get('/api/v1/farmer/finance/transactions', async (req, res) => {
     let q = 'SELECT * FROM farm_transactions WHERE farmer_id=$1';
     const params = [farmerId];
     let idx = 2;
-    if (type) { q += ' AND type=
-
-
-
-
-};
- + idx; params.push(type); idx++; }
-    if (crop) { q += ' AND crop=
-
-
-
-
-};
- + idx; params.push(crop); idx++; }
-    if (month) { q += ' AND TO_CHAR(date, \'YYYY-MM\') = 
-
-
-
-
-};
- + idx; params.push(month); idx++; }
+    if (type) { q += ' AND type=$' + idx; params.push(type); idx++; }
+    if (crop) { q += ' AND crop=$' + idx; params.push(crop); idx++; }
+    if (month) { q += " AND TO_CHAR(date, 'YYYY-MM') = $" + idx; params.push(month); idx++; }
     q += ' ORDER BY date DESC, created_at DESC LIMIT 100';
 
     const { rows } = await pool.query(q, params);
