@@ -591,7 +591,8 @@ async function syncYouTube() {
 
 // ===== VIDEO MANAGEMENT =====
 async function loadVideos() {
-  const el = document.getElementById('content');
+  const el = document.getElementById('pageContent');
+  el.innerHTML = '<div style="text-align:center;padding:40px"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
   try {
     const res = await fetch('/api/v1/videos', { headers: { 'Authorization': 'Bearer ' + TOKEN } });
     const data = await res.json();
