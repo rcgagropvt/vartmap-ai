@@ -218,6 +218,7 @@ tr:hover{background:rgba(76,175,80,.03)}
       <div class="nav-item" onclick="navigate('schemes')"><i class="fas fa-university"></i> Govt Schemes</div>
       <div class="nav-item" onclick="navigate('community')"><i class="fas fa-comments"></i> Community</div>
       <div class="nav-item" onclick="navigate('reels')"><i class="fas fa-film"></i> Reels</div>
+      <div class="nav-item" onclick="navigate('videos')"><i class="fab fa-youtube"></i> Videos</div>
       <div class="nav-item" onclick="navigate('settings')"><i class="fas fa-cog"></i> Settings</div>
       <div class="nav-item" onclick="navigate('products')"><i class="fas fa-box"></i> Products</div>
       <div class="nav-item" onclick="navigate('catalog')"><i class="fas fa-seedling"></i> Product Catalog</div>
@@ -587,6 +588,122 @@ async function syncYouTube() {
     loadReels();
   } catch(e) { alert('Error: ' + e.message); }
 }
+
+// ===== VIDEO MANAGEMENT =====
+async function loadVideos() {
+  const el = document.getElementById('content');
+  try {
+    const res = await fetch('/api/v1/videos', { headers: { 'Authorization': 'Bearer ' + TOKEN } });
+    const data = await res.json();
+    const videos = data.videos || [];
+    const shorts = videos.filter(v => v.type === 'short').length;
+    const active = videos.filter(v => v.is_active).length;
+    el.innerHTML = `
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-icon"><i class="fab fa-youtube"></i></div><div class="stat-value">${videos.length}</div><div class="stat-label">Total Videos</div></div>
+        <div class="stat-card accent"><div class="stat-icon"><i class="fas fa-mobile-alt"></i></div><div class="stat-value">${shorts}</div><div class="stat-label">Shorts</div></div>
+        <div class="stat-card"><div class="stat-icon"><i class="fas fa-play-circle"></i></div><div class="stat-value">${videos.length - shorts}</div><div class="stat-label">Full Videos</div></div>
+        <div class="stat-card accent"><div class="stat-icon"><i class="fas fa-check-circle"></i></div><div class="stat-value">${active}</div><div class="stat-label">Active</div></div>
+      </div>
+      <div style="margin:20px 0;display:flex;gap:10px">
+        <button class="btn btn-primary" onclick="openAddVideoModal()"><i class="fas fa-plus"></i> Add Video</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px">
+        ${videos.map(v => `
+          <div style="background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--border)">
+            <div style="position:relative;padding-top:56.25%;background:#000">
+              <img src="https://img.youtube.com/vi/${v.video_id}/hqdefault.jpg" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover">
+              <span style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,0.8);color:#fff;padding:2px 8px;border-radius:4px;font-size:12px">${v.duration}</span>
+              ${v.type==='short'?'<span style="position:absolute;top:8px;left:8px;background:#ff0000;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">SHORT</span>':''}
+              <span style="position:absolute;top:8px;right:8px;background:${v.is_active?'#10b981':'#ef4444'};color:#fff;padding:2px 8px;border-radius:4px;font-size:11px">${v.is_active?'Active':'Hidden'}</span>
+            </div>
+            <div style="padding:12px">
+              <div style="font-weight:600;font-size:14px;margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${v.title}</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button class="btn btn-sm" onclick="toggleVideoActive(${v.id})"><i class="fas fa-${v.is_active?'eye-slash':'eye'}"></i> ${v.is_active?'Hide':'Show'}</button>
+                <button class="btn btn-sm" onclick="editVideoModal(${v.id},'${v.video_id}',\`${v.title}\`,'${v.duration}','${v.type}','${v.category||''}',${v.order_num||0})"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-sm btn-danger" onclick="deleteVideo(${v.id})"><i class="fas fa-trash"></i></button>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } catch(e) { el.innerHTML = '<div class="empty"><i class="fas fa-exclamation-triangle"></i><p>Error loading videos: ' + e.message + '</p></div>'; }
+}
+
+function openAddVideoModal() {
+  openModal('Add Video', `
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <label>YouTube URL or Video ID</label>
+      <input id="vidUrl" placeholder="https://youtube.com/shorts/xxx or just the ID" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:14px">
+      <label>Title</label>
+      <input id="vidTitle" placeholder="Video title" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:14px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label>Duration</label><input id="vidDuration" placeholder="0:30" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:14px"></div>
+        <div><label>Type</label><select id="vidType" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:14px"><option value="short">Short</option><option value="video">Video</option></select></div>
+      </div>
+      <label>Category (optional)</label>
+      <input id="vidCategory" placeholder="e.g. Fertilizer, Irrigation" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:14px">
+      <label>Order Number</label>
+      <input id="vidOrder" type="number" value="0" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:14px">
+    </div>
+  `, '<button class="btn btn-primary" onclick="submitVideo()"><i class="fas fa-plus"></i> Add Video</button>');
+}
+
+function extractVideoId(input) {
+  if (!input) return '';
+  const match = input.match(/(?:shorts\/|watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
+  return match ? match[1] : input.trim();
+}
+
+async function submitVideo() {
+  const video_id = extractVideoId(document.getElementById('vidUrl').value);
+  const title = document.getElementById('vidTitle').value;
+  if (!video_id || !title) return alert('Video URL/ID and Title are required');
+  const res = await fetch('/api/v1/videos', { method:'POST', headers:{'Authorization':'Bearer '+TOKEN,'Content-Type':'application/json'}, body: JSON.stringify({
+    video_id, title, duration: document.getElementById('vidDuration').value || '0:00',
+    type: document.getElementById('vidType').value, category: document.getElementById('vidCategory').value,
+    order_num: parseInt(document.getElementById('vidOrder').value) || 0
+  })});
+  if (res.ok) { closeModal(); loadVideos(); } else { const d = await res.json(); alert(d.error || 'Failed'); }
+}
+
+function editVideoModal(id, vid, title, dur, type, cat, order) {
+  openModal('Edit Video', `
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <label>Video ID</label><input id="eVidId" value="${vid}" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:14px">
+      <label>Title</label><input id="eVidTitle" value="${title}" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:14px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label>Duration</label><input id="eVidDur" value="${dur}" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:14px"></div>
+        <div><label>Type</label><select id="eVidType" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:14px"><option value="short" ${type==='short'?'selected':''}>Short</option><option value="video" ${type==='video'?'selected':''}>Video</option></select></div>
+      </div>
+      <label>Category</label><input id="eVidCat" value="${cat}" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:14px">
+      <label>Order</label><input id="eVidOrder" type="number" value="${order}" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-size:14px">
+    </div>
+  `, `<button class="btn btn-primary" onclick="updateVideo(${id})"><i class="fas fa-save"></i> Save</button>`);
+}
+
+async function updateVideo(id) {
+  const res = await fetch('/api/v1/videos/' + id, { method:'PUT', headers:{'Authorization':'Bearer '+TOKEN,'Content-Type':'application/json'}, body: JSON.stringify({
+    video_id: document.getElementById('eVidId').value, title: document.getElementById('eVidTitle').value,
+    duration: document.getElementById('eVidDur').value, type: document.getElementById('eVidType').value,
+    category: document.getElementById('eVidCat').value, order_num: parseInt(document.getElementById('eVidOrder').value) || 0
+  })});
+  if (res.ok) { closeModal(); loadVideos(); } else { const d = await res.json(); alert(d.error || 'Failed'); }
+}
+
+async function toggleVideoActive(id) {
+  await fetch('/api/v1/videos/' + id + '/toggle', { method:'POST', headers:{'Authorization':'Bearer '+TOKEN} });
+  loadVideos();
+}
+
+async function deleteVideo(id) {
+  if (!confirm('Delete this video?')) return;
+  await fetch('/api/v1/videos/' + id, { method:'DELETE', headers:{'Authorization':'Bearer '+TOKEN} });
+  loadVideos();
+}
+
 // ===== END COMMUNITY & REELS =====
 
 function navigate(page) {
@@ -601,7 +718,7 @@ function navigate(page) {
     'assignment-rules':'Assignment Rules','sla-dashboard':'SLA Dashboard','chat-analytics':'Chat Analytics','soil-data':'Soil Nutrient Database','schemes':'Government Schemes','products':'Products',
     'mandi-prices':'Mandi Prices','dealers':'Dealers','field-agents':'Field Agents','orders':'Orders',
     'moderation':'Moderation Queue','notifications':'Notification Logs','analytics':'Analytics',
-    'services':'Service Health','admin-users':'Admin Users','audit-log':'Audit Log','community':'Community Management','reels':'Reels Management','settings':'Settings','catalog':'Product Catalog','bot-builder':'Bot Builder'
+    'services':'Service Health','admin-users':'Admin Users','audit-log':'Audit Log','community':'Community Management','reels':'Reels Management','videos':'Video Management','settings':'Settings','catalog':'Product Catalog','bot-builder':'Bot Builder'
   };
   document.getElementById('pageTitle').textContent = titles[page] || page;
   const loaders = {
@@ -610,7 +727,7 @@ function navigate(page) {
     'loyalty':loadLoyaltyProgram,'coupons':loadCoupons,'rewards':loadRewards,'referrals':loadReferrals,
     'assignment-rules':loadAssignmentRules,'sla-dashboard':loadSLADashboard,'chat-analytics':loadChatAnalytics,'soil-data':loadSoilData,'schemes':loadSchemes,'products':loadProducts,
     'mandi-prices':loadMandi,'dealers':loadDealers,'field-agents':loadFieldAgents,'orders':loadOrders,
-    'moderation':loadModeration,'notifications':loadNotifications,'analytics':loadAnalytics,'services':loadServices,'admin-users':loadAdminUsers,'audit-log':loadAuditLog,'community':loadCommunity,'reels':loadReels,'settings':loadSettings,'catalog':loadProductCatalog,'bot-builder':loadBotBuilder};
+    'moderation':loadModeration,'notifications':loadNotifications,'analytics':loadAnalytics,'services':loadServices,'admin-users':loadAdminUsers,'audit-log':loadAuditLog,'community':loadCommunity,'reels':loadReels,'videos':loadVideos,'settings':loadSettings,'catalog':loadProductCatalog,'bot-builder':loadBotBuilder};
   const loader = loaders[page];
   if (loader) loader(); else document.getElementById('pageContent').innerHTML = '<div class="empty"><i class="fas fa-construction"></i><p>Coming soon</p></div>';
 }
