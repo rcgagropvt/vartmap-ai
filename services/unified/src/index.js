@@ -29,7 +29,16 @@ const pool = new Pool({
   allowExitOnIdle: false
 });
 pool.on('error', (err) => console.error('Pool error:', err.message));
-pool.query('SELECT NOW()').then(() => console.log('Database connected')).catch(e => console.error('DB error:', e.message));
+pool.query('SELECT NOW()').then(() => { console.log('Database connected');
+
+// --- Add Finance menu item if not exists ---
+pool.query("SELECT id FROM bot_menu_items WHERE menu_key='hisaab'").then(r => {
+  if (r.rows.length === 0) {
+    pool.query("INSERT INTO bot_menu_items (menu_key, emoji, title_hi, title_en, description_hi, description_en, action_type, action_value, is_active, sort_order) VALUES ('hisaab', '📒', 'Hisaab-Kitaab', 'Farm Finance', 'Aay-kharch ka hisaab rakhein', 'Track income & expenses', 'keyword', 'hisaab', true, 8)").then(() => console.log('Finance menu item added')).catch(() => {});
+  }
+}).catch(() => {});
+
+}).catch(e => console.error('DB error:', e.message));
 setInterval(async () => {
   try { await pool.query('SELECT 1'); } catch (e) { console.error('DB keepalive failed:', e.message); }
 }, 20000);
