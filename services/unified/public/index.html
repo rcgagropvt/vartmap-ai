@@ -157,6 +157,7 @@ tr:hover{background:rgba(76,175,80,.03)}
   .stats-grid{grid-template-columns:1fr 1fr}
 }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -1996,233 +1997,144 @@ async function searchFarmers() {
   if (tbody && d.farmers) { navigate('farmers'); }
 }
 
-async function viewFarmer(id) {
+﻿async function viewFarmer(id) {
   const el = document.getElementById('pageContent');
-  el.innerHTML = '<div style="text-align:center;padding:60px"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
-  document.getElementById('pageTitle').textContent = 'Farmer Profile';
-
+  el.innerHTML = '<div style="text-align:center;padding:60px"><i class="fas fa-spinner fa-spin fa-2x" style="color:var(--primary)"></i><p style="margin-top:16px">Loading...</p></div>';
   try {
-    const [farmerData, financeData] = await Promise.all([
-      api('/api/v1/farmers/' + id),
-      api('/api/v1/finance/farmer/' + id).catch(() => ({ income: 0, expense: 0, profit: 0, transactions: [] }))
-    ]);
+    const res = await fetch('/api/v1/farmers/' + id + '/full-profile', { headers: { 'Authorization': 'Bearer ' + TOKEN } });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    const f = data.farmer;
+    const stats = data.interactionStats || {};
+    const fin = data.financeSummary || {};
+    const profit = (parseFloat(fin.total_income)||0) - (parseFloat(fin.total_expense)||0);
+    const msgs = data.messages || [];
+    const posts = data.posts || [];
+    const diags = data.diagnoses || [];
+    const txns = data.transactions || [];
+    const reels = data.reelActivity || [];
 
-    const f = farmerData.farmer;
-    const crops = Array.isArray(f.crops) ? f.crops.join(', ') : (f.crops || '-');
-    const joinDate = f.created_at ? new Date(f.created_at).toLocaleDateString('en-IN') : '-';
-    const lastActive = f.last_interaction_at ? new Date(f.last_interaction_at).toLocaleString('en-IN') : 'Never';
-    const tierName = farmerData.loyalty?.tier || 'None';
-    const loyaltyPts = f.loyalty_points || 0;
-    const lifetimePts = f.lifetime_points || 0;
+    let h = '<div style="max-width:1200px;margin:0 auto">';
+    h += '<button onclick="navigate(\'farmers\')" style="background:none;border:none;color:var(--primary);cursor:pointer;font-size:14px;margin-bottom:16px"><i class="fas fa-arrow-left"></i> Back to Farmers</button>';
 
-    const finIncome = Number(financeData.income || 0);
-    const finExpense = Number(financeData.expense || 0);
-    const finProfit = financeData.profit || 0;
-    const transactions = financeData.transactions || [];
+    // Header banner
+    h += '<div style="background:linear-gradient(135deg,var(--primary),#004d47);border-radius:16px;padding:32px;color:#fff;margin-bottom:24px;position:relative;overflow:hidden">';
+    h += '<div style="display:flex;align-items:center;gap:24px">';
+    h += '<div style="width:80px;height:80px;border-radius:50%;background:rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:700;border:3px solid rgba(255,255,255,0.3)">' + (f.name||'F')[0].toUpperCase() + '</div>';
+    h += '<div style="flex:1"><h2 style="margin:0;font-size:24px">' + (f.name||'Unknown') + '</h2>';
+    h += '<div style="opacity:0.85;margin-top:4px"><span style="margin-right:16px"><i class="fas fa-phone"></i> ' + (f.phone||'-') + '</span><span style="margin-right:16px"><i class="fas fa-map-marker-alt"></i> ' + (f.district||f.state||f.pin_code||'-') + '</span><span><i class="fas fa-seedling"></i> ' + (f.primary_crop||'-') + '</span></div></div>';
+    h += '<span style="background:rgba(255,255,255,0.2);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600">' + (f.tier||'bronze').toUpperCase() + '</span>';
+    h += '</div>';
+    h += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:24px">';
+    h += '<div style="background:rgba(255,255,255,0.1);border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:700">' + (stats.total_messages||0) + '</div><div style="font-size:11px;opacity:0.7">Messages</div></div>';
+    h += '<div style="background:rgba(255,255,255,0.1);border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:700">' + posts.length + '</div><div style="font-size:11px;opacity:0.7">Posts</div></div>';
+    h += '<div style="background:rgba(255,255,255,0.1);border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:700">' + diags.length + '</div><div style="font-size:11px;opacity:0.7">Diagnoses</div></div>';
+    h += '<div style="background:rgba(255,255,255,0.1);border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:700">' + (fin.total_entries||0) + '</div><div style="font-size:11px;opacity:0.7">Finance</div></div>';
+    h += '<div style="background:rgba(255,255,255,0.1);border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:700">' + reels.length + '</div><div style="font-size:11px;opacity:0.7">Reels</div></div>';
+    h += '</div></div>';
 
-    // Calculate category breakdown from transactions
-    const catBreakdown = {};
-    transactions.filter(t => t.type === 'expense').forEach(t => {
-      catBreakdown[t.category] = (catBreakdown[t.category] || 0) + Number(t.amount);
-    });
-    const catEntries = Object.entries(catBreakdown).sort((a, b) => b[1] - a[1]);
-    const maxCat = catEntries.length > 0 ? catEntries[0][1] : 1;
+    // AI Summary
+    h += '<div style="background:var(--card);border-radius:14px;padding:24px;margin-bottom:24px;border:1px solid var(--border)">';
+    h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px"><h3 style="margin:0;font-size:16px"><i class="fas fa-robot" style="color:var(--primary)"></i> AI Farmer Summary</h3>';
+    h += '<button onclick="generateAISummary(\'' + id + '\')" class="btn btn-sm btn-primary" id="aiSumBtn"><i class="fas fa-magic"></i> Generate</button></div>';
+    h += '<div id="aiSummaryContent" style="color:var(--text-secondary);font-size:14px;line-height:1.7"><p style="opacity:0.6;font-style:italic">Click Generate for AI analysis</p></div></div>';
 
-    // Monthly trend from transactions
-    const monthlyData = {};
-    transactions.forEach(t => {
-      const m = t.date ? t.date.substring(0, 7) : '';
-      if (!m) return;
-      if (!monthlyData[m]) monthlyData[m] = { income: 0, expense: 0 };
-      monthlyData[m][t.type] += Number(t.amount);
-    });
-    const monthKeys = Object.keys(monthlyData).sort().slice(-6);
+    // Finance
+    h += '<div style="background:var(--card);border-radius:14px;padding:24px;margin-bottom:24px;border:1px solid var(--border)">';
+    h += '<h3 style="margin:0 0 20px;font-size:16px"><i class="fas fa-chart-line" style="color:var(--primary)"></i> Financial Overview</h3>';
+    h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px">';
+    h += '<div style="background:#ecfdf5;border-radius:10px;padding:16px;text-align:center"><div style="font-size:11px;color:#065f46;font-weight:600">INCOME</div><div style="font-size:20px;font-weight:700;color:#059669">\u20B9' + Number(fin.total_income||0).toLocaleString('en-IN') + '</div></div>';
+    h += '<div style="background:#fef2f2;border-radius:10px;padding:16px;text-align:center"><div style="font-size:11px;color:#991b1b;font-weight:600">EXPENSE</div><div style="font-size:20px;font-weight:700;color:#dc2626">\u20B9' + Number(fin.total_expense||0).toLocaleString('en-IN') + '</div></div>';
+    h += '<div style="background:' + (profit>=0?'#ecfdf5':'#fef2f2') + ';border-radius:10px;padding:16px;text-align:center"><div style="font-size:11px;color:' + (profit>=0?'#065f46':'#991b1b') + ';font-weight:600">PROFIT/LOSS</div><div style="font-size:20px;font-weight:700;color:' + (profit>=0?'#059669':'#dc2626') + '">' + (profit>=0?'+':'') + '\u20B9' + Math.abs(profit).toLocaleString('en-IN') + '</div></div>';
+    h += '</div>';
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px"><div><h4 style="margin:0 0 12px;font-size:13px;color:var(--text-secondary)">Monthly Trend</h4><canvas id="farmerFinChart" height="200"></canvas></div>';
+    h += '<div><h4 style="margin:0 0 12px;font-size:13px;color:var(--text-secondary)">Expense Breakdown</h4><canvas id="farmerExpChart" height="200"></canvas></div></div></div>';
 
-    // Chats
-    let chatHtml = '<p style="color:var(--text-secondary)">No conversations yet</p>';
-    try {
-      const chatsData = await api('/api/v1/chats?search=' + f.phone + '&limit=10');
-      const chats = chatsData.chats || [];
-      if (chats.length > 0) {
-        chatHtml = '<div style="max-height:250px;overflow-y:auto">' + chats.map(c =>
-          '<div onclick="loadFarmerChatFull(\'' + c.id + '\',\'' + id + '\')" style="padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;cursor:pointer;transition:background 0.2s" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'transparent\'">' +
-          '<div style="display:flex;justify-content:space-between;align-items:center">' +
-          '<span style="font-weight:600"><i class="fas fa-comments" style="color:var(--primary);margin-right:6px"></i>Session ' + c.status + '</span>' +
-          '<span style="font-size:12px;color:var(--text-secondary)">' + new Date(c.last_message_at).toLocaleString('en-IN') + '</span>' +
-          '</div></div>'
-        ).join('') + '</div>';
+    // WhatsApp + Community grid
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">';
+    // WhatsApp
+    h += '<div style="background:var(--card);border-radius:14px;padding:24px;border:1px solid var(--border)">';
+    h += '<h3 style="margin:0 0 16px;font-size:16px"><i class="fas fa-comments" style="color:var(--primary)"></i> WhatsApp Activity</h3>';
+    h += '<div style="max-height:300px;overflow-y:auto">';
+    if (msgs.length) { msgs.slice(0,20).forEach(function(m) { h += '<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><div style="width:28px;height:28px;border-radius:50%;background:' + (m.direction==='inbound'?'#dbeafe':'#ecfdf5') + ';display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="fas fa-' + (m.direction==='inbound'?'arrow-down':'arrow-up') + '" style="font-size:10px;color:' + (m.direction==='inbound'?'#2563eb':'#059669') + '"></i></div><div style="flex:1;min-width:0"><div style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + ((m.content||m.message_type||'media').substring(0,80)) + '</div><div style="font-size:11px;color:var(--text-secondary)">' + (m.created_at?new Date(m.created_at).toLocaleString('en-IN'):'') + '</div></div></div>'; }); }
+    else { h += '<p style="color:var(--text-secondary);font-size:13px">No messages</p>'; }
+    h += '</div></div>';
+    // Community
+    h += '<div style="background:var(--card);border-radius:14px;padding:24px;border:1px solid var(--border)">';
+    h += '<h3 style="margin:0 0 16px;font-size:16px"><i class="fas fa-users" style="color:var(--primary)"></i> Community & Content</h3>';
+    h += '<div style="max-height:300px;overflow-y:auto">';
+    if (posts.length) { posts.forEach(function(p) { h += '<div style="padding:10px;border-radius:8px;background:var(--bg);margin-bottom:8px"><div style="font-size:13px">' + ((p.content||'').substring(0,100)) + '</div><div style="font-size:11px;color:var(--text-secondary);margin-top:4px"><i class="fas fa-heart"></i> ' + (p.likes||0) + ' &middot; ' + (p.created_at?new Date(p.created_at).toLocaleDateString('en-IN'):'') + '</div></div>'; }); }
+    else { h += '<p style="color:var(--text-secondary);font-size:13px">No posts</p>'; }
+    if (reels.length) { h += '<h4 style="margin:16px 0 8px;font-size:13px">Reels (' + reels.length + ')</h4>'; reels.forEach(function(r) { h += '<div style="font-size:13px;padding:4px 0">' + (r.caption||'Reel') + ' - ' + (r.created_at?new Date(r.created_at).toLocaleDateString('en-IN'):'') + '</div>'; }); }
+    h += '</div></div></div>';
+
+    // Diagnoses + Profile
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">';
+    h += '<div style="background:var(--card);border-radius:14px;padding:24px;border:1px solid var(--border)">';
+    h += '<h3 style="margin:0 0 16px;font-size:16px"><i class="fas fa-stethoscope" style="color:var(--primary)"></i> Crop Diagnoses</h3>';
+    h += '<div style="max-height:250px;overflow-y:auto">';
+    if (diags.length) { diags.forEach(function(d) { h += '<div style="padding:8px 0;border-bottom:1px solid var(--border)"><div style="font-size:13px">' + ((d.content||'').substring(0,120)) + '</div><div style="font-size:11px;color:var(--text-secondary)">' + (d.created_at?new Date(d.created_at).toLocaleString('en-IN'):'') + '</div></div>'; }); }
+    else { h += '<p style="color:var(--text-secondary);font-size:13px">No diagnoses</p>'; }
+    h += '</div></div>';
+    h += '<div style="background:var(--card);border-radius:14px;padding:24px;border:1px solid var(--border)">';
+    h += '<h3 style="margin:0 0 16px;font-size:16px"><i class="fas fa-id-card" style="color:var(--primary)"></i> Profile Details</h3>';
+    h += '<table style="width:100%;font-size:13px">';
+    h += '<tr><td style="padding:6px 0;color:var(--text-secondary);width:40%">Language</td><td style="font-weight:600">' + (f.language||'-') + '</td></tr>';
+    h += '<tr><td style="padding:6px 0;color:var(--text-secondary)">Land</td><td style="font-weight:600">' + (f.land_acres||'-') + ' acres</td></tr>';
+    h += '<tr><td style="padding:6px 0;color:var(--text-secondary)">Soil Type</td><td style="font-weight:600">' + (f.soil_type||'-') + '</td></tr>';
+    h += '<tr><td style="padding:6px 0;color:var(--text-secondary)">Irrigation</td><td style="font-weight:600">' + (f.irrigation_type||'-') + '</td></tr>';
+    h += '<tr><td style="padding:6px 0;color:var(--text-secondary)">Farming Type</td><td style="font-weight:600">' + (f.farming_type||'-') + '</td></tr>';
+    h += '<tr><td style="padding:6px 0;color:var(--text-secondary)">Crops</td><td style="font-weight:600">' + (f.crops||f.primary_crop||'-') + '</td></tr>';
+    h += '<tr><td style="padding:6px 0;color:var(--text-secondary)">PIN Code</td><td style="font-weight:600">' + (f.pin_code||'-') + '</td></tr>';
+    h += '<tr><td style="padding:6px 0;color:var(--text-secondary)">Joined</td><td style="font-weight:600">' + (f.created_at?new Date(f.created_at).toLocaleDateString('en-IN'):'-') + '</td></tr>';
+    h += '<tr><td style="padding:6px 0;color:var(--text-secondary)">Last Active</td><td style="font-weight:600">' + (f.last_active_at?new Date(f.last_active_at).toLocaleString('en-IN'):'-') + '</td></tr>';
+    h += '<tr><td style="padding:6px 0;color:var(--text-secondary)">Interactions</td><td style="font-weight:600">' + (f.total_interactions||0) + '</td></tr>';
+    h += '</table></div></div>';
+
+    // Transactions table
+    if (txns.length) {
+      h += '<div style="background:var(--card);border-radius:14px;padding:24px;margin-bottom:24px;border:1px solid var(--border)">';
+      h += '<h3 style="margin:0 0 16px;font-size:16px"><i class="fas fa-receipt" style="color:var(--primary)"></i> Recent Transactions</h3>';
+      h += '<div style="overflow-x:auto"><table style="width:100%;font-size:13px;border-collapse:collapse"><thead><tr style="border-bottom:2px solid var(--border)"><th style="text-align:left;padding:8px">Date</th><th style="text-align:left;padding:8px">Type</th><th style="text-align:left;padding:8px">Category</th><th style="text-align:left;padding:8px">Crop</th><th style="text-align:right;padding:8px">Amount</th></tr></thead><tbody>';
+      txns.slice(0,15).forEach(function(t) { h += '<tr style="border-bottom:1px solid var(--border)"><td style="padding:8px">' + (t.date?new Date(t.date).toLocaleDateString('en-IN'):'-') + '</td><td style="padding:8px"><span style="background:' + (t.type==='income'?'#ecfdf5':'#fef2f2') + ';color:' + (t.type==='income'?'#059669':'#dc2626') + ';padding:2px 8px;border-radius:12px;font-size:11px">' + t.type + '</span></td><td style="padding:8px">' + (t.category||'-') + '</td><td style="padding:8px">' + (t.crop||'-') + '</td><td style="padding:8px;text-align:right;font-weight:600;color:' + (t.type==='income'?'#059669':'#dc2626') + '">\u20B9' + Number(t.amount||0).toLocaleString('en-IN') + '</td></tr>'; });
+      h += '</tbody></table></div></div>';
+    }
+
+    h += '</div>';
+    el.innerHTML = h;
+
+    // Render charts
+    setTimeout(function() {
+      var mf = data.monthlyFinance || [];
+      var fc = document.getElementById('farmerFinChart');
+      if (fc && mf.length && typeof Chart !== 'undefined') {
+        new Chart(fc, { type:'bar', data:{ labels:mf.map(function(m){return m.month}), datasets:[{label:'Income',data:mf.map(function(m){return parseFloat(m.income)}),backgroundColor:'rgba(5,150,105,0.7)',borderRadius:4},{label:'Expense',data:mf.map(function(m){return parseFloat(m.expense)}),backgroundColor:'rgba(220,38,38,0.7)',borderRadius:4}]}, options:{responsive:true,plugins:{legend:{position:'bottom',labels:{boxWidth:12}}},scales:{y:{beginAtZero:true}}}});
       }
-    } catch(e) {}
+      var ec = data.expenseByCategory || [];
+      var ex = document.getElementById('farmerExpChart');
+      if (ex && ec.length && typeof Chart !== 'undefined') {
+        var cols = ['#059669','#dc2626','#2563eb','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#84cc16','#f97316','#6366f1'];
+        new Chart(ex, { type:'doughnut', data:{ labels:ec.map(function(e){return e.category||'Other'}), datasets:[{data:ec.map(function(e){return parseFloat(e.total)}),backgroundColor:cols.slice(0,ec.length),borderWidth:0}]}, options:{responsive:true,plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:11}}}},cutout:'65%'}});
+      }
+    }, 300);
 
-    const spinHtml = (farmerData.spin_history || []).length > 0
-      ? farmerData.spin_history.map(s => '<span class="tag" style="margin:2px">' + (s.prize_type === 'better_luck' ? 'Better Luck' : (s.prize_label || s.prize_type)) + ': Rs.' + s.prize_value + '</span>').join('')
-      : '<span style="color:var(--text-secondary)">No spins yet</span>';
-
-    el.innerHTML = `
-      <!-- Back Button -->
-      <div style="margin-bottom:20px">
-        <button class="btn btn-outline" onclick="navigate('farmers')"><i class="fas fa-arrow-left"></i> Back to Farmers</button>
-        <button class="btn btn-primary" style="margin-left:8px" onclick="startChatWithFarmer('${id}')"><i class="fab fa-whatsapp"></i> Send Message</button>
-        <button class="btn btn-outline" style="margin-left:8px" onclick="viewFarmerEdit('${id}')"><i class="fas fa-edit"></i> Edit</button>
-      </div>
-
-      <!-- Profile Header -->
-      <div style="background:linear-gradient(135deg,var(--primary),#2d8a4e);border-radius:16px;padding:24px;color:#fff;margin-bottom:24px;display:flex;align-items:center;gap:20px">
-        <div style="width:72px;height:72px;border-radius:50%;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:700;flex-shrink:0">${(f.name || 'K')[0].toUpperCase()}</div>
-        <div style="flex:1">
-          <h2 style="margin:0;color:#fff;font-size:22px">${f.name || 'Unknown'}</h2>
-          <p style="margin:4px 0 0;opacity:0.9;font-size:14px"><i class="fas fa-phone"></i> +${f.phone} &nbsp;|&nbsp; <i class="fas fa-map-marker-alt"></i> ${f.village || ''} ${f.district_name || ''} ${f.state_name || ''}</p>
-          <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-            <span style="background:rgba(255,255,255,0.2);padding:4px 12px;border-radius:20px;font-size:12px"><i class="fas fa-star"></i> ${tierName}</span>
-            <span style="background:rgba(255,255,255,0.2);padding:4px 12px;border-radius:20px;font-size:12px"><i class="fas fa-seedling"></i> ${crops || 'No crops'}</span>
-            <span style="background:rgba(255,255,255,0.2);padding:4px 12px;border-radius:20px;font-size:12px">${f.language === 'hi' ? 'Hindi' : f.language === 'en' ? 'English' : (f.language || '-')}</span>
-            <span style="background:rgba(255,255,255,0.2);padding:4px 12px;border-radius:20px;font-size:12px">Joined ${joinDate}</span>
-          </div>
-        </div>
-        <div style="display:flex;gap:12px;flex-shrink:0">
-          <div style="text-align:center;background:rgba(255,255,255,0.15);padding:12px 16px;border-radius:12px">
-            <div style="font-size:22px;font-weight:800">${f.total_interactions || 0}</div>
-            <div style="font-size:11px;opacity:0.8">Interactions</div>
-          </div>
-          <div style="text-align:center;background:rgba(255,255,255,0.15);padding:12px 16px;border-radius:12px">
-            <div style="font-size:22px;font-weight:800">${loyaltyPts}</div>
-            <div style="font-size:11px;opacity:0.8">Points</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Finance KPIs -->
-      <h3 style="margin:0 0 14px;font-size:18px;font-weight:700"><i class="fas fa-wallet" style="color:var(--primary);margin-right:8px"></i>Farm Finance (This Month)</h3>
-      <div class="stats-grid" style="margin-bottom:20px">
-        <div class="stat-card"><div class="stat-icon"><i class="fas fa-arrow-down" style="color:#10b981"></i></div><div class="stat-value" style="color:#10b981">\u20B9${finIncome.toLocaleString('en-IN')}</div><div class="stat-label">Total Income</div></div>
-        <div class="stat-card"><div class="stat-icon"><i class="fas fa-arrow-up" style="color:#ef4444"></i></div><div class="stat-value" style="color:#ef4444">\u20B9${finExpense.toLocaleString('en-IN')}</div><div class="stat-label">Total Expense</div></div>
-        <div class="stat-card"><div class="stat-icon"><i class="fas fa-chart-line" style="color:${finProfit>=0?'#10b981':'#ef4444'}"></i></div><div class="stat-value" style="color:${finProfit>=0?'#10b981':'#ef4444'}">${finProfit>=0?'+':'-'}\u20B9${Math.abs(finProfit).toLocaleString('en-IN')}</div><div class="stat-label">${finProfit>=0?'Profit':'Loss'}</div></div>
-        <div class="stat-card accent"><div class="stat-icon"><i class="fas fa-receipt"></i></div><div class="stat-value">${transactions.length}</div><div class="stat-label">Total Entries</div></div>
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
-        <!-- Expense by Category (Bar Chart) -->
-        <div style="background:var(--card);border-radius:12px;padding:20px;border:1px solid var(--border)">
-          <h4 style="margin:0 0 16px;font-size:15px;font-weight:700">Expense Breakdown</h4>
-          ${catEntries.length === 0 ? '<p style="color:var(--text-secondary);text-align:center;padding:20px">No expense data</p>' :
-            catEntries.map(([cat, amt]) => `
-              <div style="margin-bottom:12px">
-                <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-                  <span style="font-size:13px;font-weight:500">${cat}</span>
-                  <span style="font-size:13px;font-weight:700;color:#ef4444">\u20B9${Number(amt).toLocaleString('en-IN')}</span>
-                </div>
-                <div style="height:8px;background:#f3f4f6;border-radius:4px;overflow:hidden">
-                  <div style="height:100%;width:${(amt/maxCat*100).toFixed(1)}%;background:linear-gradient(90deg,var(--primary),#2d8a4e);border-radius:4px;transition:width 0.5s"></div>
-                </div>
-              </div>
-            `).join('')}
-        </div>
-
-        <!-- Monthly Trend -->
-        <div style="background:var(--card);border-radius:12px;padding:20px;border:1px solid var(--border)">
-          <h4 style="margin:0 0 16px;font-size:15px;font-weight:700">Monthly Trend</h4>
-          ${monthKeys.length === 0 ? '<p style="color:var(--text-secondary);text-align:center;padding:20px">No data yet</p>' : `
-            <div style="display:flex;align-items:flex-end;justify-content:space-around;height:160px;border-bottom:1px solid var(--border);padding-bottom:8px">
-              ${monthKeys.map(m => {
-                const maxVal = Math.max(...monthKeys.map(k => Math.max(monthlyData[k].income, monthlyData[k].expense))) || 1;
-                const incH = (monthlyData[m].income / maxVal * 120).toFixed(0);
-                const expH = (monthlyData[m].expense / maxVal * 120).toFixed(0);
-                return '<div style="display:flex;flex-direction:column;align-items:center;gap:4px">' +
-                  '<div style="display:flex;gap:3px;align-items:flex-end">' +
-                  '<div style="width:14px;height:' + incH + 'px;background:#10b981;border-radius:3px 3px 0 0;min-height:4px" title="Income: \u20B9' + monthlyData[m].income.toLocaleString('en-IN') + '"></div>' +
-                  '<div style="width:14px;height:' + expH + 'px;background:#ef4444;border-radius:3px 3px 0 0;min-height:4px" title="Expense: \u20B9' + monthlyData[m].expense.toLocaleString('en-IN') + '"></div>' +
-                  '</div></div>';
-              }).join('')}
-            </div>
-            <div style="display:flex;justify-content:space-around;margin-top:6px">
-              ${monthKeys.map(m => '<span style="font-size:11px;color:var(--text-secondary)">' + m.substring(5) + '</span>').join('')}
-            </div>
-            <div style="display:flex;gap:16px;justify-content:center;margin-top:12px">
-              <span style="font-size:12px"><span style="display:inline-block;width:10px;height:10px;background:#10b981;border-radius:2px;margin-right:4px"></span>Income</span>
-              <span style="font-size:12px"><span style="display:inline-block;width:10px;height:10px;background:#ef4444;border-radius:2px;margin-right:4px"></span>Expense</span>
-            </div>
-          `}
-        </div>
-      </div>
-
-      <!-- Main Content Grid -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
-        <!-- Profile Details -->
-        <div style="background:var(--card);border-radius:12px;padding:20px;border:1px solid var(--border)">
-          <h4 style="margin:0 0 16px;font-size:15px;font-weight:700"><i class="fas fa-user" style="color:var(--primary);margin-right:8px"></i>Profile Details</h4>
-          <table style="width:100%;font-size:13px">
-            <tr><td style="padding:8px 0;color:var(--text-secondary);width:40%">Village</td><td style="padding:8px 0;font-weight:500">${f.village || '-'}</td></tr>
-            <tr><td style="padding:8px 0;color:var(--text-secondary)">District</td><td style="padding:8px 0;font-weight:500">${f.district_name || '-'}</td></tr>
-            <tr><td style="padding:8px 0;color:var(--text-secondary)">State</td><td style="padding:8px 0;font-weight:500">${f.state_name || '-'}</td></tr>
-            <tr><td style="padding:8px 0;color:var(--text-secondary)">Pin Code</td><td style="padding:8px 0;font-weight:500">${f.pin_code || '-'}</td></tr>
-            <tr><td style="padding:8px 0;color:var(--text-secondary)">Land</td><td style="padding:8px 0;font-weight:500">${f.land_holding_acres ? f.land_holding_acres + ' acres' : '-'}</td></tr>
-            <tr><td style="padding:8px 0;color:var(--text-secondary)">Soil Type</td><td style="padding:8px 0;font-weight:500">${f.soil_type || '-'}</td></tr>
-            <tr><td style="padding:8px 0;color:var(--text-secondary)">Irrigation</td><td style="padding:8px 0;font-weight:500">${f.irrigation_type || '-'}</td></tr>
-            <tr><td style="padding:8px 0;color:var(--text-secondary)">Farming Type</td><td style="padding:8px 0;font-weight:500">${f.farming_type || '-'}</td></tr>
-            <tr><td style="padding:8px 0;color:var(--text-secondary)">Last Active</td><td style="padding:8px 0;font-weight:500">${lastActive}</td></tr>
-          </table>
-        </div>
-
-        <!-- Conversations -->
-        <div style="background:var(--card);border-radius:12px;padding:20px;border:1px solid var(--border)">
-          <h4 style="margin:0 0 16px;font-size:15px;font-weight:700"><i class="fas fa-comments" style="color:var(--primary);margin-right:8px"></i>Conversations</h4>
-          ${chatHtml}
-          <div id="farmerChatMessagesFull" style="margin-top:12px"></div>
-        </div>
-      </div>
-
-      <!-- Finance Transactions Table -->
-      <div style="background:var(--card);border-radius:12px;padding:20px;border:1px solid var(--border);margin-bottom:24px">
-        <h4 style="margin:0 0 16px;font-size:15px;font-weight:700"><i class="fas fa-list" style="color:var(--primary);margin-right:8px"></i>Finance Transactions</h4>
-        ${transactions.length === 0 ? '<p style="color:var(--text-secondary);text-align:center;padding:20px">No transactions recorded. Farmer can type "hisaab" on WhatsApp.</p>' : `
-          <table style="width:100%;border-collapse:collapse;font-size:13px">
-            <thead><tr style="border-bottom:2px solid var(--border)">
-              <th style="text-align:left;padding:8px">Date</th>
-              <th style="text-align:left;padding:8px">Type</th>
-              <th style="text-align:left;padding:8px">Category</th>
-              <th style="text-align:left;padding:8px">Description</th>
-              <th style="text-align:right;padding:8px">Amount</th>
-            </tr></thead>
-            <tbody>
-              ${transactions.slice(0, 30).map(t => `
-                <tr style="border-bottom:1px solid var(--border)">
-                  <td style="padding:8px">${new Date(t.date).toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'})}</td>
-                  <td style="padding:8px"><span style="background:${t.type==='income'?'#ecfdf5':'#fef2f2'};color:${t.type==='income'?'#059669':'#dc2626'};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600">${t.type}</span></td>
-                  <td style="padding:8px;font-weight:500">${t.category}</td>
-                  <td style="padding:8px;color:var(--text-secondary)">${t.description || '-'}</td>
-                  <td style="padding:8px;text-align:right;font-weight:700;color:${t.type==='income'?'#10b981':'#ef4444'}">${t.type==='income'?'+':'-'}\u20B9${Number(t.amount).toLocaleString('en-IN')}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        `}
-      </div>
-
-      <!-- Spin & Loyalty -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
-        <div style="background:var(--card);border-radius:12px;padding:20px;border:1px solid var(--border)">
-          <h4 style="margin:0 0 12px;font-size:15px;font-weight:700"><i class="fas fa-dharmachakra" style="color:var(--primary);margin-right:8px"></i>Spin History</h4>
-          <div style="display:flex;flex-wrap:wrap;gap:4px">${spinHtml}</div>
-        </div>
-        <div style="background:var(--card);border-radius:12px;padding:20px;border:1px solid var(--border)">
-          <h4 style="margin:0 0 12px;font-size:15px;font-weight:700"><i class="fas fa-crown" style="color:#f59e0b;margin-right:8px"></i>Loyalty</h4>
-          <div style="display:flex;gap:16px">
-            <div style="text-align:center;flex:1;background:var(--bg);padding:14px;border-radius:10px">
-              <div style="font-size:24px;font-weight:800;color:var(--primary)">${loyaltyPts}</div>
-              <div style="font-size:12px;color:var(--text-secondary)">Current Points</div>
-            </div>
-            <div style="text-align:center;flex:1;background:var(--bg);padding:14px;border-radius:10px">
-              <div style="font-size:24px;font-weight:800;color:#8b5cf6">${lifetimePts}</div>
-              <div style="font-size:12px;color:var(--text-secondary)">Lifetime Points</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  } catch(e) {
-    el.innerHTML = '<div class="empty"><i class="fas fa-exclamation-triangle"></i><p>Error loading farmer: ' + e.message + '</p></div>';
-  }
+    window._farmerProfileData = data;
+  } catch(e) { el.innerHTML = '<div style="text-align:center;padding:40px"><i class="fas fa-exclamation-triangle fa-2x" style="color:#dc2626"></i><p>' + e.message + '</p><button onclick="navigate(\'farmers\')" class="btn btn-primary" style="margin-top:12px">Back</button></div>'; }
 }
+
+function generateAISummary(farmerId) {
+  var btn = document.getElementById('aiSumBtn');
+  var box = document.getElementById('aiSummaryContent');
+  btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+  box.innerHTML = '<p style="font-style:italic">Generating AI summary...</p>';
+  var pd = window._farmerProfileData || {};
+  var slim = { farmer: pd.farmer, interactionStats: pd.interactionStats, financeSummary: pd.financeSummary, postsCount: (pd.posts||[]).length, diagnosesCount: (pd.diagnoses||[]).length, reelsCount: (pd.reelActivity||[]).length, txnCount: (pd.transactions||[]).length, loyalty: pd.loyalty, recentMsgs: (pd.messages||[]).slice(0,10).map(function(m){return {dir:m.direction,text:(m.content||'').substring(0,50),type:m.message_type};}), monthlyFinance: pd.monthlyFinance, expenseByCategory: pd.expenseByCategory };
+  fetch('/api/v1/farmers/' + farmerId + '/ai-summary', { method:'POST', headers:{'Authorization':'Bearer '+TOKEN,'Content-Type':'application/json'}, body:JSON.stringify({profileData:slim}) })
+  .then(function(r){return r.json()})
+  .then(function(d){ box.innerHTML = (d.summary||'No summary').split('\n').map(function(p){return p.trim()?'<p style="margin:0 0 12px;line-height:1.7">'+p+'</p>':'';}).join(''); btn.disabled=false; btn.innerHTML='<i class="fas fa-magic"></i> Regenerate'; })
+  .catch(function(e){ box.innerHTML='<p style="color:#dc2626">Error: '+e.message+'</p>'; btn.disabled=false; btn.innerHTML='<i class="fas fa-magic"></i> Generate'; });
+}
+
 
 async function loadFarmerChatFull(sessionId, farmerId) {
   const el = document.getElementById('farmerChatMessagesFull');
