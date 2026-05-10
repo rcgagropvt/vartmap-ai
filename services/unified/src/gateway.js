@@ -2090,24 +2090,28 @@ const state = pendingData.state || '';
           // Send voice reply if farmer sent a voice message
           if (effectiveMsgType === 'audio' && cleanReply && process.env.GROQ_API_KEY) {
             try {
-              const Groq = require('groq-sdk');
-              const groqTTS = new Groq({ apiKey: process.env.GROQ_API_KEY });
-              // Keep voice reply concise (max 500 chars)
+              // Use GROQ TTS API directly via HTTP (Orpheus English model)
               const ttsText = cleanReply.length > 500 ? cleanReply.substring(0, 497) + '...' : cleanReply;
-              const ttsResponse = await groqTTS.audio.speech.create({
-                model: 'playai-tts',
+              const ttsResp = await axios.post('https://api.groq.com/openai/v1/audio/speech', {
+                model: 'canopylabs/orpheus-v1-english',
                 input: ttsText,
-                voice: 'Arista-PlayAI',
-                response_format: 'mp3',
-                speed: 1.0
+                voice: 'troy',
+                response_format: 'wav'
+              }, {
+                headers: {
+                  'Authorization': 'Bearer ' + process.env.GROQ_API_KEY,
+                  'Content-Type': 'application/json'
+                },
+                responseType: 'arraybuffer',
+                timeout: 15000
               });
-              const audioArrayBuffer = await ttsResponse.arrayBuffer();
-              const audioBuf = Buffer.from(audioArrayBuffer);
+              const audioBuf = Buffer.from(ttsResp.data);
               if (audioBuf.length > 1000) {
                 await sendWhatsAppAudio(from, audioBuf);
+                console.log('Voice reply sent (' + (audioBuf.length/1024).toFixed(1) + ' KB)');
               }
             } catch(ttsErr) {
-              console.log('TTS voice reply error:', ttsErr.message);
+              console.log('TTS voice reply error:', ttsErr.response ? ttsErr.response.status + ' ' + ttsErr.response.statusText : ttsErr.message);
             }
           }
 
