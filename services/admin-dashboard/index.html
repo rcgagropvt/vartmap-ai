@@ -197,6 +197,7 @@ tr:hover{background:rgba(76,175,80,.03)}
       <div class="nav-section-title">Engagement</div>
       <div class="nav-item" onclick="navigate('templates')"><i class="fas fa-file-alt"></i> Templates</div>
       <div class="nav-item" onclick="navigate('campaigns')"><i class="fas fa-bullhorn"></i> Campaigns</div>
+      <div class="nav-item" onclick="navigate('videos')"><i class="fas fa-video"></i> Videos</div>
 
 
 
@@ -325,7 +326,7 @@ function navigate(page) {
   items.forEach(n => { if (n.textContent.trim().toLowerCase().replace(/[\s\d]/g, '').includes(page.replace(/-/g, ''))) n.classList.add('active'); });
   const titles = {
     'overview':'Overview','chats':'WhatsApp Chat','farmers':'Farmers','conversations':'Conversations',
-    'templates':'Message Templates','campaigns':'Campaigns','spin-wheels':'Spin Wheels & Lucky Draw',
+    'templates':'Message Templates','campaigns':'Campaigns','videos':'Video Management','spin-wheels':'Spin Wheels & Lucky Draw',
     'loyalty':'Loyalty Program','coupons':'Coupon Codes','rewards':'Rewards','referrals':'Referrals',
     'soil-data':'Soil Nutrient Database','schemes':'Government Schemes','products':'Products',
     'mandi-prices':'Mandi Prices','dealers':'Dealers','field-agents':'Field Agents','orders':'Orders',
@@ -335,7 +336,7 @@ function navigate(page) {
   document.getElementById('pageTitle').textContent = titles[page] || page;
   const loaders = {
     'overview':loadOverview,'chats':loadChats,'farmers':loadFarmers,'conversations':loadConversations,
-    'templates':loadTemplates,'campaigns':loadCampaigns,'spin-wheels':loadSpinWheels,
+    'templates':loadTemplates,'campaigns':loadCampaigns,'videos':loadVideos,'spin-wheels':loadSpinWheels,
     'loyalty':loadLoyaltyProgram,'coupons':loadCoupons,'rewards':loadRewards,'referrals':loadReferrals,
     'soil-data':loadSoilData,'schemes':loadSchemes,'products':loadProducts,
     'mandi-prices':loadMandi,'dealers':loadDealers,'field-agents':loadFieldAgents,'orders':loadOrders,
@@ -4538,6 +4539,148 @@ async function loadAuditLog() {
 
 // ------
 if (TOKEN && USER) showApp();
+
+// ─── VIDEO MANAGEMENT ───
+async function loadVideos() {
+  const el = document.getElementById('pageContent');
+  el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
+  try {
+    const videos = await api('/api/v1/videos');
+    const shorts = videos.filter(v => v.type === 'short').length;
+    const full = videos.filter(v => v.type === 'video').length;
+    const active = videos.filter(v => v.is_active).length;
+
+    el.innerHTML = `
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-value">${videos.length}</div><div class="stat-label">Total Videos</div></div>
+      <div class="stat-card accent"><div class="stat-value">${shorts}</div><div class="stat-label">Shorts</div></div>
+      <div class="stat-card info"><div class="stat-value">${full}</div><div class="stat-label">Full Videos</div></div>
+      <div class="stat-card"><div class="stat-value">${active}</div><div class="stat-label">Active</div></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="font-size:16px">All Videos</h3>
+      <button class="btn btn-primary" onclick="openAddVideoModal()"><i class="fas fa-plus"></i> Add Video</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">
+      ${videos.map(v => `
+        <div style="background:var(--card);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)">
+          <div style="position:relative;height:170px;background:#111">
+            <img src="https://img.youtube.com/vi/${v.video_id}/hqdefault.jpg" style="width:100%;height:100%;object-fit:cover;opacity:${v.is_active ? 1 : 0.4}" />
+            <span style="position:absolute;top:8px;right:8px;background:${v.type==='short'?'#FF0000':'var(--info)'};color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px">${v.type.toUpperCase()}</span>
+            <span style="position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,0.7);color:#fff;font-size:11px;padding:3px 8px;border-radius:4px">${v.duration}</span>
+            ${!v.is_active ? '<span style="position:absolute;top:8px;left:8px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px">HIDDEN</span>' : ''}
+          </div>
+          <div style="padding:14px">
+            <h4 style="font-size:14px;margin-bottom:4px">${v.title}</h4>
+            <p style="font-size:12px;color:var(--text-light)">ID: ${v.video_id}${v.category ? ' | ' + v.category : ''} | Order: ${v.order_num}</p>
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <button class="btn btn-sm btn-outline" onclick="toggleVideo(${v.id})"><i class="fas fa-${v.is_active?'eye-slash':'eye'}"></i> ${v.is_active?'Hide':'Show'}</button>
+              <button class="btn btn-sm btn-outline" onclick="editVideo(${v.id},'${v.video_id}','${v.title.replace(/'/g,"\\'")}','${v.duration}','${v.type}','${v.category||''}',${v.order_num})"><i class="fas fa-edit"></i> Edit</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteVideo(${v.id})"><i class="fas fa-trash"></i></button>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+    ${videos.length === 0 ? '<div class="empty"><i class="fas fa-video"></i><p>No videos yet. Add your first YouTube video!</p></div>' : ''}
+    `;
+  } catch(e) {
+    el.innerHTML = '<div class="empty"><i class="fas fa-exclamation-triangle"></i><p>Failed to load videos</p></div>';
+  }
+}
+
+function extractYTId(input) {
+  if (!input) return '';
+  const patterns = [/shorts\/([a-zA-Z0-9_-]+)/, /watch\?v=([a-zA-Z0-9_-]+)/, /youtu\.be\/([a-zA-Z0-9_-]+)/, /embed\/([a-zA-Z0-9_-]+)/];
+  for (const p of patterns) { const m = input.match(p); if (m) return m[1]; }
+  if (/^[a-zA-Z0-9_-]{11}$/.test(input)) return input;
+  return input;
+}
+
+function openAddVideoModal() {
+  const body = `
+    <div class="form-group"><label>YouTube URL or Video ID *</label><input id="vidUrl" placeholder="https://youtube.com/shorts/NcwAGns4K9M or just NcwAGns4K9M" /></div>
+    <div class="form-group"><label>Title *</label><input id="vidTitle" placeholder="Video title" /></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group"><label>Duration *</label><input id="vidDuration" placeholder="0:50" /></div>
+      <div class="form-group"><label>Type</label><select id="vidType"><option value="short">Short</option><option value="video">Full Video</option></select></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group"><label>Category</label><input id="vidCategory" placeholder="e.g. Pest Control" /></div>
+      <div class="form-group"><label>Order</label><input id="vidOrder" type="number" value="1" /></div>
+    </div>
+    <div id="vidPreview" style="margin-top:12px;border-radius:8px;overflow:hidden"></div>
+    <button class="btn btn-sm btn-outline" style="margin-top:8px" onclick="previewVid()"><i class="fas fa-play"></i> Preview</button>
+  `;
+  openModal('Add New Video', body, '<button class="btn btn-primary" onclick="saveVideo()"><i class="fas fa-save"></i> Save Video</button> <button class="btn btn-outline" onclick="closeModal()">Cancel</button>');
+}
+
+function previewVid() {
+  const url = document.getElementById('vidUrl').value;
+  const vid = extractYTId(url);
+  if (vid) document.getElementById('vidPreview').innerHTML = '<iframe src="https://www.youtube.com/embed/' + vid + '" style="width:100%;height:200px;border:none;border-radius:8px" allowfullscreen></iframe>';
+}
+
+async function saveVideo() {
+  const video_id = extractYTId(document.getElementById('vidUrl').value);
+  const title = document.getElementById('vidTitle').value;
+  const duration = document.getElementById('vidDuration').value;
+  const type = document.getElementById('vidType').value;
+  const category = document.getElementById('vidCategory').value;
+  const order_num = parseInt(document.getElementById('vidOrder').value) || 1;
+  if (!video_id || !title) { alert('Please fill video URL and title'); return; }
+  try {
+    await api('/api/v1/videos', { method: 'POST', body: JSON.stringify({ video_id, title, duration, type, category, order_num }) });
+    closeModal();
+    loadVideos();
+  } catch(e) { alert('Failed to save video'); }
+}
+
+function editVideo(id, videoId, title, duration, type, category, order) {
+  const body = `
+    <div class="form-group"><label>YouTube Video ID</label><input id="vidUrl" value="${videoId}" /></div>
+    <div class="form-group"><label>Title</label><input id="vidTitle" value="${title}" /></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group"><label>Duration</label><input id="vidDuration" value="${duration}" /></div>
+      <div class="form-group"><label>Type</label><select id="vidType"><option value="short" ${type==='short'?'selected':''}>Short</option><option value="video" ${type==='video'?'selected':''}>Full Video</option></select></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group"><label>Category</label><input id="vidCategory" value="${category}" /></div>
+      <div class="form-group"><label>Order</label><input id="vidOrder" type="number" value="${order}" /></div>
+    </div>
+  `;
+  openModal('Edit Video', body, '<button class="btn btn-primary" onclick="updateVideo('+id+')"><i class="fas fa-save"></i> Update</button> <button class="btn btn-outline" onclick="closeModal()">Cancel</button>');
+}
+
+async function updateVideo(id) {
+  const video_id = document.getElementById('vidUrl').value;
+  const title = document.getElementById('vidTitle').value;
+  const duration = document.getElementById('vidDuration').value;
+  const type = document.getElementById('vidType').value;
+  const category = document.getElementById('vidCategory').value;
+  const order_num = parseInt(document.getElementById('vidOrder').value) || 1;
+  try {
+    await api('/api/v1/videos/' + id, { method: 'PUT', body: JSON.stringify({ video_id, title, duration, type, category, order_num }) });
+    closeModal();
+    loadVideos();
+  } catch(e) { alert('Failed to update'); }
+}
+
+async function toggleVideo(id) {
+  try {
+    await api('/api/v1/videos/' + id + '/toggle', { method: 'POST' });
+    loadVideos();
+  } catch(e) { alert('Failed to toggle'); }
+}
+
+async function deleteVideo(id) {
+  if (!confirm('Delete this video permanently?')) return;
+  try {
+    await api('/api/v1/videos/' + id, { method: 'DELETE' });
+    loadVideos();
+  } catch(e) { alert('Failed to delete'); }
+}
+
 </script>
 </body>
 </html>

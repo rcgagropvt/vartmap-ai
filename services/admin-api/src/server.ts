@@ -8,6 +8,7 @@ import { farmerRoutes } from "./routes/farmers.js";
 import { campaignRoutes } from "./routes/campaigns.js";
 import { analyticsRoutes } from "./routes/analytics.js";
 import { moderationRoutes } from "./routes/moderation.js";
+import { videoRoutes } from "./routes/videos.js";
 import { db } from "./utils/db.js";
 
 const app = Fastify({ logger: true, trustProxy: true });
@@ -38,6 +39,7 @@ async function bootstrap() {
   await app.register(campaignRoutes, { prefix: "/api/v1/campaigns" });
   await app.register(analyticsRoutes, { prefix: "/api/v1/analytics" });
   await app.register(moderationRoutes, { prefix: "/api/v1/moderation" });
+  await app.register(videoRoutes, { prefix: "/api/v1/videos" });
 
   await app.listen({ port: config.PORT, host: "0.0.0.0" });
 }
