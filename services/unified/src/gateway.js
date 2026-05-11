@@ -1767,7 +1767,28 @@ app.post('/webhook', async (req, res) => {
             }];
 
             await sendWhatsAppList(from,
-              lang === 'hi' ? '\u{1F33E} Fasal Calendar Registration\n\nKonsi fasal ka calendar shuru karna chahte hain? Buwai ki taareekh dene ke baad har stage pe automatic reminder milega.' : '\u{1F33E} Crop Calendar Registration\n\nWhich crop? After sowing date, you get automatic stage reminders.',
+              lang === 'hi' ? '\u{1F33E} Fasal Calendar Registration\
+          // --- NUTRITION SCHEDULE ---
+          if (lowerMsg === 'mera schedule' || lowerMsg === 'nutrition schedule' || lowerMsg === 'khaad schedule' || lowerMsg === 'fertilizer schedule') {
+            try {
+              const axios3 = require('axios');
+              const baseUrl3 = 'http://localhost:' + (process.env.PORT || 10000);
+              const nRes = await axios3.get(baseUrl3 + '/api/v1/crop-calendar/next-action/' + farmerId);
+              if (nRes.data.actions && nRes.data.actions.length > 0) {
+                for (const action of nRes.data.actions) {
+                  await sendWhatsAppMessage(from, action.message);
+                }
+              } else {
+                const noMsg = lang === 'hi' ? 'Abhi koi active fasal calendar nahi hai. \"Fasal register\" bhejein shuru karne ke liye.' : 'No active crop calendar. Send \"Fasal register\" to start.';
+                await sendWhatsAppMessage(from, noMsg);
+              }
+            } catch (nErr) {
+              console.error('Nutrition schedule error:', nErr.message);
+              await sendWhatsAppMessage(from, lang === 'hi' ? 'Schedule load nahi ho paya. Baad mein try karein.' : 'Could not load schedule. Try later.');
+            }
+            continue;
+          }
+n\nKonsi fasal ka calendar shuru karna chahte hain? Buwai ki taareekh dene ke baad har stage pe automatic reminder milega.' : '\u{1F33E} Crop Calendar Registration\n\nWhich crop? After sowing date, you get automatic stage reminders.',
               lang === 'hi' ? 'Fasal chunein' : 'Select Crop',
               sections
             );
