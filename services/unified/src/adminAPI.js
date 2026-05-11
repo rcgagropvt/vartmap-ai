@@ -6414,7 +6414,7 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
   });
 
 
-  /api/v1/crop-calendar/init-tables", async (req, res) => {
+  app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
     try {
       // Create tables
       await pool.query(`
