@@ -5753,10 +5753,7 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
   // Create tables on first load
   (async () => {
     try {
-      await pool.query(`DROP TABLE IF EXISTS crop_reminders_log CASCADE;
-        DROP TABLE IF EXISTS farmer_crop_registrations CASCADE;
-        DROP TABLE IF EXISTS crop_calendar_templates CASCADE;
-        CREATE TABLE crop_calendar_templates (
+      await pool.query(` CREATE TABLE IF NOT EXISTS crop_calendar_templates (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         crop VARCHAR(100) NOT NULL,
         stage_name VARCHAR(200) NOT NULL,
@@ -5935,7 +5932,7 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
           activity TEXT,
           created_at TIMESTAMP DEFAULT NOW()
         );
-        CREATE TABLE farmer_crop_registrations (
+        CREATE TABLE IF NOT EXISTS farmer_crop_registrations (
           id SERIAL PRIMARY KEY,
           farmer_id UUID REFERENCES farmers(id),
           crop VARCHAR(100) NOT NULL,
@@ -5945,7 +5942,7 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
           status VARCHAR(20) DEFAULT 'active',
           created_at TIMESTAMP DEFAULT NOW()
         );
-        CREATE TABLE crop_reminders_log (
+        CREATE TABLE IF NOT EXISTS crop_reminders_log (
           id SERIAL PRIMARY KEY,
           registration_id INTEGER REFERENCES farmer_crop_registrations(id),
           farmer_id UUID REFERENCES farmers(id),
