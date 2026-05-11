@@ -5902,6 +5902,16 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
   
   // Manual table init endpoint (call once after deploy)
   // One-time: deactivate expert menu item
+  // Debug: check crop registrations (remove later)
+  app.get("/api/v1/crop-calendar/debug", async (req, res) => {
+    try {
+      const { rows: regs } = await pool.query("SELECT r.id, r.farmer_id, r.crop, r.sow_date, r.status, f.phone, f.name FROM farmer_crop_registrations r LEFT JOIN farmers f ON f.id = r.farmer_id ORDER BY r.created_at DESC LIMIT 10");
+      const { rows: farmers } = await pool.query("SELECT id, phone, name FROM farmers WHERE phone LIKE '%8953587717%'");
+      res.json({ registrations: regs, matching_farmers: farmers });
+    } catch(e) { res.status(500).json({ error: e.message }); }
+  });
+
+
   app.get("/api/v1/crop-calendar/fix-menu", async (req, res) => {
     try {
       await pool.query("UPDATE bot_menu_items SET is_active = false WHERE menu_key = 'talk_to_expert'");
