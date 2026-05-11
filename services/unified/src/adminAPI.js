@@ -5884,7 +5884,7 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
     try {
       const { crop, stage_name, day_offset, message_hi, message_en, task_type, product_suggestion, is_weather_sensitive, skip_if_rain, priority } = req.body;
       const { rows } = await pool.query(
-        "INSERT INTO crop_calendar_templates (crop, stage_name, day_offset, message_hi, message_en, task_type, product_suggestion, is_weather_sensitive, skip_if_rain, priority) VALUES (" + D + "1," + D + "2," + D + "3," + D + "4," + D + "5," + D + "6," + D + "7," + D + "8," + D + "9," + D + "10) RETURNING *",
+        "INSERT INTO crop_calendar_templates (crop, stage_name, day_offset, message_hi, message_en, task_type, product_suggestion, is_weather_sensitive, skip_if_rain, priority) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *",
         [crop, stage_name, day_offset, message_hi, message_en, task_type || 'general', product_suggestion, is_weather_sensitive || false, skip_if_rain || false, priority || 'medium']
       );
       res.json({ template: rows[0] });
@@ -5894,7 +5894,7 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
   // Delete template
   app.delete("/api/v1/crop-calendar/templates/:id", auth, async (req, res) => {
     try {
-      await pool.query("DELETE FROM crop_calendar_templates WHERE id=" + D + "1", [req.params.id]);
+      await pool.query("DELETE FROM crop_calendar_templates WHERE id=$1", [req.params.id]);
       res.json({ success: true });
     } catch(e) { res.status(500).json({ error: e.message }); }
   });
@@ -6006,14 +6006,14 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
       
       // Calculate next reminder date
       const { rows: templates } = await pool.query(
-        "SELECT MIN(day_offset) as first_day FROM crop_calendar_templates WHERE LOWER(crop)=LOWER(" + D + "1)", [crop]
+        "SELECT MIN(day_offset) as first_day FROM crop_calendar_templates WHERE LOWER(crop)=LOWER($1)", [crop]
       );
       const firstDay = templates[0] ? templates[0].first_day : 5;
       const nextDate = new Date(sow_date);
       nextDate.setDate(nextDate.getDate() + firstDay);
 
       const { rows } = await pool.query(
-        "INSERT INTO farmer_crop_registrations (farmer_id, crop, sow_date, land_area, next_reminder_date) VALUES (" + D + "1," + D + "2," + D + "3," + D + "4," + D + "5) RETURNING *",
+        "INSERT INTO farmer_crop_registrations (farmer_id, crop, sow_date, land_area, next_reminder_date) VALUES ($1,$2,$3,$4,$5) RETURNING *",
         [farmer_id, crop.toLowerCase(), sow_date, land_area || null, nextDate.toISOString().split('T')[0]]
       );
       res.json({ registration: rows[0] });
@@ -6024,7 +6024,7 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
   app.get("/api/v1/crop-calendar/farmer/:farmerId", async (req, res) => {
     try {
       const { rows } = await pool.query(
-        "SELECT r.*, (SELECT COUNT(*) FROM crop_reminders_log WHERE registration_id=r.id) as reminders_sent FROM farmer_crop_registrations r WHERE r.farmer_id=" + D + "1 ORDER BY r.created_at DESC",
+        "SELECT r.*, (SELECT COUNT(*) FROM crop_reminders_log WHERE registration_id=r.id) as reminders_sent FROM farmer_crop_registrations r WHERE r.farmer_id=$1 ORDER BY r.created_at DESC",
         [req.params.farmerId]
       );
       res.json({ registrations: rows });
@@ -6034,15 +6034,15 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
   // Get timeline for a registration
   app.get("/api/v1/crop-calendar/timeline/:regId", async (req, res) => {
     try {
-      const { rows: [reg] } = await pool.query("SELECT * FROM farmer_crop_registrations WHERE id=" + D + "1", [req.params.regId]);
+      const { rows: [reg] } = await pool.query("SELECT * FROM farmer_crop_registrations WHERE id=$1", [req.params.regId]);
       if (!reg) return res.status(404).json({ error: "Not found" });
 
       const { rows: templates } = await pool.query(
-        "SELECT * FROM crop_calendar_templates WHERE LOWER(crop)=LOWER(" + D + "1) ORDER BY day_offset", [reg.crop]
+        "SELECT * FROM crop_calendar_templates WHERE LOWER(crop)=LOWER($1) ORDER BY day_offset", [reg.crop]
       );
 
       const { rows: logs } = await pool.query(
-        "SELECT * FROM crop_reminders_log WHERE registration_id=" + D + "1 ORDER BY sent_at", [req.params.regId]
+        "SELECT * FROM crop_reminders_log WHERE registration_id=$1 ORDER BY sent_at", [req.params.regId]
       );
 
       const sowDate = new Date(reg.sow_date);
@@ -6110,7 +6110,7 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
     try {
       const { response } = req.body;
       await pool.query(
-        "UPDATE crop_reminders_log SET farmer_response=" + D + "1, responded_at=NOW() WHERE id=" + D + "2",
+        "UPDATE crop_reminders_log SET farmer_response=$1, responded_at=NOW() WHERE id=$2",
         [response, req.params.logId]
       );
       res.json({ success: true });
