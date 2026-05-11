@@ -221,6 +221,7 @@ tr:hover{background:rgba(76,175,80,.03)}
       <div class="nav-item" onclick="navigate('reels')"><i class="fas fa-film"></i> Reels</div>
       <div class="nav-item" onclick="navigate('videos')"><i class="fab fa-youtube"></i> Videos</div>
       <div class="nav-item" onclick="navigate('finance')"><i class="fas fa-wallet"></i> Farm Finance</div>
+      <div class="nav-item" onclick="navigate('crop-calendar')"><i class="fas fa-seedling"></i> Crop Calendar</div>
       <div class="nav-item" onclick="navigate('settings')"><i class="fas fa-cog"></i> Settings</div>
       <div class="nav-item" onclick="navigate('products')"><i class="fas fa-box"></i> Products</div>
       <div class="nav-item" onclick="navigate('catalog')"><i class="fas fa-seedling"></i> Product Catalog</div>
@@ -894,7 +895,7 @@ function navigate(page) {
     'assignment-rules':'Assignment Rules','sla-dashboard':'SLA Dashboard','chat-analytics':'Chat Analytics','soil-data':'Soil Nutrient Database','schemes':'Government Schemes','products':'Products',
     'mandi-prices':'Mandi Prices','dealers':'Dealers','field-agents':'Field Agents','orders':'Orders',
     'moderation':'Moderation Queue','notifications':'Notification Logs','analytics':'Analytics',
-    'services':'Service Health','admin-users':'Admin Users','audit-log':'Audit Log','community':'Community Management','reels':'Reels Management','videos':'Video Management','finance':'Farm Finance','settings':'Settings','catalog':'Product Catalog','bot-builder':'Bot Builder'
+    'services':'Service Health','admin-users':'Admin Users','audit-log':'Audit Log','community':'Community Management','reels':'Reels Management','videos':'Video Management','finance':'Farm Finance','crop-calendar':'Crop Calendar','settings':'Settings','catalog':'Product Catalog','bot-builder':'Bot Builder'
   };
   document.getElementById('pageTitle').textContent = titles[page] || page;
   const loaders = {
@@ -903,7 +904,7 @@ function navigate(page) {
     'loyalty':loadLoyaltyProgram,'coupons':loadCoupons,'rewards':loadRewards,'referrals':loadReferrals,
     'assignment-rules':loadAssignmentRules,'sla-dashboard':loadSLADashboard,'chat-analytics':loadChatAnalytics,'soil-data':loadSoilData,'schemes':loadSchemes,'products':loadProducts,
     'mandi-prices':loadMandi,'dealers':loadDealers,'field-agents':loadFieldAgents,'orders':loadOrders,
-    'moderation':loadModeration,'notifications':loadNotifications,'analytics':loadAnalytics,'services':loadServices,'admin-users':loadAdminUsers,'audit-log':loadAuditLog,'community':loadCommunity,'reels':loadReels,'videos':loadVideos,'finance':loadFinance,'settings':loadSettings,'catalog':loadProductCatalog,'bot-builder':loadBotBuilder};
+    'moderation':loadModeration,'notifications':loadNotifications,'analytics':loadAnalytics,'services':loadServices,'admin-users':loadAdminUsers,'audit-log':loadAuditLog,'community':loadCommunity,'reels':loadReels,'videos':loadVideos,'finance':loadFinance,'crop-calendar':loadCropCalendar,'settings':loadSettings,'catalog':loadProductCatalog,'bot-builder':loadBotBuilder};
   const loader = loaders[page];
   if (loader) loader(); else document.getElementById('pageContent').innerHTML = '<div class="empty"><i class="fas fa-construction"></i><p>Coming soon</p></div>';
 }
