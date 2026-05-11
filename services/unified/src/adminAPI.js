@@ -5998,6 +5998,93 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
 
 
 
+  // ===== FARMER APP: CROP CALENDAR ROUTES =====
+  app.get("/api/v1/farmer/crop-calendar", communityAuth, async (req, res) => {
+    try {
+      const farmerId = req.user.farmerId || req.user.id;
+      const { rows: regs } = await pool.query(
+        "SELECT r.*, (SELECT COUNT(*) FROM crop_reminders_log WHERE registration_id=r.id) as reminders_sent FROM farmer_crop_registrations r WHERE r.farmer_id=$1 ORDER BY r.created_at DESC",
+        [farmerId]
+      );
+      // Add next stage info
+      for (const reg of regs) {
+        const days = Math.floor((Date.now() - new Date(reg.sow_date).getTime()) / (1000*60*60*24));
+        const { rows: nextStages } = await pool.query(
+          "SELECT stage_name, day_offset FROM crop_calendar_templates WHERE LOWER(crop)=LOWER($1) AND day_offset > $2 ORDER BY day_offset LIMIT 1",
+          [reg.crop, days]
+        );
+        if (nextStages.length > 0) {
+          reg.next_stage = nextStages[0].stage_name;
+          reg.days_until_next = nextStages[0].day_offset - days;
+        }
+      }
+      res.json({ registrations: regs });
+    } catch(e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/v1/farmer/crop-calendar/register", communityAuth, async (req, res) => {
+    try {
+      const farmerId = req.user.farmerId || req.user.id;
+      const { crop, sow_date, land_area } = req.body;
+      if (!crop || !sow_date) return res.status(400).json({ error: "crop and sow_date required" });
+
+      const { rows: templates } = await pool.query(
+        "SELECT MIN(day_offset) as first_day FROM crop_calendar_templates WHERE LOWER(crop)=LOWER($1)", [crop]
+      );
+      const firstDay = templates[0]?.first_day || 5;
+      const nextDate = new Date(sow_date);
+      nextDate.setDate(nextDate.getDate() + firstDay);
+
+      const { rows } = await pool.query(
+        "INSERT INTO farmer_crop_registrations (farmer_id, crop, sow_date, land_area, next_reminder_date) VALUES ($1,$2,$3,$4,$5) RETURNING *",
+        [farmerId, crop.toLowerCase(), sow_date, land_area || null, nextDate.toISOString().split('T')[0]]
+      );
+      res.json({ registration: rows[0] });
+    } catch(e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/v1/farmer/crop-calendar/:regId/timeline", communityAuth, async (req, res) => {
+    try {
+      const farmerId = req.user.farmerId || req.user.id;
+      const { rows: [reg] } = await pool.query(
+        "SELECT * FROM farmer_crop_registrations WHERE id=$1 AND farmer_id=$2", [req.params.regId, farmerId]
+      );
+      if (!reg) return res.status(404).json({ error: "Not found" });
+
+      const days = Math.floor((Date.now() - new Date(reg.sow_date).getTime()) / (1000*60*60*24));
+      const { rows: stages } = await pool.query(
+        "SELECT * FROM crop_calendar_templates WHERE LOWER(crop)=LOWER($1) ORDER BY day_offset", [reg.crop]
+      );
+      const { rows: logs } = await pool.query(
+        "SELECT * FROM crop_reminders_log WHERE registration_id=$1 ORDER BY sent_at", [reg.id]
+      );
+
+      const timeline = stages.map(s => ({
+        ...s,
+        status: days >= s.day_offset ? 'completed' : 'upcoming',
+        target_date: new Date(new Date(reg.sow_date).getTime() + s.day_offset * 86400000).toISOString().split('T')[0],
+        reminder_sent: logs.some(l => l.stage_name === s.stage_name),
+      }));
+
+      res.json({ registration: reg, timeline, days_elapsed: days });
+    } catch(e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.post("/api/v1/farmer/crop-calendar/:regId/mark-done", communityAuth, async (req, res) => {
+    try {
+      const farmerId = req.user.farmerId || req.user.id;
+      const { rows: logs } = await pool.query(
+        "SELECT id FROM crop_reminders_log WHERE registration_id=$1 AND farmer_id=$2 AND farmer_response IS NULL ORDER BY sent_at DESC LIMIT 1",
+        [req.params.regId, farmerId]
+      );
+      if (logs.length > 0) {
+        await pool.query("UPDATE crop_reminders_log SET farmer_response='done', responded_at=NOW() WHERE id=$1", [logs[0].id]);
+      }
+      res.json({ success: true });
+    } catch(e) { res.status(500).json({ error: e.message }); }
+  });
+
+
 // Register farmer crop (from app or bot)
   app.post("/api/v1/crop-calendar/register", async (req, res) => {
     try {
