@@ -5753,7 +5753,10 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
   // Create tables on first load
   (async () => {
     try {
-      await pool.query(` CREATE TABLE IF NOT EXISTS crop_calendar_templates (
+      await pool.query(`DROP TABLE IF EXISTS crop_reminders_log CASCADE;
+        DROP TABLE IF EXISTS farmer_crop_registrations CASCADE;
+        DROP TABLE IF EXISTS crop_calendar_templates CASCADE;
+        CREATE TABLE crop_calendar_templates (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         crop VARCHAR(100) NOT NULL,
         stage_name VARCHAR(200) NOT NULL,
@@ -5918,36 +5921,24 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
   });
 
 
-
-  // ====== NUTRITION SCHEDULE GENERATOR ======
   
-  // District-based sowing date offsets (days from standard Oct 25 for wheat)
+  // ====== NUTRITION SCHEDULE GENERATOR ======
   const DISTRICT_OFFSETS = {
-    // UP districts
     'lucknow': 0, 'kanpur': 0, 'agra': -3, 'varanasi': 5, 'allahabad': 3, 'meerut': -5, 'bareilly': -3, 'gorakhpur': 7,
     'mathura': -3, 'jhansi': -5, 'moradabad': -3, 'aligarh': -3, 'muzaffarnagar': -7, 'saharanpur': -7,
-    // Rajasthan districts
     'jaipur': -7, 'jodhpur': -10, 'udaipur': -5, 'kota': -3, 'ajmer': -7, 'bikaner': -10, 'alwar': -5, 'bharatpur': -5,
     'sikar': -7, 'sri ganganagar': -10, 'churu': -10, 'nagaur': -10,
-    // MP districts
     'bhopal': 3, 'indore': 5, 'jabalpur': 3, 'gwalior': 0, 'ujjain': 5, 'sagar': 3, 'rewa': 5, 'satna': 5,
-    // Bihar districts
     'patna': 7, 'gaya': 5, 'muzaffarpur': 7, 'bhagalpur': 7, 'darbhanga': 10, 'purnia': 10,
-    // Haryana & Punjab
     'karnal': -5, 'hisar': -7, 'ambala': -5, 'rohtak': -5, 'sirsa': -7,
     'ludhiana': -7, 'amritsar': -7, 'jalandhar': -5, 'patiala': -5, 'bathinda': -7
   };
 
-  // Standard nutrition schedule templates per crop (per hectare basis)
   const NUTRITION_SCHEDULES = {
     wheat: {
-      base_npk: { n: 150, p: 60, k: 40 }, // kg/ha for irrigated timely sown
+      base_npk: { n: 150, p: 60, k: 40 },
       stages: [
-        {
-          stage: 'basal_application',
-          day_offset: 0,
-          title_hi: 'Buvaai ke samay khaad (Basal Dose)',
-          title_en: 'Basal Fertilizer Application at Sowing',
+        { stage: 'basal_application', day_offset: 0, title_hi: 'Buvaai ke samay khaad (Basal Dose)', title_en: 'Basal Fertilizer Application at Sowing',
           products: [
             { type: 'fertilizer', name: 'DAP (Di-Ammonium Phosphate)', dose_per_ha: 130, unit: 'kg', method: 'broadcasting', note_hi: 'Buvaai se pehle khet mein failaayein', note_en: 'Broadcast and incorporate before sowing' },
             { type: 'fertilizer', name: 'MOP (Muriate of Potash)', dose_per_ha: 67, unit: 'kg', method: 'broadcasting', note_hi: 'DAP ke saath milaakar daalein', note_en: 'Mix with DAP and broadcast' },
@@ -5956,461 +5947,231 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
           ],
           soil_adjustment: { low_n: 1.2, high_n: 0.8, low_p: 1.3, high_p: 0.7, low_k: 1.3, high_k: 0.7 }
         },
-        {
-          stage: 'seed_treatment',
-          day_offset: -1,
-          title_hi: 'Beej Upchaar (Seed Treatment)',
-          title_en: 'Seed Treatment Before Sowing',
+        { stage: 'seed_treatment', day_offset: -1, title_hi: 'Beej Upchaar (Seed Treatment)', title_en: 'Seed Treatment Before Sowing',
           products: [
             { type: 'fungicide', name: 'Raxil (Tebuconazole 2DS)', dose_per_ha: 1, unit: 'g/kg seed', method: 'seed_coating', note_hi: 'Beej ko bimari se bachane ke liye', note_en: 'Protects against loose smut and karnal bunt' },
             { type: 'biofertilizer', name: 'Trichoderma viride', dose_per_ha: 5, unit: 'g/kg seed', method: 'seed_coating', note_hi: 'Mitti janit rog se suraksha', note_en: 'Protection against soil-borne diseases' },
             { type: 'biofertilizer', name: 'PSB (Phosphate Solubilizing Bacteria)', dose_per_ha: 5, unit: 'g/kg seed', method: 'seed_coating', note_hi: 'Phosphorus ki uplabdhta badhata hai', note_en: 'Enhances phosphorus availability' }
           ]
         },
-        {
-          stage: 'first_irrigation_topdress',
-          day_offset: 21,
-          title_hi: 'Pehli Sinchai + Top Dressing (Crown Root Initiation)',
-          title_en: 'First Irrigation + Top Dressing (CRI Stage)',
+        { stage: 'first_irrigation_topdress', day_offset: 21, title_hi: 'Pehli Sinchai + Top Dressing (CRI)', title_en: 'First Irrigation + Top Dressing (CRI Stage)',
           products: [
             { type: 'fertilizer', name: 'Urea', dose_per_ha: 55, unit: 'kg', method: 'topdressing', note_hi: 'Sinchai se pehle urea failaayein', note_en: 'Broadcast urea just before irrigation' }
-          ],
-          soil_adjustment: { low_n: 1.3, high_n: 0.7 }
+          ], soil_adjustment: { low_n: 1.3, high_n: 0.7 }
         },
-        {
-          stage: 'weed_control',
-          day_offset: 30,
-          title_hi: 'Kharpatwar Niyantran (Weed Control)',
-          title_en: 'Weed Management',
+        { stage: 'weed_control', day_offset: 30, title_hi: 'Kharpatwar Niyantran', title_en: 'Weed Management',
           products: [
-            { type: 'herbicide', name: 'Sulfosulfuron 75% WG (Leader)', dose_per_ha: 33.3, unit: 'g a.i.', method: 'spray', note_hi: '200 litre pani mein ghol kar spray karein', note_en: 'Dissolve in 200L water/ha and spray. Controls both grasses and broadleaf weeds' },
-            { type: 'herbicide', name: '2,4-D Ethyl Ester 38% EC', dose_per_ha: 500, unit: 'ml', method: 'spray', note_hi: 'Chaudi patti kharpatwar ke liye', note_en: 'For broadleaf weed control only' }
+            { type: 'herbicide', name: 'Sulfosulfuron 75% WG (Leader)', dose_per_ha: 33.3, unit: 'g a.i.', method: 'spray', note_hi: '200 litre pani mein ghol kar spray karein', note_en: 'Dissolve in 200L water/ha and spray' },
+            { type: 'herbicide', name: '2,4-D Ethyl Ester 38% EC', dose_per_ha: 500, unit: 'ml', method: 'spray', note_hi: 'Chaudi patti kharpatwar ke liye', note_en: 'For broadleaf weed control' }
           ]
         },
-        {
-          stage: 'second_irrigation_topdress',
-          day_offset: 45,
-          title_hi: 'Dusri Sinchai + Top Dressing (Tillering/First Node)',
-          title_en: 'Second Irrigation + Top Dressing (Tillering Stage)',
+        { stage: 'second_irrigation_topdress', day_offset: 45, title_hi: 'Dusri Sinchai + Top Dressing', title_en: 'Second Irrigation + Top Dressing (Tillering)',
           products: [
             { type: 'fertilizer', name: 'Urea', dose_per_ha: 55, unit: 'kg', method: 'topdressing', note_hi: 'Bachi hui 1/3 Nitrogen daalein', note_en: 'Apply remaining 1/3 nitrogen' }
           ]
         },
-        {
-          stage: 'disease_watch',
-          day_offset: 55,
-          title_hi: 'Rog Nigrani - Peeli Geru (Yellow Rust Watch)',
-          title_en: 'Disease Monitoring - Yellow Rust',
+        { stage: 'disease_watch', day_offset: 55, title_hi: 'Rog Nigrani - Peeli Geru', title_en: 'Yellow Rust Watch',
           products: [
-            { type: 'fungicide', name: 'Propiconazole 25% EC (Tilt)', dose_per_ha: 500, unit: 'ml', method: 'spray', note_hi: 'Peeli geru dikhne par turant spray karein, 200L pani/ha', note_en: 'Spray immediately on appearance of yellow rust pustules, 200L water/ha' },
-            { type: 'fungicide', name: 'Tebuconazole 25.9% EC (Folicur)', dose_per_ha: 500, unit: 'ml', method: 'spray', note_hi: 'Vaikalpik dawai - geru rog ke liye', note_en: 'Alternative fungicide for rust control' }
+            { type: 'fungicide', name: 'Propiconazole 25% EC (Tilt)', dose_per_ha: 500, unit: 'ml', method: 'spray', note_hi: 'Peeli geru dikhne par turant spray, 200L pani/ha', note_en: 'Spray immediately on yellow rust appearance' },
+            { type: 'fungicide', name: 'Tebuconazole 25.9% EC (Folicur)', dose_per_ha: 500, unit: 'ml', method: 'spray', note_hi: 'Vaikalpik dawai', note_en: 'Alternative fungicide' }
           ]
         },
-        {
-          stage: 'third_irrigation',
-          day_offset: 65,
-          title_hi: 'Teesri Sinchai (Jointing Stage)',
-          title_en: 'Third Irrigation (Jointing/Stem Elongation)',
+        { stage: 'third_irrigation', day_offset: 65, title_hi: 'Teesri Sinchai (Jointing)', title_en: 'Third Irrigation (Jointing)',
           products: [
-            { type: 'foliar', name: 'Urea 2% Spray', dose_per_ha: 10, unit: 'kg in 500L water', method: 'foliar_spray', note_hi: 'Pattiyon par spray - nitrogen ki kami door kare', note_en: 'Foliar nitrogen if yellowing observed' }
+            { type: 'foliar', name: 'Urea 2% Spray', dose_per_ha: 10, unit: 'kg in 500L water', method: 'foliar_spray', note_hi: 'Pattiyon par spray', note_en: 'Foliar nitrogen if yellowing observed' }
           ]
         },
-        {
-          stage: 'fourth_irrigation_boot',
-          day_offset: 85,
-          title_hi: 'Chauthi Sinchai (Boot Stage)',
-          title_en: 'Fourth Irrigation (Boot/Heading Stage)',
+        { stage: 'fourth_irrigation_boot', day_offset: 85, title_hi: 'Chauthi Sinchai (Boot Stage)', title_en: 'Fourth Irrigation (Boot/Heading)',
           products: [
-            { type: 'micronutrient', name: 'Micronutrient Mixture Spray (Zn+Fe+Mn)', dose_per_ha: 2.5, unit: 'kg in 500L water', method: 'foliar_spray', note_hi: 'Dane ka wajan badhane ke liye sukshm tatva spray', note_en: 'Micronutrient spray for better grain filling' }
+            { type: 'micronutrient', name: 'Micronutrient Mixture (Zn+Fe+Mn)', dose_per_ha: 2.5, unit: 'kg in 500L water', method: 'foliar_spray', note_hi: 'Dane ka wajan badhane ke liye', note_en: 'For better grain filling' }
           ]
         },
-        {
-          stage: 'fifth_irrigation_milk',
-          day_offset: 105,
-          title_hi: 'Paanchvi Sinchai (Milk/Dough Stage)',
-          title_en: 'Fifth Irrigation (Grain Filling)',
+        { stage: 'fifth_irrigation_milk', day_offset: 105, title_hi: 'Paanchvi Sinchai (Grain Filling)', title_en: 'Fifth Irrigation (Grain Filling)',
           products: [
-            { type: 'fertilizer', name: 'KNO3 (Potassium Nitrate) 13:0:45', dose_per_ha: 5, unit: 'kg in 500L water', method: 'foliar_spray', note_hi: 'Dane ka wajan badhane ke liye spray', note_en: 'Foliar spray for better grain weight' }
+            { type: 'fertilizer', name: 'KNO3 (Potassium Nitrate) 13:0:45', dose_per_ha: 5, unit: 'kg in 500L water', method: 'foliar_spray', note_hi: 'Dane ka wajan badhane ke liye spray', note_en: 'Foliar spray for grain weight' }
           ]
         },
-        {
-          stage: 'harvest_prep',
-          day_offset: 130,
-          title_hi: 'Katai ki Taiyari',
-          title_en: 'Pre-Harvest Preparation',
-          products: [],
-          note_hi: 'Jab dane mein 14% nami ho tab katai karein. Combine ya manually. Agle fasal ke liye mitti janch karwaayein.',
-          note_en: 'Harvest when grain moisture reaches 14%. Use combine or manual harvesting. Get soil tested for next crop.'
-        }
+        { stage: 'harvest_prep', day_offset: 130, title_hi: 'Katai ki Taiyari', title_en: 'Pre-Harvest',
+          products: [], note_hi: 'Jab dane mein 14% nami ho tab katai. Agle fasal ke liye mitti janch karwaayein.', note_en: 'Harvest at 14% grain moisture. Get soil tested for next crop.' }
       ]
     },
     rice: {
       base_npk: { n: 120, p: 60, k: 40 },
       stages: [
-        {
-          stage: 'nursery_preparation',
-          day_offset: -25,
-          title_hi: 'Narsari Taiyari',
-          title_en: 'Nursery Bed Preparation',
+        { stage: 'nursery_prep', day_offset: -25, title_hi: 'Narsari Taiyari', title_en: 'Nursery Preparation',
           products: [
-            { type: 'fertilizer', name: 'DAP', dose_per_ha: 2.5, unit: 'kg per 100sqm nursery', method: 'broadcasting', note_hi: 'Narsari bed mein daalein', note_en: 'Apply to nursery bed' },
-            { type: 'fungicide', name: 'Carbendazim 50% WP (Bavistin)', dose_per_ha: 2, unit: 'g/kg seed', method: 'seed_treatment', note_hi: 'Beej upchaar blast se bachav ke liye', note_en: 'Seed treatment against blast' }
+            { type: 'fertilizer', name: 'DAP', dose_per_ha: 2.5, unit: 'kg/100sqm nursery', method: 'broadcasting', note_hi: 'Narsari bed mein', note_en: 'Apply to nursery bed' },
+            { type: 'fungicide', name: 'Carbendazim 50% WP (Bavistin)', dose_per_ha: 2, unit: 'g/kg seed', method: 'seed_treatment', note_hi: 'Blast se bachav', note_en: 'Seed treatment against blast' }
           ]
         },
-        {
-          stage: 'transplanting_basal',
-          day_offset: 0,
-          title_hi: 'Rupai + Basal Khaad',
-          title_en: 'Transplanting + Basal Fertilizer',
+        { stage: 'transplanting_basal', day_offset: 0, title_hi: 'Rupai + Basal Khaad', title_en: 'Transplanting + Basal Fertilizer',
           products: [
-            { type: 'fertilizer', name: 'DAP', dose_per_ha: 130, unit: 'kg', method: 'broadcasting', note_hi: 'Rupai se 1 din pehle khet mein daalein', note_en: 'Apply one day before transplanting' },
-            { type: 'fertilizer', name: 'MOP', dose_per_ha: 67, unit: 'kg', method: 'broadcasting', note_hi: 'DAP ke saath milaakar', note_en: 'Mix with DAP' },
-            { type: 'fertilizer', name: 'Zinc Sulphate', dose_per_ha: 25, unit: 'kg', method: 'broadcasting', note_hi: 'Zinc ki kami door karne ke liye', note_en: 'To correct zinc deficiency' }
-          ],
-          soil_adjustment: { low_n: 1.2, high_n: 0.8, low_p: 1.3, high_p: 0.7, low_k: 1.3, high_k: 0.7 }
+            { type: 'fertilizer', name: 'DAP', dose_per_ha: 130, unit: 'kg', method: 'broadcasting', note_hi: 'Rupai se 1 din pehle', note_en: 'Apply day before transplanting' },
+            { type: 'fertilizer', name: 'MOP', dose_per_ha: 67, unit: 'kg', method: 'broadcasting', note_hi: 'DAP ke saath', note_en: 'Mix with DAP' },
+            { type: 'fertilizer', name: 'Zinc Sulphate', dose_per_ha: 25, unit: 'kg', method: 'broadcasting', note_hi: 'Zinc ki kami ke liye', note_en: 'For zinc deficiency' }
+          ], soil_adjustment: { low_n: 1.2, high_n: 0.8, low_p: 1.3, high_p: 0.7, low_k: 1.3, high_k: 0.7 }
         },
-        {
-          stage: 'first_topdress',
-          day_offset: 21,
-          title_hi: 'Pehli Top Dressing (Tillering)',
-          title_en: 'First Top Dressing (Active Tillering)',
+        { stage: 'first_topdress', day_offset: 21, title_hi: 'Pehli Top Dressing (Tillering)', title_en: 'First Top Dressing',
+          products: [{ type: 'fertilizer', name: 'Urea', dose_per_ha: 45, unit: 'kg', method: 'broadcasting', note_hi: '2-3cm pani mein daalein', note_en: 'Apply with standing water' }]
+        },
+        { stage: 'weed_control', day_offset: 25, title_hi: 'Kharpatwar Niyantran', title_en: 'Weed Control',
+          products: [{ type: 'herbicide', name: 'Bispyribac Sodium 10% SC (Nominee Gold)', dose_per_ha: 200, unit: 'ml', method: 'spray', note_hi: '500L pani, rupai ke 15-25 din baad', note_en: 'Spray 15-25 DAT in 500L water/ha' }]
+        },
+        { stage: 'second_topdress', day_offset: 42, title_hi: 'Dusri Top Dressing (PI)', title_en: 'Second Top Dressing (Panicle Init)',
+          products: [{ type: 'fertilizer', name: 'Urea', dose_per_ha: 45, unit: 'kg', method: 'broadcasting', note_hi: 'Baal nikalne se pehle', note_en: 'Before panicle emergence' }]
+        },
+        { stage: 'pest_mgmt', day_offset: 50, title_hi: 'Keetnashak (Stem Borer)', title_en: 'Pest Management',
           products: [
-            { type: 'fertilizer', name: 'Urea', dose_per_ha: 45, unit: 'kg', method: 'broadcasting', note_hi: 'Khet mein 2-3cm pani rakh kar daalein', note_en: 'Apply with 2-3cm standing water in field' }
+            { type: 'insecticide', name: 'Cartap Hydrochloride 4G', dose_per_ha: 25, unit: 'kg', method: 'broadcasting_granules', note_hi: 'Tana chhedak ke liye', note_en: 'For stem borer' },
+            { type: 'insecticide', name: 'Imidacloprid 17.8% SL', dose_per_ha: 100, unit: 'ml', method: 'spray', note_hi: 'BPH ke liye', note_en: 'For BPH control' }
           ]
         },
-        {
-          stage: 'weed_control',
-          day_offset: 25,
-          title_hi: 'Kharpatwar Niyantran',
-          title_en: 'Weed Control',
-          products: [
-            { type: 'herbicide', name: 'Bispyribac Sodium 10% SC (Nominee Gold)', dose_per_ha: 200, unit: 'ml', method: 'spray', note_hi: '500L pani mein ghol kar spray. Rupai ke 15-25 din baad', note_en: 'Spray in 500L water/ha. Apply 15-25 DAT' }
-          ]
+        { stage: 'blast_mgmt', day_offset: 60, title_hi: 'Blast Rog Niyantran', title_en: 'Blast Disease Control',
+          products: [{ type: 'fungicide', name: 'Tricyclazole 75% WP (Beam)', dose_per_ha: 300, unit: 'g', method: 'spray', note_hi: '500L pani mein spray', note_en: 'Spray in 500L water/ha' }]
         },
-        {
-          stage: 'second_topdress',
-          day_offset: 42,
-          title_hi: 'Dusri Top Dressing (Panicle Initiation)',
-          title_en: 'Second Top Dressing (Panicle Initiation)',
-          products: [
-            { type: 'fertilizer', name: 'Urea', dose_per_ha: 45, unit: 'kg', method: 'broadcasting', note_hi: 'Baal nikalne se pehle daalein', note_en: 'Apply before panicle emergence' }
-          ]
+        { stage: 'grain_filling', day_offset: 75, title_hi: 'Dane Bharne ka Samay', title_en: 'Grain Filling',
+          products: [{ type: 'foliar', name: 'KNO3', dose_per_ha: 5, unit: 'kg in 500L water', method: 'foliar_spray', note_hi: 'Dane ka wajan badhane ke liye', note_en: 'For grain weight' }]
         },
-        {
-          stage: 'pest_management',
-          day_offset: 50,
-          title_hi: 'Keetnashak (Stem Borer/BPH)',
-          title_en: 'Pest Management (Stem Borer/BPH)',
-          products: [
-            { type: 'insecticide', name: 'Cartap Hydrochloride 4G', dose_per_ha: 25, unit: 'kg', method: 'broadcasting_granules', note_hi: 'Tana chhedak ke liye daane failaayein', note_en: 'Broadcast granules for stem borer' },
-            { type: 'insecticide', name: 'Imidacloprid 17.8% SL', dose_per_ha: 100, unit: 'ml', method: 'spray', note_hi: 'BPH (Brown Plant Hopper) ke liye', note_en: 'For BPH control' }
-          ]
-        },
-        {
-          stage: 'disease_management',
-          day_offset: 60,
-          title_hi: 'Blast Rog Niyantran',
-          title_en: 'Blast Disease Management',
-          products: [
-            { type: 'fungicide', name: 'Tricyclazole 75% WP (Beam)', dose_per_ha: 300, unit: 'g', method: 'spray', note_hi: '500L pani mein spray. Blast dikhne par turant', note_en: 'Spray in 500L water/ha at first appearance of blast' }
-          ]
-        },
-        {
-          stage: 'grain_filling',
-          day_offset: 75,
-          title_hi: 'Dane Bharne ka Samay',
-          title_en: 'Grain Filling Stage',
-          products: [
-            { type: 'foliar', name: 'KNO3 (Potassium Nitrate)', dose_per_ha: 5, unit: 'kg in 500L water', method: 'foliar_spray', note_hi: 'Dane ka wajan badhane ke liye', note_en: 'For better grain weight' }
-          ]
-        },
-        {
-          stage: 'harvest',
-          day_offset: 110,
-          title_hi: 'Katai',
-          title_en: 'Harvest',
-          products: [],
-          note_hi: 'Jab 80% dane pakk jayein. Nami 20-22% par katai karein.',
-          note_en: 'Harvest when 80% grains are mature. Grain moisture at 20-22%.'
-        }
+        { stage: 'harvest', day_offset: 110, title_hi: 'Katai', title_en: 'Harvest',
+          products: [], note_hi: '80% dane pakne par katai. Nami 20-22%.', note_en: 'Harvest at 80% maturity, 20-22% moisture.' }
       ]
     },
     sugarcane: {
       base_npk: { n: 300, p: 80, k: 80 },
       stages: [
-        {
-          stage: 'planting_basal',
-          day_offset: 0,
-          title_hi: 'Buvai + Basal Khaad',
-          title_en: 'Planting + Basal Fertilizer',
+        { stage: 'planting_basal', day_offset: 0, title_hi: 'Buvai + Basal Khaad', title_en: 'Planting + Basal',
           products: [
-            { type: 'fertilizer', name: 'SSP (Single Super Phosphate)', dose_per_ha: 500, unit: 'kg', method: 'furrow_placement', note_hi: 'Nali mein daalein buvai ke samay', note_en: 'Place in furrow at planting' },
-            { type: 'fertilizer', name: 'MOP', dose_per_ha: 133, unit: 'kg', method: 'furrow_placement', note_hi: 'SSP ke saath nali mein', note_en: 'Apply in furrow with SSP' },
-            { type: 'biofertilizer', name: 'Trichoderma harzianum', dose_per_ha: 2.5, unit: 'kg/acre mixed in FYM', method: 'soil_application', note_hi: 'Gober ki khaad mein milaakar daalein', note_en: 'Mix in FYM and apply' }
+            { type: 'fertilizer', name: 'SSP (Single Super Phosphate)', dose_per_ha: 500, unit: 'kg', method: 'furrow_placement', note_hi: 'Nali mein buvai ke samay', note_en: 'In furrow at planting' },
+            { type: 'fertilizer', name: 'MOP', dose_per_ha: 133, unit: 'kg', method: 'furrow_placement', note_hi: 'SSP ke saath', note_en: 'With SSP in furrow' },
+            { type: 'biofertilizer', name: 'Trichoderma harzianum', dose_per_ha: 2.5, unit: 'kg/acre in FYM', method: 'soil_application', note_hi: 'Gober ki khaad mein milaakar', note_en: 'Mix in FYM' }
           ]
         },
-        {
-          stage: 'germination_gap_filling',
-          day_offset: 30,
-          title_hi: 'Ankuran + Gap Filling + Pehli Khaad',
-          title_en: 'Germination Check + First Nitrogen',
+        { stage: 'first_nitrogen', day_offset: 30, title_hi: 'Pehli Nitrogen + Gap Filling', title_en: 'First Nitrogen Dose',
+          products: [{ type: 'fertilizer', name: 'Urea', dose_per_ha: 72, unit: 'kg', method: 'side_dressing', note_hi: 'Line ke dono taraf + mitti chadhaai', note_en: 'Side dress + earthing up' }]
+        },
+        { stage: 'second_nitrogen', day_offset: 60, title_hi: 'Dusri Nitrogen (Tillering)', title_en: 'Second Nitrogen (Tillering)',
           products: [
-            { type: 'fertilizer', name: 'Urea', dose_per_ha: 72, unit: 'kg', method: 'side_dressing', note_hi: 'Line ke dono taraf daalein aur mitti chadhaayein', note_en: 'Side dress along rows and earth up' }
+            { type: 'fertilizer', name: 'Urea', dose_per_ha: 72, unit: 'kg', method: 'side_dressing', note_hi: 'Katon ke pas daalein', note_en: 'Near plant base' },
+            { type: 'herbicide', name: 'Atrazine 50% WP', dose_per_ha: 2, unit: 'kg', method: 'spray', note_hi: '600L pani mein spray', note_en: 'Spray in 600L water/ha' }
           ]
         },
-        {
-          stage: 'tillering_second_dose',
-          day_offset: 60,
-          title_hi: 'Tillering + Dusri Khaad',
-          title_en: 'Tillering Stage + Second Nitrogen',
+        { stage: 'third_nitrogen', day_offset: 90, title_hi: 'Teesri Nitrogen (Grand Growth)', title_en: 'Third Nitrogen (Grand Growth)',
           products: [
-            { type: 'fertilizer', name: 'Urea', dose_per_ha: 72, unit: 'kg', method: 'side_dressing', note_hi: 'Dusri baar nitrogen - katon ke pas daalein', note_en: 'Second nitrogen dose near plant base' },
-            { type: 'herbicide', name: 'Atrazine 50% WP', dose_per_ha: 2, unit: 'kg', method: 'spray', note_hi: '600L pani mein pre-emergence spray', note_en: 'Pre-emergence spray in 600L water/ha' }
+            { type: 'fertilizer', name: 'Urea', dose_per_ha: 72, unit: 'kg', method: 'side_dressing', note_hi: 'Mitti chadhaai ke saath', note_en: 'With earthing up' },
+            { type: 'insecticide', name: 'Chlorantraniliprole 0.4% GR (Ferterra)', dose_per_ha: 20, unit: 'kg', method: 'soil_application', note_hi: 'Tana chhedak ke liye', note_en: 'For stem borer' }
           ]
         },
-        {
-          stage: 'grand_growth_third_dose',
-          day_offset: 90,
-          title_hi: 'Grand Growth + Teesri Khaad',
-          title_en: 'Grand Growth Phase + Third Nitrogen',
-          products: [
-            { type: 'fertilizer', name: 'Urea', dose_per_ha: 72, unit: 'kg', method: 'side_dressing', note_hi: 'Teesri baar nitrogen + mitti chadhaai', note_en: 'Third nitrogen + earthing up' },
-            { type: 'insecticide', name: 'Chlorantraniliprole 0.4% GR (Ferterra)', dose_per_ha: 20, unit: 'kg', method: 'soil_application', note_hi: 'Tana chhedak ke liye', note_en: 'For shoot borer/stem borer control' }
-          ]
+        { stage: 'fourth_nitrogen', day_offset: 120, title_hi: 'Chauthi Nitrogen + Earthing Up', title_en: 'Fourth Nitrogen + Earthing Up',
+          products: [{ type: 'fertilizer', name: 'Urea', dose_per_ha: 72, unit: 'kg', method: 'side_dressing', note_hi: 'Aakhri nitrogen. Acchi mitti chadhaai zaruri', note_en: 'Last nitrogen. Proper earthing up essential' }]
         },
-        {
-          stage: 'fourth_nitrogen',
-          day_offset: 120,
-          title_hi: 'Chauthi Khaad + Mitti Chadhaai',
-          title_en: 'Fourth Nitrogen + Earthing Up',
-          products: [
-            { type: 'fertilizer', name: 'Urea', dose_per_ha: 72, unit: 'kg', method: 'side_dressing', note_hi: 'Aakhri nitrogen dose. Acchi mitti chadhaai zaruri', note_en: 'Last nitrogen dose. Ensure proper earthing up' }
-          ]
+        { stage: 'red_rot_watch', day_offset: 150, title_hi: 'Laal Sadak Rog Nigrani', title_en: 'Red Rot Watch',
+          products: [{ type: 'fungicide', name: 'Carbendazim 50% WP', dose_per_ha: 500, unit: 'g in 500L water', method: 'drench', note_hi: 'Lakshan dikhne par jad mein ghol daalein', note_en: 'Drench near base if symptoms seen' }]
         },
-        {
-          stage: 'red_rot_watch',
-          day_offset: 150,
-          title_hi: 'Laal Sadak Rog Nigrani',
-          title_en: 'Red Rot Disease Watch',
-          products: [
-            { type: 'fungicide', name: 'Carbendazim 50% WP', dose_per_ha: 500, unit: 'g in 500L water', method: 'drench', note_hi: 'Jad ke paas ghol daalein agar lakshan dikhein', note_en: 'Drench near base if symptoms observed' }
-          ]
-        },
-        {
-          stage: 'detrashing',
-          day_offset: 180,
-          title_hi: 'Sukhi Pattiyan Hatana (Detrashing)',
-          title_en: 'Detrashing (Dry Leaf Removal)',
-          products: [],
-          note_hi: 'Sukhi pattiyan hatayein - hawa ka sanchar badhega, keeton ka aasra kam hoga',
-          note_en: 'Remove dry leaves to improve aeration and reduce pest harbor'
-        },
-        {
-          stage: 'ripening',
-          day_offset: 300,
-          title_hi: 'Pakne ka Samay - Sinchai Band',
-          title_en: 'Ripening - Stop Irrigation',
-          products: [
-            { type: 'growth_regulator', name: 'Ethephon 39% SL', dose_per_ha: 750, unit: 'ml in 500L water', method: 'spray', note_hi: 'Katai se 30 din pehle spray - cheeni ki maatra badhane ke liye', note_en: 'Spray 30 days before harvest to enhance sugar content' }
-          ]
+        { stage: 'detrashing', day_offset: 180, title_hi: 'Sukhi Pattiyan Hatana', title_en: 'Detrashing',
+          products: [], note_hi: 'Sukhi pattiyan hatayein - hawa sanchar badhega', note_en: 'Remove dry leaves for better aeration' },
+        { stage: 'ripening', day_offset: 300, title_hi: 'Pakne ka Samay - Sinchai Band', title_en: 'Ripening - Stop Irrigation',
+          products: [{ type: 'growth_regulator', name: 'Ethephon 39% SL', dose_per_ha: 750, unit: 'ml in 500L water', method: 'spray', note_hi: 'Katai se 30 din pehle - cheeni badhane ke liye', note_en: 'Spray 30 days before harvest for sugar content' }]
         }
       ]
     }
   };
 
-  // Generate personalized nutrition schedule for a farmer
   app.get("/api/v1/crop-calendar/nutrition-schedule/:registrationId", async (req, res) => {
     try {
       const { registrationId } = req.params;
-      
-      // Get registration details
-      const { rows: regRows } = await pool.query(
-        "SELECT r.*, f.name, f.phone, f.district_id, f.land_holding_acres, f.soil_type, f.village FROM farmer_crop_registrations r JOIN farmers f ON f.id = r.farmer_id WHERE r.id = $1",
-        [registrationId]
-      );
+      const { rows: regRows } = await pool.query("SELECT r.*, f.name, f.phone, f.district_id, f.land_holding_acres, f.soil_type, f.village FROM farmer_crop_registrations r JOIN farmers f ON f.id = r.farmer_id WHERE r.id = " + D + "1", [registrationId]);
       if (!regRows.length) return res.status(404).json({ error: 'Registration not found' });
       const reg = regRows[0];
-      
-      // Get soil data if available
       let soilData = null;
       if (reg.farmer_id) {
-        const { rows: soilRows } = await pool.query(
-          "SELECT * FROM soil_health_cards WHERE farmer_id = $1 ORDER BY sample_date DESC LIMIT 1",
-          [reg.farmer_id]
-        );
+        const { rows: soilRows } = await pool.query("SELECT * FROM soil_health_cards WHERE farmer_id = " + D + "1 ORDER BY sample_date DESC LIMIT 1", [reg.farmer_id]);
         if (soilRows.length) soilData = soilRows[0];
       }
-      
-      // Get district name for timing adjustment
       let districtName = '';
       if (reg.district_id) {
-        const { rows: distRows } = await pool.query("SELECT name FROM districts_master WHERE id = $1", [reg.district_id]);
+        const { rows: distRows } = await pool.query("SELECT name FROM districts_master WHERE id = " + D + "1", [reg.district_id]);
         if (distRows.length) districtName = distRows[0].name.toLowerCase();
       }
-      
-      // Get crop schedule
       const cropKey = reg.crop.toLowerCase();
       const schedule = NUTRITION_SCHEDULES[cropKey];
-      if (!schedule) return res.status(404).json({ error: 'No nutrition schedule available for crop: ' + reg.crop });
-      
-      // Land area (convert to hectare - assume farmer stores in acres)
+      if (!schedule) return res.status(404).json({ error: 'No nutrition schedule for: ' + reg.crop });
       const landAcres = reg.land_holding_acres || reg.land_area || 1;
       const landHa = landAcres * 0.4047;
-      
-      // District timing offset
       const districtOffset = DISTRICT_OFFSETS[districtName] || 0;
-      
-      // Build personalized schedule
       const sowDate = new Date(reg.sow_date);
       const today = new Date();
       const daysSinceSowing = Math.floor((today - sowDate) / (1000*60*60*24));
-      
       const personalizedStages = schedule.stages.map(stage => {
         const adjustedDayOffset = stage.day_offset + districtOffset;
-        const stageDate = new Date(sowDate);
-        stageDate.setDate(stageDate.getDate() + adjustedDayOffset);
-        
-        // Adjust product quantities for land area
+        const stageDate = new Date(sowDate); stageDate.setDate(stageDate.getDate() + adjustedDayOffset);
         const adjustedProducts = (stage.products || []).map(p => {
           let adjustedDose = p.dose_per_ha * landHa;
-          
-          // Soil-based adjustment
           if (stage.soil_adjustment && soilData) {
-            if (p.type === 'fertilizer' && p.name.includes('Urea')) {
-              const nLevel = soilData.nitrogen_level || soilData.n_status || 'medium';
-              if (nLevel === 'low' || nLevel === 'L') adjustedDose *= (stage.soil_adjustment.low_n || 1);
-              if (nLevel === 'high' || nLevel === 'H') adjustedDose *= (stage.soil_adjustment.high_n || 1);
-            }
-            if (p.type === 'fertilizer' && (p.name.includes('DAP') || p.name.includes('SSP'))) {
-              const pLevel = soilData.phosphorus_level || soilData.p_status || 'medium';
-              if (pLevel === 'low' || pLevel === 'L') adjustedDose *= (stage.soil_adjustment.low_p || 1);
-              if (pLevel === 'high' || pLevel === 'H') adjustedDose *= (stage.soil_adjustment.high_p || 1);
-            }
-            if (p.type === 'fertilizer' && p.name.includes('MOP')) {
-              const kLevel = soilData.potassium_level || soilData.k_status || 'medium';
-              if (kLevel === 'low' || kLevel === 'L') adjustedDose *= (stage.soil_adjustment.low_k || 1);
-              if (kLevel === 'high' || kLevel === 'H') adjustedDose *= (stage.soil_adjustment.high_k || 1);
-            }
+            if (p.name.includes('Urea') && soilData.n_status === 'low') adjustedDose *= (stage.soil_adjustment.low_n || 1);
+            if (p.name.includes('Urea') && soilData.n_status === 'high') adjustedDose *= (stage.soil_adjustment.high_n || 1);
+            if ((p.name.includes('DAP') || p.name.includes('SSP')) && soilData.p_status === 'low') adjustedDose *= (stage.soil_adjustment.low_p || 1);
+            if ((p.name.includes('DAP') || p.name.includes('SSP')) && soilData.p_status === 'high') adjustedDose *= (stage.soil_adjustment.high_p || 1);
+            if (p.name.includes('MOP') && soilData.k_status === 'low') adjustedDose *= (stage.soil_adjustment.low_k || 1);
+            if (p.name.includes('MOP') && soilData.k_status === 'high') adjustedDose *= (stage.soil_adjustment.high_k || 1);
           }
-          
-          return {
-            ...p,
-            adjusted_dose: Math.round(adjustedDose * 10) / 10,
-            adjusted_unit: p.unit,
-            for_land: landAcres + ' acres (' + landHa.toFixed(2) + ' ha)'
-          };
+          return { ...p, adjusted_dose: Math.round(adjustedDose * 10) / 10, for_land: landAcres + ' acres' };
         });
-        
         const status = daysSinceSowing >= adjustedDayOffset ? 'completed' : (daysSinceSowing >= adjustedDayOffset - 3 ? 'upcoming' : 'pending');
-        
-        return {
-          stage: stage.stage,
-          title_hi: stage.title_hi,
-          title_en: stage.title_en,
-          day_offset: adjustedDayOffset,
-          scheduled_date: stageDate.toISOString().split('T')[0],
-          status: status,
-          days_from_now: adjustedDayOffset - daysSinceSowing,
-          products: adjustedProducts,
-          note_hi: stage.note_hi || null,
-          note_en: stage.note_en || null,
-          district_adjustment: districtOffset !== 0 ? districtOffset + ' days (' + districtName + ')' : null
-        };
+        return { stage: stage.stage, title_hi: stage.title_hi, title_en: stage.title_en, day_offset: adjustedDayOffset, scheduled_date: stageDate.toISOString().split('T')[0], status, days_from_now: adjustedDayOffset - daysSinceSowing, products: adjustedProducts, note_hi: stage.note_hi || null, note_en: stage.note_en || null };
       });
-      
-      // Find matching products from catalog
-      const { rows: catalogProducts } = await pool.query(
-        "SELECT id, name, brand, category, dosage, application_method, image_url FROM products WHERE status = 'active' AND (LOWER(target_crops) LIKE $1 OR LOWER(target_crops) LIKE '%all%') LIMIT 50",
-        ['%' + cropKey + '%']
-      );
-      
-      res.json({
-        registration: { id: reg.id, crop: reg.crop, sow_date: reg.sow_date, land_acres: landAcres, land_ha: landHa },
-        farmer: { name: reg.name, district: districtName, soil_type: reg.soil_type },
-        soil_data: soilData ? { nitrogen: soilData.nitrogen_level || soilData.n_status, phosphorus: soilData.phosphorus_level || soilData.p_status, potassium: soilData.potassium_level || soilData.k_status, organic_carbon: soilData.organic_carbon, ph: soilData.ph } : null,
-        district_offset_days: districtOffset,
-        days_since_sowing: daysSinceSowing,
-        current_stage: personalizedStages.find(s => s.status === 'upcoming') || personalizedStages.find(s => s.status === 'pending'),
-        schedule: personalizedStages,
-        catalog_products: catalogProducts
-      });
-    } catch (e) {
-      console.error('Nutrition schedule error:', e);
-      res.status(500).json({ error: e.message });
-    }
+      res.json({ registration: { id: reg.id, crop: reg.crop, sow_date: reg.sow_date, land_acres: landAcres, land_ha: landHa }, farmer: { name: reg.name, district: districtName, soil_type: reg.soil_type }, soil_data: soilData ? { nitrogen: soilData.n_status, phosphorus: soilData.p_status, potassium: soilData.k_status, ph: soilData.ph } : null, district_offset_days: districtOffset, days_since_sowing: daysSinceSowing, current_stage: personalizedStages.find(s => s.status === 'upcoming') || personalizedStages.find(s => s.status === 'pending'), schedule: personalizedStages });
+    } catch (e) { console.error('Nutrition schedule error:', e); res.status(500).json({ error: e.message }); }
   });
 
-  // WhatsApp-friendly nutrition reminder endpoint
   app.get("/api/v1/crop-calendar/next-action/:farmerId", async (req, res) => {
     try {
       const { farmerId } = req.params;
-      const { rows: regs } = await pool.query(
-        "SELECT * FROM farmer_crop_registrations WHERE farmer_id = $1 AND status = 'active'",
-        [farmerId]
-      );
-      if (!regs.length) return res.json({ message: 'No active crops registered' });
-      
-      // Get farmer details
-      const { rows: farmers } = await pool.query("SELECT * FROM farmers WHERE id = $1", [farmerId]);
+      const { rows: regs } = await pool.query("SELECT * FROM farmer_crop_registrations WHERE farmer_id = " + D + "1 AND status = 'active'", [farmerId]);
+      if (!regs.length) return res.json({ message: 'No active crops' });
+      const { rows: farmers } = await pool.query("SELECT * FROM farmers WHERE id = " + D + "1", [farmerId]);
       const farmer = farmers[0] || {};
       const lang = farmer.language || 'hi';
-      
       let districtName = '';
-      if (farmer.district_id) {
-        const { rows: d } = await pool.query("SELECT name FROM districts_master WHERE id = $1", [farmer.district_id]);
-        if (d.length) districtName = d[0].name.toLowerCase();
-      }
+      if (farmer.district_id) { const { rows: d } = await pool.query("SELECT name FROM districts_master WHERE id = " + D + "1", [farmer.district_id]); if (d.length) districtName = d[0].name.toLowerCase(); }
       const districtOffset = DISTRICT_OFFSETS[districtName] || 0;
-      
       const actions = [];
       for (const reg of regs) {
-        const cropKey = reg.crop.toLowerCase();
-        const schedule = NUTRITION_SCHEDULES[cropKey];
+        const schedule = NUTRITION_SCHEDULES[reg.crop.toLowerCase()];
         if (!schedule) continue;
-        
         const sowDate = new Date(reg.sow_date);
-        const today = new Date();
-        const daysSinceSowing = Math.floor((today - sowDate) / (1000*60*60*24));
-        const landAcres = farmer.land_holding_acres || reg.land_area || 1;
-        const landHa = landAcres * 0.4047;
-        
-        // Find next upcoming action
+        const daysSinceSowing = Math.floor((new Date() - sowDate) / (1000*60*60*24));
+        const landHa = (farmer.land_holding_acres || reg.land_area || 1) * 0.4047;
         const nextStage = schedule.stages.find(s => (s.day_offset + districtOffset) > daysSinceSowing - 2);
         if (nextStage) {
-          const adjustedOffset = nextStage.day_offset + districtOffset;
-          const daysUntil = adjustedOffset - daysSinceSowing;
-          
+          const daysUntil = (nextStage.day_offset + districtOffset) - daysSinceSowing;
           let msg = '';
           if (lang === 'hi') {
-            msg = '🌾 *' + reg.crop + '* - ' + nextStage.title_hi + '\n';
-            msg += '📅 ' + (daysUntil <= 0 ? 'Aaj karna hai!' : daysUntil + ' din baad') + '\n\n';
-            (nextStage.products || []).forEach(p => {
-              const dose = Math.round(p.dose_per_ha * landHa * 10) / 10;
-              msg += '• *' + p.name + '*: ' + dose + ' ' + p.unit + '\n';
-              msg += '  📝 ' + p.note_hi + '\n';
-              msg += '  🔧 Tarika: ' + p.method.replace(/_/g, ' ') + '\n\n';
-            });
-            if (nextStage.note_hi) msg += '\n💡 ' + nextStage.note_hi;
+            msg = '\u{1F33E} *' + reg.crop + '* - ' + nextStage.title_hi + '\n';
+            msg += '\u{1F4C5} ' + (daysUntil <= 0 ? 'Aaj karna hai!' : daysUntil + ' din baad') + '\n\n';
+            (nextStage.products || []).forEach(p => { const dose = Math.round(p.dose_per_ha * landHa * 10) / 10; msg += '\u2022 *' + p.name + '*: ' + dose + ' ' + p.unit + '\n  ' + p.note_hi + '\n  Tarika: ' + p.method.replace(/_/g, ' ') + '\n\n'; });
+            if (nextStage.note_hi) msg += '\n\u{1F4A1} ' + nextStage.note_hi;
           } else {
-            msg = '🌾 *' + reg.crop + '* - ' + nextStage.title_en + '\n';
-            msg += '📅 ' + (daysUntil <= 0 ? 'Action needed today!' : 'In ' + daysUntil + ' days') + '\n\n';
-            (nextStage.products || []).forEach(p => {
-              const dose = Math.round(p.dose_per_ha * landHa * 10) / 10;
-              msg += '• *' + p.name + '*: ' + dose + ' ' + p.unit + '\n';
-              msg += '  📝 ' + p.note_en + '\n';
-              msg += '  🔧 Method: ' + p.method.replace(/_/g, ' ') + '\n\n';
-            });
-            if (nextStage.note_en) msg += '\n💡 ' + nextStage.note_en;
+            msg = '\u{1F33E} *' + reg.crop + '* - ' + nextStage.title_en + '\n';
+            msg += '\u{1F4C5} ' + (daysUntil <= 0 ? 'Action needed today!' : 'In ' + daysUntil + ' days') + '\n\n';
+            (nextStage.products || []).forEach(p => { const dose = Math.round(p.dose_per_ha * landHa * 10) / 10; msg += '\u2022 *' + p.name + '*: ' + dose + ' ' + p.unit + '\n  ' + p.note_en + '\n  Method: ' + p.method.replace(/_/g, ' ') + '\n\n'; });
+            if (nextStage.note_en) msg += '\n\u{1F4A1} ' + nextStage.note_en;
           }
-          
           actions.push({ crop: reg.crop, stage: nextStage.stage, days_until: daysUntil, message: msg });
         }
       }
-      
       res.json({ farmer_id: farmerId, language: lang, district: districtName, actions });
-    } catch (e) {
-      res.status(500).json({ error: e.message });
-    }
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  app.get("/api/v1/farmer/crop-calendar/:regId/nutrition", communityAuth, async (req, res) => {
+    try {
+      const { regId } = req.params;
+      const farmerId = req.farmer.id;
+      const axios4 = require('axios');
+      const baseUrl4 = 'http://localhost:' + (process.env.PORT || 10000);
+      const nRes = await axios4.get(baseUrl4 + '/api/v1/crop-calendar/nutrition-schedule/' + regId);
+      res.json(nRes.data);
+    } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
 
@@ -6428,7 +6189,7 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
           activity TEXT,
           created_at TIMESTAMP DEFAULT NOW()
         );
-        CREATE TABLE IF NOT EXISTS farmer_crop_registrations (
+        CREATE TABLE farmer_crop_registrations (
           id SERIAL PRIMARY KEY,
           farmer_id UUID REFERENCES farmers(id),
           crop VARCHAR(100) NOT NULL,
@@ -6438,7 +6199,7 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
           status VARCHAR(20) DEFAULT 'active',
           created_at TIMESTAMP DEFAULT NOW()
         );
-        CREATE TABLE IF NOT EXISTS crop_reminders_log (
+        CREATE TABLE crop_reminders_log (
           id SERIAL PRIMARY KEY,
           registration_id INTEGER REFERENCES farmer_crop_registrations(id),
           farmer_id UUID REFERENCES farmers(id),
@@ -6520,22 +6281,7 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
     } catch(e) { res.status(500).json({ error: e.message }); }
   });
 
-  app.post("
-  // Farmer nutrition schedule endpoint
-  app.get("/api/v1/farmer/crop-calendar/:regId/nutrition", communityAuth, async (req, res) => {
-    try {
-      const { regId } = req.params;
-      const farmerId = req.farmer.id;
-      const axios4 = require('axios');
-      const baseUrl4 = 'http://localhost:' + (process.env.PORT || 10000);
-      const nRes = await axios4.get(baseUrl4 + '/api/v1/crop-calendar/nutrition-schedule/' + regId);
-      res.json(nRes.data);
-    } catch (e) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-/api/v1/farmer/crop-calendar/register", communityAuth, async (req, res) => {
+  app.post("/api/v1/farmer/crop-calendar/register", communityAuth, async (req, res) => {
     try {
       const farmerId = req.farmer.id;
       const { crop, sow_date, land_area } = req.body;
