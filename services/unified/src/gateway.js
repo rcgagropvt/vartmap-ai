@@ -1777,7 +1777,7 @@ app.post('/webhook', async (req, res) => {
 
           if (lowerMsg === 'mera calendar' || lowerMsg === 'my calendar' || lowerMsg === 'crop status' || lowerMsg === 'mera fasal') {
             const lang = farmerData.language || 'hi';
-            const { rows: regs } = await pool.query("SELECT * FROM farmer_crop_registrations WHERE farmer_id=" + D + "1 AND status='active' ORDER BY created_at DESC", [farmerId]);
+            const { rows: regs } = await pool.query("SELECT * FROM farmer_crop_registrations WHERE farmer_id=$1 AND status='active' ORDER BY created_at DESC", [farmerId]);
 
             if (regs.length === 0) {
               await sendWhatsAppMessage(from, lang === 'hi' ? 'Aapne abhi koi fasal register nahi ki. "fasal register" likhen shuru karne ke liye.' : 'No crops registered. Type "crop register" to start.');
@@ -1787,7 +1787,7 @@ app.post('/webhook', async (req, res) => {
                 const sowDate = new Date(r.sow_date);
                 const days = Math.floor((new Date() - sowDate) / (1000 * 60 * 60 * 24));
                 const { rows: nextStage } = await pool.query(
-                  "SELECT stage_name, day_offset FROM crop_calendar_templates WHERE LOWER(crop)=LOWER(" + D + "1) AND day_offset > " + D + "2 ORDER BY day_offset LIMIT 1",
+                  "SELECT stage_name, day_offset FROM crop_calendar_templates WHERE LOWER(crop)=LOWER($1) AND day_offset > $2 ORDER BY day_offset LIMIT 1",
                   [r.crop, days]
                 );
                 msg += '\u{1F33E} *' + r.crop.charAt(0).toUpperCase() + r.crop.slice(1) + '*\n';
@@ -1806,17 +1806,17 @@ app.post('/webhook', async (req, res) => {
 
           // Handle "done"/"skip" for crop reminders
           if (lowerMsg === 'done' || lowerMsg === 'ho gaya' || lowerMsg === 'kar liya') {
-            const { rows: lastRem } = await pool.query("SELECT id FROM crop_reminders_log WHERE farmer_id=" + D + "1 AND farmer_response IS NULL ORDER BY sent_at DESC LIMIT 1", [farmerId]);
+            const { rows: lastRem } = await pool.query("SELECT id FROM crop_reminders_log WHERE farmer_id=$1 AND farmer_response IS NULL ORDER BY sent_at DESC LIMIT 1", [farmerId]);
             if (lastRem.length > 0) {
-              await pool.query("UPDATE crop_reminders_log SET farmer_response='done', responded_at=NOW() WHERE id=" + D + "1", [lastRem[0].id]);
+              await pool.query("UPDATE crop_reminders_log SET farmer_response='done', responded_at=NOW() WHERE id=$1", [lastRem[0].id]);
               await sendWhatsAppMessage(from, farmerData.language === 'en' ? 'Great! Marked complete.' : '\u2705 Bahut achha! Complete mark ho gaya.');
               continue;
             }
           }
           if (lowerMsg === 'skip' || lowerMsg === 'nahi hua') {
-            const { rows: lastRem } = await pool.query("SELECT id FROM crop_reminders_log WHERE farmer_id=" + D + "1 AND farmer_response IS NULL ORDER BY sent_at DESC LIMIT 1", [farmerId]);
+            const { rows: lastRem } = await pool.query("SELECT id FROM crop_reminders_log WHERE farmer_id=$1 AND farmer_response IS NULL ORDER BY sent_at DESC LIMIT 1", [farmerId]);
             if (lastRem.length > 0) {
-              await pool.query("UPDATE crop_reminders_log SET farmer_response='skipped', responded_at=NOW() WHERE id=" + D + "1", [lastRem[0].id]);
+              await pool.query("UPDATE crop_reminders_log SET farmer_response='skipped', responded_at=NOW() WHERE id=$1", [lastRem[0].id]);
               await sendWhatsAppMessage(from, farmerData.language === 'en' ? 'OK, skipped.' : '\u23ED Theek hai, skip. Kal yaad dilayenge.');
               continue;
             }
@@ -1877,7 +1877,7 @@ app.post('/webhook', async (req, res) => {
             await axios2.post(baseUrl + '/api/v1/crop-calendar/register', {
               farmer_id: farmerId, crop: crop, sow_date: sowDate.toISOString().split('T')[0], land_area: farmerData.land_acres || null
             });
-            const { rows: tCount } = await pool.query("SELECT COUNT(*) as cnt FROM crop_calendar_templates WHERE LOWER(crop)=LOWER(" + D + "1)", [crop]);
+            const { rows: tCount } = await pool.query("SELECT COUNT(*) as cnt FROM crop_calendar_templates WHERE LOWER(crop)=LOWER($1)", [crop]);
             await sendWhatsAppMessage(from,
               lang === 'hi'
                 ? '\u2705 *Fasal Calendar Registered!*\n\n\u{1F33E} Fasal: ' + crop.charAt(0).toUpperCase() + crop.slice(1) + '\n\u{1F4C5} Buwai: ' + sowDate.toLocaleDateString('en-IN') + '\n\u{1F4CB} ' + (tCount[0].cnt || 0) + ' stages ka calendar set\n\n\u{1F514} Har zaroori stage pe WhatsApp reminder milega!\n\nProgress: "mera calendar"'

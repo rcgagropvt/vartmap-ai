@@ -98,7 +98,7 @@ async function runCropReminderScheduler() {
     
     // Find registrations with reminders due today
     const { rows: dueRegs } = await pool.query(
-      "SELECT r.*, f.name as farmer_name, f.phone, f.language FROM farmer_crop_registrations r JOIN farmers f ON f.id = r.farmer_id WHERE r.status='active' AND r.next_reminder_date <= " + D + "1",
+      "SELECT r.*, f.name as farmer_name, f.phone, f.language FROM farmer_crop_registrations r JOIN farmers f ON f.id = r.farmer_id WHERE r.status='active' AND r.next_reminder_date <= $1",
       [today]
     );
 
@@ -115,13 +115,13 @@ async function runCropReminderScheduler() {
 
         // Find the template for today's stage
         const { rows: templates } = await pool.query(
-          "SELECT * FROM crop_calendar_templates WHERE LOWER(crop)=LOWER(" + D + "1) AND day_offset <= " + D + "2 AND id NOT IN (SELECT template_id FROM crop_reminders_log WHERE registration_id=" + D + "3 AND template_id IS NOT NULL) ORDER BY day_offset DESC LIMIT 1",
+          "SELECT * FROM crop_calendar_templates WHERE LOWER(crop)=LOWER($1) AND day_offset <= $2 AND id NOT IN (SELECT template_id FROM crop_reminders_log WHERE registration_id=$3 AND template_id IS NOT NULL) ORDER BY day_offset DESC LIMIT 1",
           [reg.crop, daysSinceSow, reg.id]
         );
 
         if (templates.length === 0) {
           // All reminders sent for this crop, mark as completed
-          await pool.query("UPDATE farmer_crop_registrations SET status='completed', updated_at=NOW() WHERE id=" + D + "1", [reg.id]);
+          await pool.query("UPDATE farmer_crop_registrations SET status='completed', updated_at=NOW() WHERE id=$1", [reg.id]);
           continue;
         }
 
@@ -177,22 +177,22 @@ async function runCropReminderScheduler() {
 
         // Log the reminder
         await pool.query(
-          "INSERT INTO crop_reminders_log (registration_id, farmer_id, template_id, stage_name, message_sent, weather_context) VALUES (" + D + "1," + D + "2," + D + "3," + D + "4," + D + "5," + D + "6)",
+          "INSERT INTO crop_reminders_log (registration_id, farmer_id, template_id, stage_name, message_sent, weather_context) VALUES ($1,$2,$3,$4,$5,$6)",
           [reg.id, reg.farmer_id, template.id, template.stage_name, message, null]
         );
 
         // Update next reminder date
         const { rows: nextTemplate } = await pool.query(
-          "SELECT day_offset FROM crop_calendar_templates WHERE LOWER(crop)=LOWER(" + D + "1) AND day_offset > " + D + "2 ORDER BY day_offset LIMIT 1",
+          "SELECT day_offset FROM crop_calendar_templates WHERE LOWER(crop)=LOWER($1) AND day_offset > $2 ORDER BY day_offset LIMIT 1",
           [reg.crop, template.day_offset]
         );
         
         if (nextTemplate.length > 0) {
           const nextDate = new Date(reg.sow_date);
           nextDate.setDate(nextDate.getDate() + nextTemplate[0].day_offset);
-          await pool.query("UPDATE farmer_crop_registrations SET next_reminder_date=" + D + "1, updated_at=NOW() WHERE id=" + D + "2", [nextDate.toISOString().split('T')[0], reg.id]);
+          await pool.query("UPDATE farmer_crop_registrations SET next_reminder_date=$1, updated_at=NOW() WHERE id=$2", [nextDate.toISOString().split('T')[0], reg.id]);
         } else {
-          await pool.query("UPDATE farmer_crop_registrations SET status='completed', updated_at=NOW() WHERE id=" + D + "1", [reg.id]);
+          await pool.query("UPDATE farmer_crop_registrations SET status='completed', updated_at=NOW() WHERE id=$1", [reg.id]);
         }
 
         console.log('[Scheduler] Sent reminder to ' + reg.farmer_name + ' (' + reg.crop + ' - ' + template.stage_name + ')');

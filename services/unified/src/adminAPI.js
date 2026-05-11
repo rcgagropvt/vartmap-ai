@@ -5860,7 +5860,7 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
 
         for (const t of templates) {
           await pool.query(
-            "INSERT INTO crop_calendar_templates (crop, stage_name, day_offset, message_hi, message_en, task_type, product_suggestion, is_weather_sensitive, skip_if_rain, priority) VALUES (" + D + "1," + D + "2," + D + "3," + D + "4," + D + "5," + D + "6," + D + "7," + D + "8," + D + "9," + D + "10)",
+            "INSERT INTO crop_calendar_templates (crop, stage_name, day_offset, message_hi, message_en, task_type, product_suggestion, is_weather_sensitive, skip_if_rain, priority) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
             t
           );
         }
