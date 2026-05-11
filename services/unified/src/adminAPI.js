@@ -6001,7 +6001,7 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
   // ===== FARMER APP: CROP CALENDAR ROUTES =====
   app.get("/api/v1/farmer/crop-calendar", communityAuth, async (req, res) => {
     try {
-      const farmerId = req.user.farmerId || req.user.id;
+      const farmerId = req.farmer.id;
       const { rows: regs } = await pool.query(
         "SELECT r.*, (SELECT COUNT(*) FROM crop_reminders_log WHERE registration_id=r.id) as reminders_sent FROM farmer_crop_registrations r WHERE r.farmer_id=$1 ORDER BY r.created_at DESC",
         [farmerId]
@@ -6024,7 +6024,7 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
 
   app.post("/api/v1/farmer/crop-calendar/register", communityAuth, async (req, res) => {
     try {
-      const farmerId = req.user.farmerId || req.user.id;
+      const farmerId = req.farmer.id;
       const { crop, sow_date, land_area } = req.body;
       if (!crop || !sow_date) return res.status(400).json({ error: "crop and sow_date required" });
 
@@ -6045,7 +6045,7 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
 
   app.get("/api/v1/farmer/crop-calendar/:regId/timeline", communityAuth, async (req, res) => {
     try {
-      const farmerId = req.user.farmerId || req.user.id;
+      const farmerId = req.farmer.id;
       const { rows: [reg] } = await pool.query(
         "SELECT * FROM farmer_crop_registrations WHERE id=$1 AND farmer_id=$2", [req.params.regId, farmerId]
       );
@@ -6072,7 +6072,7 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
 
   app.post("/api/v1/farmer/crop-calendar/:regId/mark-done", communityAuth, async (req, res) => {
     try {
-      const farmerId = req.user.farmerId || req.user.id;
+      const farmerId = req.farmer.id;
       const { rows: logs } = await pool.query(
         "SELECT id FROM crop_reminders_log WHERE registration_id=$1 AND farmer_id=$2 AND farmer_response IS NULL ORDER BY sent_at DESC LIMIT 1",
         [req.params.regId, farmerId]
