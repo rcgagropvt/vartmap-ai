@@ -833,7 +833,36 @@ async function loadCropCalendar() {
     } else { h += '<p style="color:var(--text-secondary)">No reminders sent yet</p>'; }
     h += '</div>';
 
-    // Templates management link
+    
+    // All registrations table
+    h += '<div style="background:var(--card);border-radius:14px;padding:24px;border:1px solid var(--border);margin-bottom:20px">';
+    h += '<h3 style="margin:0 0 16px;font-size:16px"><i class="fas fa-list" style="color:var(--primary)"></i> All Crop Registrations</h3>';
+    
+    // Fetch all registrations
+    const regRes = await fetch('/api/v1/crop-calendar/all-registrations', { headers: { 'Authorization': 'Bearer ' + TOKEN } });
+    const regData = await regRes.json();
+    const allRegs = regData.registrations || [];
+    
+    if (allRegs.length) {
+      h += '<div style="overflow-x:auto"><table style="width:100%;font-size:13px;border-collapse:collapse"><thead><tr style="border-bottom:2px solid var(--border)"><th style="text-align:left;padding:8px">Farmer</th><th style="text-align:left;padding:8px">Phone</th><th style="text-align:left;padding:8px">Crop</th><th style="text-align:left;padding:8px">Sow Date</th><th style="text-align:left;padding:8px">Days</th><th style="text-align:left;padding:8px">Next Stage</th><th style="text-align:left;padding:8px">Status</th><th style="text-align:left;padding:8px">Reminders</th></tr></thead><tbody>';
+      allRegs.forEach(function(r) {
+        var days = Math.floor((Date.now() - new Date(r.sow_date).getTime()) / (1000*60*60*24));
+        h += '<tr style="border-bottom:1px solid var(--border)">';
+        h += '<td style="padding:8px;font-weight:600">' + (r.farmer_name || 'Unknown') + '</td>';
+        h += '<td style="padding:8px">' + (r.farmer_phone || '-') + '</td>';
+        h += '<td style="padding:8px;text-transform:capitalize">' + r.crop + '</td>';
+        h += '<td style="padding:8px">' + new Date(r.sow_date).toLocaleDateString('en-IN') + '</td>';
+        h += '<td style="padding:8px">' + days + ' days</td>';
+        h += '<td style="padding:8px">' + (r.next_stage || '-') + '</td>';
+        h += '<td style="padding:8px"><span style="background:' + (r.status === 'active' ? '#ecfdf5' : '#f3f4f6') + ';color:' + (r.status === 'active' ? '#059669' : '#6b7280') + ';padding:2px 8px;border-radius:12px;font-size:11px">' + r.status + '</span></td>';
+        h += '<td style="padding:8px">' + (r.reminders_sent || 0) + '</td>';
+        h += '</tr>';
+      });
+      h += '</tbody></table></div>';
+    } else { h += '<p style="color:var(--text-secondary)">No registrations yet</p>'; }
+    h += '</div>';
+
+// Templates management link
     h += '<div style="margin-top:20px;text-align:center"><button class="btn btn-primary" onclick="loadCalendarTemplates()"><i class="fas fa-cog"></i> Manage Templates</button></div>';
 
     el.innerHTML = h;

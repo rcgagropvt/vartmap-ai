@@ -6159,6 +6159,25 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
   });
 
   // Admin overview of all registrations
+  // All registrations with farmer info
+  app.get("/api/v1/crop-calendar/all-registrations", auth, async (req, res) => {
+    try {
+      const { rows } = await pool.query(`
+        SELECT r.*, f.name as farmer_name, f.phone as farmer_phone,
+          (SELECT COUNT(*) FROM crop_reminders_log WHERE registration_id = r.id) as reminders_sent,
+          (SELECT stage_name FROM crop_calendar_templates t 
+           WHERE LOWER(t.crop)=LOWER(r.crop) 
+           AND t.day_offset > EXTRACT(DAY FROM NOW() - r.sow_date)::int 
+           ORDER BY t.day_offset LIMIT 1) as next_stage
+        FROM farmer_crop_registrations r
+        JOIN farmers f ON f.id = r.farmer_id
+        ORDER BY r.created_at DESC
+      `);
+      res.json({ registrations: rows });
+    } catch(e) { res.status(500).json({ error: e.message }); }
+  });
+
+
   app.get("/api/v1/crop-calendar/overview", auth, async (req, res) => {
     try {
       const { rows: stats } = await pool.query(`
