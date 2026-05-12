@@ -1755,6 +1755,28 @@ app.post('/webhook', async (req, res) => {
 
           // --- CROP CALENDAR COMMANDS ---
 
+          // --- DISTRICT UPDATE ---
+          if (lowerMsg.startsWith('district ') || lowerMsg.startsWith('mera district ')) {
+            const distName = msgBody.replace(/^(mera )?districts+/i, '').trim();
+            if (distName.length > 1) {
+              try {
+                const { rows: distMatch } = await pool.query("SELECT id, name FROM districts_master WHERE LOWER(name) LIKE $1 LIMIT 1", ['%' + distName.toLowerCase() + '%']);
+                if (distMatch.length) {
+                  await pool.query("UPDATE farmers SET district_id = $1 WHERE id = $2", [distMatch[0].id, farmerId]);
+                  const dMsg = lang === 'hi'
+                    ? '\u2705 District set: *' + distMatch[0].name + '*\nAb aapka khaad schedule aapke area ke hisaab se adjust hoga!'
+                    : '\u2705 District set: *' + distMatch[0].name + '*\nYour nutrition schedule will now be adjusted for your area!';
+                  await sendWhatsAppMessage(from, dMsg);
+                } else {
+                  const noD = lang === 'hi' ? '\u274C "' + distName + '" nahi mila. Sahi district naam bhejein.' : '\u274C District "' + distName + '" not found. Send correct name.';
+                  await sendWhatsAppMessage(from, noD);
+                }
+              } catch(de) { console.log('District update error:', de.message); }
+              continue;
+            }
+          }
+
+
           // --- NUTRITION SCHEDULE ---
           if (lowerMsg === 'mera schedule' || lowerMsg === 'nutrition schedule' || lowerMsg === 'khaad schedule' || lowerMsg === 'fertilizer schedule') {
             try {
@@ -1765,6 +1787,29 @@ app.post('/webhook', async (req, res) => {
                 for (const action of nRes.data.actions) {
                   await sendWhatsAppMessage(from, action.message);
                 }
+                // Prompt for missing data to improve recommendations
+                try {
+                  const fRes = await axiosN2.get(baseN2 + '/api/v1/crop-calendar/nutrition-schedule/' + nRes.data.actions[0].registration_id || '');
+                } catch(e2) {}
+                const farmerDist = farmerData.district_id;
+                const farmerSoil = farmerData.soil_type;
+                if (!farmerDist || !farmerSoil) {
+                  await new Promise(r => setTimeout(r, 1500));
+                  let missingMsg = '';
+                  if (lang === 'hi') {
+                    missingMsg = '\n\u{2139}\uFE0F *Behtar salah ke liye yeh jaankari dein:*\n';
+                    if (!farmerDist) missingMsg += '\u2022 Apna district batayein (jaise: "district Lucknow")\n';
+                    if (!farmerSoil) missingMsg += '\u2022 Mitti ki jaanch (Soil Health Card) karwaayein - hum NPK ke hisaab se khaad adjust karenge\n';
+                    missingMsg += '\nYeh jaankari dene se aapko bilkul sahi maatra ki salah milegi!';
+                  } else {
+                    missingMsg = '\n\u{2139}\uFE0F *For better recommendations:*\n';
+                    if (!farmerDist) missingMsg += '\u2022 Tell your district (e.g. "district Lucknow")\n';
+                    if (!farmerSoil) missingMsg += '\u2022 Get a Soil Health Card test - we adjust NPK doses based on your soil\n';
+                    missingMsg += '\nThis helps us give exact quantities for your farm!';
+                  }
+                  await sendWhatsAppMessage(from, missingMsg);
+                }
+
               } else {
                 const noMsg = lang === 'hi' ? 'Abhi koi active fasal calendar nahi hai. "Fasal register" bhejein.' : 'No active crop calendar. Send "Fasal register" to start.';
                 await sendWhatsAppMessage(from, noMsg);
@@ -1904,6 +1949,22 @@ app.post('/webhook', async (req, res) => {
                 ? '\u2705 *Fasal Calendar Registered!*\n\n🌾 Fasal: ' + crop.charAt(0).toUpperCase() + crop.slice(1) + '\n📅 Buwai: ' + sowDate.toLocaleDateString('en-IN') + '\n📋 ' + (tCount[0].cnt || 0) + ' stages ka calendar set\n\n\u{1F514} Har zaroori stage pe WhatsApp reminder milega!\n\nProgress: "mera calendar"'
                 : '\u2705 *Crop Calendar Registered!*\n\n🌾 Crop: ' + crop.charAt(0).toUpperCase() + crop.slice(1) + '\n📅 Sown: ' + sowDate.toLocaleDateString('en-IN') + '\n📋 ' + (tCount[0].cnt || 0) + ' stages set\n\n\u{1F514} You will get WhatsApp reminders at each stage!\n\nCheck: "my calendar"'
             );
+            // Send first nutrition action after registration
+            try {
+              const axiosN = require('axios');
+              const baseN = 'http://localhost:' + (process.env.PORT || 10000);
+              const schedRes = await axiosN.get(baseN + '/api/v1/crop-calendar/next-action/' + farmerId);
+              if (schedRes.data.actions && schedRes.data.actions.length > 0) {
+                await new Promise(r => setTimeout(r, 1500));
+                await sendWhatsAppMessage(from, schedRes.data.actions[0].message);
+                await new Promise(r => setTimeout(r, 1000));
+                const tipMsg = lang === 'hi' 
+                  ? '\u{1F4A1} *Tips:*\n\u2022 "mera schedule" bhejein - poora khaad schedule dekhein\n\u2022 "mera calendar" - fasal ki progress dekhein\n\u2022 Har stage pe automatic reminder aayega!'
+                  : '\u{1F4A1} *Tips:*\n\u2022 Send "mera schedule" - view full nutrition plan\n\u2022 Send "mera calendar" - check crop progress\n\u2022 You will get automatic reminders at each stage!';
+                await sendWhatsAppMessage(from, tipMsg);
+              }
+            } catch(nErr) { console.log('Post-reg nutrition msg error:', nErr.message); }
+
           } catch(regErr) {
             console.log('Crop reg error:', regErr.message);
             await sendWhatsAppMessage(from, lang === 'hi' ? 'Registration mein error. Dobara try karein.' : 'Registration error. Try again.');
