@@ -5910,12 +5910,12 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
       const { farmerId, district } = req.params;
       // Try districts_master first
       let distId = null;
-      const { rows: dm } = await pool.query("SELECT id, name FROM districts_master WHERE LOWER(name) ILIKE $1 OR LOWER(district_name) ILIKE $1 LIMIT 1", ['%' + district.toLowerCase() + '%']);
+      const { rows: dm } = await pool.query("SELECT id, district_name FROM districts_master WHERE LOWER(district_name) ILIKE $1 LIMIT 1", ['%' + district.toLowerCase() + '%']);
       if (dm.length) { distId = dm[0].id; }
       
       if (distId) {
         await pool.query("UPDATE farmers SET district_id = $1 WHERE id = $2", [distId, farmerId]);
-        res.json({ success: true, district: dm[0].name, district_id: distId });
+        res.json({ success: true, district: dm[0].district_name, district_id: distId });
       } else {
         // No districts_master entry - just store district name directly
         await pool.query("UPDATE farmers SET village = $1 WHERE id = $2", [district, farmerId]);
@@ -6110,7 +6110,7 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
       }
       let districtName = '';
       if (reg.district_id) {
-        const { rows: distRows } = await pool.query("SELECT name FROM districts_master WHERE id = $1", [reg.district_id]);
+        const { rows: distRows } = await pool.query("SELECT district_name as name FROM districts_master WHERE id = $1", [reg.district_id]);
         if (distRows.length) districtName = distRows[0].name.toLowerCase();
       }
         // Fallback: get district-level soil data from soil_nutrient_data
@@ -6118,11 +6118,11 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
           let soilDistrict = districtName;
           if (!soilDistrict && reg.village) soilDistrict = reg.village;
           if (soilDistrict) {
-            const { rows: distSoil } = await pool.query("SELECT nitrogen_status, phosphorus_status, potassium_status, ph, organic_carbon, micronutrients FROM soil_nutrient_data WHERE LOWER(district_name) ILIKE $1 LIMIT 5", ['%' + soilDistrict + '%']);
+            const { rows: distSoil } = await pool.query("SELECT * FROM soil_nutrient_data WHERE LOWER(district_name) ILIKE $1 LIMIT 5", ['%' + soilDistrict + '%']);
             if (distSoil.length) {
-              const nLow = distSoil.filter(r => r.nitrogen_status === 'low' || r.nitrogen_status === 'Low').length;
-              const pLow = distSoil.filter(r => r.phosphorus_status === 'low' || r.phosphorus_status === 'Low').length;
-              const kLow = distSoil.filter(r => r.potassium_status === 'low' || r.potassium_status === 'Low').length;
+              const nLow = distSoil.filter(r => (r.nitrogen_status || r.n_status || r.nitrogen || '').toString().toLowerCase() === 'low' || parseFloat(r.n_kg_ha || r.nitrogen_kg_per_ha || 0) < 250).length;
+              const pLow = distSoil.filter(r => (r.phosphorus_status || r.p_status || r.phosphorus || '').toString().toLowerCase() === 'low' || parseFloat(r.p_kg_ha || r.phosphorus_kg_per_ha || 0) < 12).length;
+              const kLow = distSoil.filter(r => (r.potassium_status || r.k_status || r.potassium || '').toString().toLowerCase() === 'low' || parseFloat(r.k_kg_ha || r.potassium_kg_per_ha || 0) < 130).length;
               const total = distSoil.length;
               soilData = { n_status: nLow > total/2 ? 'low' : 'medium', p_status: pLow > total/2 ? 'low' : 'medium', k_status: kLow > total/2 ? 'low' : 'medium', ph: distSoil[0].ph, organic_carbon: distSoil[0].organic_carbon, micronutrients: distSoil[0].micronutrients, source: 'district_average', samples: total };
             }
@@ -6168,7 +6168,7 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
       const farmer = farmers[0] || {};
       const lang = farmer.language || 'hi';
       let districtName = '';
-      if (farmer.district_id) { const { rows: d } = await pool.query("SELECT name FROM districts_master WHERE id = $1", [farmer.district_id]); if (d.length) districtName = d[0].name.toLowerCase(); }
+      if (farmer.district_id) { const { rows: d } = await pool.query("SELECT district_name FROM districts_master WHERE id = $1", [farmer.district_id]); if (d.length) districtName = d[0].district_name.toLowerCase(); }
       const districtOffset = DISTRICT_OFFSETS[districtName] || 0;
       const actions = [];
       for (const reg of regs) {

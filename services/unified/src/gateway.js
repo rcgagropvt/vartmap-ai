@@ -967,7 +967,7 @@ async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, 
         // Resolve district_id from geocoded district name
         let resolvedDistrictId = null;
         if (geo && geo.district) {
-          const { rows: distMatch } = await pool.query("SELECT id FROM districts_master WHERE LOWER(name) ILIKE $1 OR LOWER(district_name) ILIKE $1 LIMIT 1", ['%' + geo.district.toLowerCase() + '%']);
+          const { rows: distMatch } = await pool.query("SELECT id FROM districts_master WHERE LOWER(district_name) ILIKE $1 LIMIT 1", ['%' + geo.district.toLowerCase() + '%']);
           if (distMatch.length) resolvedDistrictId = distMatch[0].id;
         }
         await pool.query(
