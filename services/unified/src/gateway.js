@@ -1755,6 +1755,36 @@ app.post('/webhook', async (req, res) => {
 
           // --- CROP CALENDAR COMMANDS ---
 
+          
+          // Handle sow date button replies
+          if (lowerMsg === 'sow_today' || selectedId === 'sow_today') {
+            msgBody = 'Aaj';
+            lowerMsg = 'aaj';
+          } else if (lowerMsg === 'sow_yesterday' || selectedId === 'sow_yesterday') {
+            const yd = new Date(); yd.setDate(yd.getDate() - 1);
+            msgBody = yd.toLocaleDateString('en-IN');
+            lowerMsg = msgBody.toLowerCase();
+          } else if (lowerMsg === 'sow_week' || selectedId === 'sow_week') {
+            const wk = new Date(); wk.setDate(wk.getDate() - 7);
+            msgBody = wk.toLocaleDateString('en-IN');
+            lowerMsg = msgBody.toLowerCase();
+          }
+          // Handle other button replies
+          if (selectedId === 'mera_schedule' || lowerMsg === 'mera_schedule') {
+            msgBody = 'mera schedule';
+            lowerMsg = 'mera schedule';
+          } else if (selectedId === 'mera_calendar' || lowerMsg === 'mera_calendar') {
+            msgBody = 'mera calendar';
+            lowerMsg = 'mera calendar';
+          } else if (selectedId === 'set_district' || lowerMsg === 'set_district') {
+            const distPrompt = lang === 'hi' ? 'Apna district naam bhejein (jaise: district Lucknow)' : 'Send your district name (e.g. district Lucknow)';
+            await sendWhatsAppMessage(from, distPrompt);
+            continue;
+          } else if (selectedId === 'fasal_register' || lowerMsg === 'fasal_register') {
+            msgBody = 'fasal register';
+            lowerMsg = 'fasal register';
+          }
+
           // --- DISTRICT UPDATE ---
           if (lowerMsg.startsWith('district ') || lowerMsg.startsWith('mera district ')) {
             const distName = msgBody.replace(/^(mera )?districts+/i, '').trim();
@@ -1808,6 +1838,15 @@ app.post('/webhook', async (req, res) => {
                     missingMsg += '\nThis helps us give exact quantities for your farm!';
                   }
                   await sendWhatsAppMessage(from, missingMsg);
+                await sendWhatsAppButtons(from,
+                  lang === 'hi' ? 'Kya karna chahte hain?' : 'What next?',
+                  [
+                    { id: 'set_district', title: 'District Set Karein' },
+                    { id: 'mera_calendar', title: 'Mera Calendar' },
+                    { id: 'fasal_register', title: 'Nayi Fasal Add' }
+                  ]
+                );
+
                 }
 
               } else {
@@ -1912,11 +1951,14 @@ app.post('/webhook', async (req, res) => {
         
         if (crop) {
           setPendingAction(farmerId, 'crop_calendar_date', { crop: crop });
-          await sendWhatsAppMessage(from,
-            lang === 'hi' 
-              ? '📅 *' + crop.charAt(0).toUpperCase() + crop.slice(1) + '* select hua!\n\nBuwai ki taareekh batayen (DD/MM/YYYY)\nJaise: 15/11/2024\n\nYa "aaj" likhen agar aaj buwai ki hai.'
-              : '📅 *' + crop.charAt(0).toUpperCase() + crop.slice(1) + '* selected!\n\nEnter sowing date (DD/MM/YYYY)\nExample: 15/11/2024\n\nOr type "today".'
-          );
+          await sendWhatsAppButtons(from,
+              lang === 'hi' ? 'Buwai kab ki? (ya date bhejein jaise 10/05/2026)' : 'When did you sow? (or send date like 10/05/2026)',
+              [
+                { id: 'sow_today', title: 'Aaj' },
+                { id: 'sow_yesterday', title: 'Kal' },
+                { id: 'sow_week', title: '1 Hafta Pehle' }
+              ]
+            )
         } else {
           await sendWhatsAppMessage(from, lang === 'hi' ? 'Kripya list mein se fasal chunein.' : 'Please select from the list.');
         }
@@ -1956,11 +1998,14 @@ app.post('/webhook', async (req, res) => {
               const schedRes = await axiosN.get(baseN + '/api/v1/crop-calendar/next-action/' + farmerId);
               if (schedRes.data.actions && schedRes.data.actions.length > 0) {
                 await new Promise(r => setTimeout(r, 1500));
-                await sendWhatsAppMessage(from, schedRes.data.actions[0].message);
-                await new Promise(r => setTimeout(r, 1000));
-                const tipMsg = lang === 'hi' 
-                  ? '\u{1F4A1} *Tips:*\n\u2022 "mera schedule" bhejein - poora khaad schedule dekhein\n\u2022 "mera calendar" - fasal ki progress dekhein\n\u2022 Har stage pe automatic reminder aayega!'
-                  : '\u{1F4A1} *Tips:*\n\u2022 Send "mera schedule" - view full nutrition plan\n\u2022 Send "mera calendar" - check crop progress\n\u2022 You will get automatic reminders at each stage!';
+                await sendWhatsAppButtons(from,
+                  lang === 'hi' ? 'Aap kya dekhna chahenge?' : 'What would you like to see?',
+                  [
+                    { id: 'mera_schedule', title: 'Khaad Schedule' },
+                    { id: 'mera_calendar', title: 'Mera Calendar' },
+                    { id: 'set_district', title: 'District Set Karein' }
+                  ]
+                )
                 await sendWhatsAppMessage(from, tipMsg);
               }
             } catch(nErr) { console.log('Post-reg nutrition msg error:', nErr.message); }
