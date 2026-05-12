@@ -1907,7 +1907,7 @@ app.post('/webhook', async (req, res) => {
               let msg = (farmerData.language || 'hi') === 'hi' ? '📋 *Aapki Registered Fasalein:*\n\n' : '📋 *Your Registered Crops:*\n\n';
               for (const r of regs) {
                 const sowDate = new Date(r.sow_date);
-                const days = Math.floor((new Date() - sowDate) / (1000 * 60 * 60 * 24));
+                const days = Math.floor((new Date(new Date().getTime() + 5.5 * 60 * 60 * 1000) - sowDate) / (1000 * 60 * 60 * 24));
                 const { rows: nextStage } = await pool.query(
                   "SELECT stage_name, day_offset FROM crop_calendar_templates WHERE LOWER(crop)=LOWER($1) AND day_offset > $2 ORDER BY day_offset LIMIT 1",
                   [r.crop, days]
@@ -1991,8 +1991,8 @@ app.post('/webhook', async (req, res) => {
         let sowDate = null;
         const ddmm = dateStr.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
         if (ddmm) sowDate = new Date(parseInt(ddmm[3]), parseInt(ddmm[2]) - 1, parseInt(ddmm[1]));
-        if (!sowDate && (dateStr.toLowerCase() === 'aaj' || dateStr.toLowerCase() === 'today')) sowDate = new Date();
-        if (!sowDate && (dateStr.toLowerCase() === 'kal' || dateStr.toLowerCase() === 'yesterday')) { sowDate = new Date(); sowDate.setDate(sowDate.getDate() - 1); }
+        if (!sowDate && (dateStr.toLowerCase() === 'aaj' || dateStr.toLowerCase() === 'today')) { sowDate = new Date(new Date().getTime() + 5.5 * 60 * 60 * 1000); }
+        if (!sowDate && (dateStr.toLowerCase() === 'kal' || dateStr.toLowerCase() === 'yesterday')) { sowDate = new Date(new Date().getTime() + 5.5 * 60 * 60 * 1000); sowDate.setDate(sowDate.getDate() - 1); }
 
         if (sowDate && !isNaN(sowDate.getTime())) {
           clearPendingAction(farmerId);

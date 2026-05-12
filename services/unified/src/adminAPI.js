@@ -6222,7 +6222,7 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
       const landHa = landAcres * 0.4047;
       const districtOffset = DISTRICT_OFFSETS[districtName] || 0;
       const sowDate = new Date(reg.sow_date);
-      const today = new Date();
+      const today = new Date(new Date().getTime() + 5.5 * 60 * 60 * 1000); // IST
       const daysSinceSowing = Math.floor((today - sowDate) / (1000*60*60*24));
       const personalizedStages = schedule.stages.map(stage => {
         const adjustedDayOffset = stage.day_offset + districtOffset;
@@ -6263,7 +6263,7 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
         const schedule = NUTRITION_SCHEDULES[reg.crop.toLowerCase()];
         if (!schedule) continue;
         const sowDate = new Date(reg.sow_date);
-        const daysSinceSowing = Math.floor((new Date() - sowDate) / (1000*60*60*24));
+        const daysSinceSowing = Math.floor((new Date(new Date().getTime() + 5.5 * 60 * 60 * 1000) - sowDate) / (1000*60*60*24));
         const landHa = (farmer.land_holding_acres || reg.land_area || 1) * 0.4047;
         const nextStage = schedule.stages.find(s => (s.day_offset + districtOffset) > daysSinceSowing - 2);
         if (nextStage) {
@@ -6502,12 +6502,15 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
         "SELECT MIN(day_offset) as first_day FROM crop_calendar_templates WHERE LOWER(crop)=LOWER($1)", [crop]
       );
       const firstDay = templates[0] ? templates[0].first_day : 5;
-      const nextDate = new Date(sow_date);
+      // Use IST date if sow_date is 'today'
+      const istNow = new Date(new Date().getTime() + 5.5 * 60 * 60 * 1000);
+      const sowDateIST = sow_date === 'today' ? istNow.toISOString().split('T')[0] : sow_date;
+      const nextDate = new Date(sowDateIST);
       nextDate.setDate(nextDate.getDate() + firstDay);
 
       const { rows } = await pool.query(
         "INSERT INTO farmer_crop_registrations (farmer_id, crop, sow_date, land_area, next_reminder_date) VALUES ($1,$2,$3,$4,$5) RETURNING *",
-        [farmer_id, crop.toLowerCase(), sow_date, land_area || null, nextDate.toISOString().split('T')[0]]
+        [farmer_id, crop.toLowerCase(), sowDateIST, land_area || null, nextDate.toISOString().split('T')[0]]
       );
       res.json({ registration: rows[0] });
     } catch(e) { res.status(500).json({ error: e.message }); }
