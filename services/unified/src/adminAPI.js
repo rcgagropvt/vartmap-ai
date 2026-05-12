@@ -6017,7 +6017,122 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
         }
       ]
     }
-  };
+  ,
+    'mustard': {
+      crop_name: 'Mustard (Sarson)',
+      total_duration_days: 140,
+      stages: [
+        { stage: 'seed_treatment', day_offset: -1, title_hi: 'Beej Upchaar', title_en: 'Seed Treatment',
+          products: [
+            { type: 'fungicide', name: 'Thiram 75% WP', dose_per_ha: 3, unit: 'g/kg seed', method: 'seed_coating', note_hi: 'Mitti janit rog se suraksha', note_en: 'Protection against soil-borne diseases' }
+          ]
+        },
+        { stage: 'basal_application', day_offset: 0, title_hi: 'Buvaai ke samay khaad (Basal Dose)', title_en: 'Basal Fertilizer Application',
+          products: [
+            { type: 'fertilizer', name: 'DAP (Di-Ammonium Phosphate)', dose_per_ha: 130, unit: 'kg', method: 'broadcasting', note_hi: 'Buvaai se pehle khet mein failaayein', note_en: 'Broadcast before sowing' },
+            { type: 'fertilizer', name: 'MOP (Muriate of Potash)', dose_per_ha: 25, unit: 'kg', method: 'broadcasting', note_hi: 'DAP ke saath milaakar daalein', note_en: 'Mix with DAP and broadcast' },
+            { type: 'fertilizer', name: 'Urea', dose_per_ha: 55, unit: 'kg', method: 'broadcasting', note_hi: 'Nitrogen ki aadhi maatra basal mein', note_en: 'Half nitrogen as basal dose' },
+            { type: 'fertilizer', name: 'Sulphur (Gypsum/SSP)', dose_per_ha: 40, unit: 'kg S', method: 'broadcasting', note_hi: 'Sarson mein sulphur bahut zaroori', note_en: 'Sulphur critical for mustard oil content' }
+          ], soil_adjustment: { low_n: 1.3, high_n: 0.7, low_p: 1.2, high_p: 0.8 }
+        },
+        { stage: 'thinning', day_offset: 15, title_hi: 'Chhidaai (Thinning)', title_en: 'Thinning & Gap Filling',
+          products: [],
+          note_hi: 'Paudho ke beech 15 cm distance rakhein. Kamzor paudhe nikaalein.', note_en: 'Maintain 15cm plant spacing. Remove weak seedlings.'
+        },
+        { stage: 'first_irrigation_topdress', day_offset: 25, title_hi: 'Pehli Sinchai + Top Dressing', title_en: 'First Irrigation + Top Dressing',
+          products: [
+            { type: 'fertilizer', name: 'Urea', dose_per_ha: 55, unit: 'kg', method: 'topdressing', note_hi: 'Sinchai se pehle urea failaayein', note_en: 'Broadcast urea before irrigation' }
+          ], soil_adjustment: { low_n: 1.3, high_n: 0.7 }
+        },
+        { stage: 'weed_control', day_offset: 20, title_hi: 'Kharpatwar Niyantran', title_en: 'Weed Management',
+          products: [
+            { type: 'herbicide', name: 'Isoproturon 75% WP', dose_per_ha: 750, unit: 'g', method: 'spray', note_hi: 'Buvaai ke 2 din baad spray karein', note_en: 'Pre-emergence spray within 2 days of sowing' },
+            { type: 'herbicide', name: 'Oxadiargyl 6% EC', dose_per_ha: 750, unit: 'ml', method: 'spray', note_hi: 'Vaikalpik - post emergence 25-30 din baad', note_en: 'Alternative post-emergence at 25-30 DAS' }
+          ]
+        },
+        { stage: 'aphid_watch', day_offset: 45, title_hi: 'Mahoo/Aphid Nigrani', title_en: 'Aphid Monitoring',
+          products: [
+            { type: 'insecticide', name: 'Thiamethoxam 25% WG', dose_per_ha: 200, unit: 'g', method: 'spray', note_hi: 'Mahoo dikhne par turant spray karein', note_en: 'Spray on aphid appearance' },
+            { type: 'insecticide', name: 'Oxydemeton methyl 25% EC', dose_per_ha: 625, unit: 'ml', method: 'spray', note_hi: 'Vaikalpik dawai', note_en: 'Alternative insecticide' }
+          ]
+        },
+        { stage: 'second_irrigation', day_offset: 50, title_hi: 'Dusri Sinchai (Phool aane par)', title_en: 'Second Irrigation (Flowering)',
+          products: [
+            { type: 'foliar', name: 'Boron 20% (Borax)', dose_per_ha: 1, unit: 'kg in 500L water', method: 'foliar_spray', note_hi: 'Phool girne se rokne ke liye', note_en: 'Prevents flower drop, improves pod setting' }
+          ]
+        },
+        { stage: 'disease_watch', day_offset: 60, title_hi: 'Rog Nigrani - Safed Geru/Blight', title_en: 'White Rust & Blight Watch',
+          products: [
+            { type: 'fungicide', name: 'Metalaxyl 8% + Mancozeb 64% WP (Ridomil Gold)', dose_per_ha: 2500, unit: 'g', method: 'spray', note_hi: 'Safed geru ya blight dikhne par spray', note_en: 'Spray on white rust or blight appearance' },
+            { type: 'fungicide', name: 'Mancozeb 75% WP (Indofil M-45)', dose_per_ha: 2000, unit: 'g', method: 'spray', note_hi: 'Vaikalpik - 15 din baad dobaara spray', note_en: 'Repeat spray after 15 days if needed' }
+          ]
+        },
+        { stage: 'third_irrigation_pod', day_offset: 80, title_hi: 'Teesri Sinchai (Phali Bharne ka Samay)', title_en: 'Third Irrigation (Pod Filling)',
+          products: [
+            { type: 'foliar', name: 'Urea 2% Spray', dose_per_ha: 10, unit: 'kg in 500L water', method: 'foliar_spray', note_hi: 'Dane ka wajan badhane ke liye', note_en: 'Foliar N for better seed filling' }
+          ]
+        },
+        { stage: 'harvest_prep', day_offset: 130, title_hi: 'Katai ki Taiyari', title_en: 'Pre-Harvest',
+          products: [],
+          note_hi: 'Jab 75% phaliyan peeli ho jaayein tab katai. Subah ke samay katai karein taaki phaliya na fatein.', note_en: 'Harvest when 75% pods turn yellow. Harvest in morning to avoid shattering.'
+        }
+      ]
+    },
+    'potato': {
+      crop_name: 'Potato (Aloo)',
+      total_duration_days: 100,
+      stages: [
+        { stage: 'seed_treatment', day_offset: -1, title_hi: 'Beej Upchaar (Tuber Treatment)', title_en: 'Seed Tuber Treatment',
+          products: [
+            { type: 'fungicide', name: 'Mancozeb 75% WP', dose_per_ha: 5, unit: 'g/L (dip 10 min)', method: 'tuber_dip', note_hi: 'Kande ko 10 minute duboyein - sadan rog se bachav', note_en: 'Dip tubers for 10 min - prevents rot' },
+            { type: 'growth_regulator', name: 'Gibberellic Acid (GA3)', dose_per_ha: 1, unit: 'g in 10L (dip 1hr)', method: 'tuber_dip', note_hi: 'Samaan ankuran ke liye', note_en: 'For uniform sprouting from cold storage' }
+          ]
+        },
+        { stage: 'basal_application', day_offset: 0, title_hi: 'Buvaai ke samay khaad (Basal Dose)', title_en: 'Basal Fertilizer at Planting',
+          products: [
+            { type: 'fertilizer', name: 'DAP (Di-Ammonium Phosphate)', dose_per_ha: 260, unit: 'kg', method: 'band_placement', note_hi: 'Kundo ke paas nali mein daalein', note_en: 'Place in furrow near tubers' },
+            { type: 'fertilizer', name: 'MOP (Muriate of Potash)', dose_per_ha: 100, unit: 'kg', method: 'band_placement', note_hi: 'Potash poori maatra basal mein daalein', note_en: 'Full potash dose as basal' },
+            { type: 'fertilizer', name: 'Urea', dose_per_ha: 130, unit: 'kg', method: 'band_placement', note_hi: '3/4 Nitrogen basal mein', note_en: '3/4th nitrogen as basal' },
+            { type: 'micronutrient', name: 'Zinc Sulphate (ZnSO4)', dose_per_ha: 25, unit: 'kg', method: 'broadcasting', note_hi: 'Zinc ki kami waale kshetra mein', note_en: 'In zinc deficient areas' },
+            { type: 'fertilizer', name: 'Magnesium Sulphate (MgSO4)', dose_per_ha: 60, unit: 'kg', method: 'broadcasting', note_hi: 'Aloo ke liye zaroori', note_en: 'Essential for potato' }
+          ], soil_adjustment: { low_n: 1.25, high_n: 0.75, low_p: 1.2, high_p: 0.8, low_k: 1.3, high_k: 0.7 }
+        },
+        { stage: 'first_irrigation', day_offset: 3, title_hi: 'Pehli Sinchai', title_en: 'First Irrigation',
+          products: [],
+          note_hi: 'Buvaai ke 2-3 din baad halki sinchai dein. Paani bharav se bachein.', note_en: 'Light irrigation 2-3 days after planting. Avoid waterlogging.'
+        },
+        { stage: 'weed_control', day_offset: 5, title_hi: 'Kharpatwar Niyantran', title_en: 'Weed Management',
+          products: [
+            { type: 'herbicide', name: 'Metribuzin 70% WP (Sencor)', dose_per_ha: 500, unit: 'g', method: 'spray', note_hi: 'Ankuran se pehle spray karein', note_en: 'Pre-emergence spray before sprouts appear' }
+          ]
+        },
+        { stage: 'earthing_up_topdress', day_offset: 30, title_hi: 'Mitti Chadhaana + Top Dressing', title_en: 'Earthing Up + Top Dressing',
+          products: [
+            { type: 'fertilizer', name: 'Urea', dose_per_ha: 45, unit: 'kg', method: 'side_dressing', note_hi: 'Bachi hui 1/4 Nitrogen daalein, phir mitti chadhaayein', note_en: 'Apply remaining 1/4 N, then earth up' }
+          ], soil_adjustment: { low_n: 1.3, high_n: 0.7 }
+        },
+        { stage: 'late_blight_watch', day_offset: 45, title_hi: 'Peechha Jhulsa Rog Nigrani', title_en: 'Late Blight Watch',
+          products: [
+            { type: 'fungicide', name: 'Propineb 70% WP (Antracol)', dose_per_ha: 2000, unit: 'g', method: 'spray', note_hi: 'Baadale mausam mein 45 din par spray shuru karein', note_en: 'Start preventive spray at 45 days in cloudy weather' },
+            { type: 'fungicide', name: 'Cymoxanil 8% + Mancozeb 64% WP', dose_per_ha: 2000, unit: 'g', method: 'spray', note_hi: 'Rog dikhne par 10 din ke antar par dobaara spray', note_en: 'Repeat at 10 day intervals on disease appearance' }
+          ]
+        },
+        { stage: 'tuber_bulking_foliar', day_offset: 55, title_hi: 'Kanda Badhana - Foliar Spray', title_en: 'Tuber Bulking Foliar Feed',
+          products: [
+            { type: 'foliar', name: 'KNO3 (13:0:45)', dose_per_ha: 5, unit: 'kg in 500L water', method: 'foliar_spray', note_hi: 'Kande ka size badhane ke liye', note_en: 'Promotes tuber bulking' },
+            { type: 'foliar', name: 'Magnesium EDTA', dose_per_ha: 250, unit: 'g in 500L water', method: 'foliar_spray', note_hi: 'Magnesium ki kami door kare', note_en: 'Corrects Mg deficiency' }
+          ]
+        },
+        { stage: 'dehaulming', day_offset: 75, title_hi: 'Paudha Kaatna (Dehaulming)', title_en: 'Dehaulming (Haulm Cutting)',
+          products: [],
+          note_hi: 'Zameen se 2-3 inch upar paudha kaat dein. Virus-mukt beej ke liye zaroori. Katai ke 15 din baad khudai karein.', note_en: 'Cut haulms 2-3 inches above ground. Essential for virus-free seed. Harvest 15 days after dehaulming.'
+        },
+        { stage: 'harvest', day_offset: 90, title_hi: 'Khudai (Harvest)', title_en: 'Harvesting',
+          products: [],
+          note_hi: 'Mitti mein nami ho tab khudai karein. Kande ko 10-15 din chhaon mein sukhayein (curing). Katte-pitte aloo alag karein.', note_en: 'Harvest when soil has moisture. Cure tubers in shade for 10-15 days. Sort out damaged tubers.'
+        }
+      ]
+    }};
 
   app.get("/api/v1/crop-calendar/nutrition-schedule/:registrationId", async (req, res) => {
     try {
@@ -6041,7 +6156,37 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
           let soilDistrict = districtName;
           if (!soilDistrict && reg.village) soilDistrict = reg.village.toLowerCase();
           if (soilDistrict) {
-            const { rows: distSoil } = await pool.query("SELECT nitrogen_low_pct, nitrogen_medium_pct, phosphorus_low_pct, phosphorus_medium_pct, potassium_low_pct, potassium_medium_pct, organic_carbon_low_pct, avg_ph, avg_zinc, avg_boron, avg_sulphur, soil_type, block_name, recommendations FROM soil_nutrient_data WHERE LOWER(district_name) ILIKE $1 LIMIT 10", ['%' + soilDistrict + '%']);
+            // Try block-level first using village name
+        const farmerBlock = reg.village || '';
+        if (farmerBlock && farmerBlock.toLowerCase() !== districtName) {
+          const { rows: blockSoil } = await pool.query(
+            "SELECT nitrogen_low_pct, phosphorus_low_pct, potassium_low_pct, organic_carbon_low_pct, avg_ph, avg_zinc, avg_boron, avg_sulphur, soil_type, block_name, recommendations FROM soil_nutrient_data WHERE LOWER(district_name) ILIKE $1 AND LOWER(block_name) ILIKE $2 LIMIT 1",
+            ['%' + districtName + '%', '%' + farmerBlock.toLowerCase() + '%']
+          );
+          if (blockSoil.length) {
+            const br = blockSoil[0];
+            soilData = {
+              n_status: parseFloat(br.nitrogen_low_pct) > 50 ? 'low' : parseFloat(br.nitrogen_low_pct) > 20 ? 'medium' : 'high',
+              p_status: parseFloat(br.phosphorus_low_pct) > 50 ? 'low' : parseFloat(br.phosphorus_low_pct) > 20 ? 'medium' : 'high',
+              k_status: parseFloat(br.potassium_low_pct) > 50 ? 'low' : parseFloat(br.potassium_low_pct) > 20 ? 'medium' : 'high',
+              oc_status: parseFloat(br.organic_carbon_low_pct) > 50 ? 'low' : 'medium',
+              ph: parseFloat(br.avg_ph),
+              zinc_deficient_pct: 100 - parseFloat(br.avg_zinc || 0),
+              boron_deficient_pct: 100 - parseFloat(br.avg_boron || 0),
+              sulphur_deficient_pct: 100 - parseFloat(br.avg_sulphur || 0),
+              soil_type: br.soil_type || 'unknown',
+              block: br.block_name,
+              recommendations: br.recommendations || {},
+              source: 'block_level (' + br.block_name + ')',
+              n_low_pct: parseFloat(br.nitrogen_low_pct).toFixed(1),
+              p_low_pct: parseFloat(br.phosphorus_low_pct).toFixed(1),
+              k_low_pct: parseFloat(br.potassium_low_pct).toFixed(1)
+            };
+          }
+        }
+        // District average fallback
+        if (!soilData) {
+        const { rows: distSoil } = await pool.query("SELECT nitrogen_low_pct, nitrogen_medium_pct, phosphorus_low_pct, phosphorus_medium_pct, potassium_low_pct, potassium_medium_pct, organic_carbon_low_pct, avg_ph, avg_zinc, avg_boron, avg_sulphur, soil_type, block_name, recommendations FROM soil_nutrient_data WHERE LOWER(district_name) ILIKE $1 LIMIT 10", ['%' + soilDistrict + '%']);
             if (distSoil.length) {
               const avg = (arr, key) => arr.reduce((s, r) => s + parseFloat(r[key] || 0), 0) / arr.length;
               const nLowPct = avg(distSoil, 'nitrogen_low_pct');
@@ -6065,9 +6210,11 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
                 p_low_pct: pLowPct.toFixed(1),
                 k_low_pct: kLowPct.toFixed(1)
               };
+              };
             }
           }
         }
+
       const cropKey = reg.crop.toLowerCase();
       const schedule = NUTRITION_SCHEDULES[cropKey];
       if (!schedule) return res.status(404).json({ error: 'No nutrition schedule for: ' + reg.crop });

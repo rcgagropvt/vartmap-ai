@@ -1821,9 +1821,35 @@ app.post('/webhook', async (req, res) => {
               const baseUrl3 = 'http://localhost:' + (process.env.PORT || 10000);
               const nRes = await axios3.get(baseUrl3 + '/api/v1/crop-calendar/next-action/' + farmerId);
               if (nRes.data.actions && nRes.data.actions.length > 0) {
-                for (const action of nRes.data.actions) {
-                  await sendWhatsAppMessage(from, action.message);
+                // Build clean schedule card
+                const actions = nRes.data.actions;
+                const sLang = farmerData.language || 'hi';
+                let schedMsg = '';
+                
+                if (sLang === 'hi') {
+                  schedMsg = '*\u{1F33E} Khaad Schedule*\n';
+                  schedMsg += '\u{1F4CD} ' + (farmerData.village || '') + '\n\n';
+                } else {
+                  schedMsg = '*\u{1F33E} Nutrition Schedule*\n';
+                  schedMsg += '\u{1F4CD} ' + (farmerData.village || '') + '\n\n';
                 }
+                
+                for (let si = 0; si < Math.min(actions.length, 3); si++) {
+                  const act = actions[si];
+                  const isNow = si === 0;
+                  const stIcon = isNow ? '\u{1F534}' : '\u26AA';
+                  const stLabel = isNow ? (sLang === 'hi' ? ' *ABHI*' : ' *NOW*') : '';
+                  schedMsg += stIcon + ' *' + (act.title || act.stage || '') + '*' + stLabel + '\n';
+                  if (act.scheduled_date) schedMsg += '   \u{1F4C5} ' + act.scheduled_date + '\n';
+                  if (act.message) schedMsg += '   ' + act.message.substring(0, 150) + '\n';
+                  schedMsg += '\n';
+                }
+                
+                if (actions.length > 3) {
+                  schedMsg += '\u{1F4CB} +' + (actions.length - 3) + (sLang === 'hi' ? ' aur stages' : ' more stages');
+                }
+                
+                await sendWhatsAppMessage(from, schedMsg);
                 // Prompt for missing data to improve recommendations
                 try {
                   const fRes = await axiosN2.get(baseN2 + '/api/v1/crop-calendar/nutrition-schedule/' + nRes.data.actions[0].registration_id || '');
