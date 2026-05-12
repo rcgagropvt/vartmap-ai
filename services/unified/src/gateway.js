@@ -1757,30 +1757,30 @@ app.post('/webhook', async (req, res) => {
 
           
           // Handle sow date button replies
-          if (lowerMsg === 'sow_today' || selectedId === 'sow_today') {
+          if (lowerMsg === 'sow_today' || lowerMsg === 'sow_today') {
             msgBody = 'Aaj';
             lowerMsg = 'aaj';
-          } else if (lowerMsg === 'sow_yesterday' || selectedId === 'sow_yesterday') {
+          } else if (lowerMsg === 'sow_yesterday' || lowerMsg === 'sow_yesterday') {
             const yd = new Date(); yd.setDate(yd.getDate() - 1);
             msgBody = yd.toLocaleDateString('en-IN');
             lowerMsg = msgBody.toLowerCase();
-          } else if (lowerMsg === 'sow_week' || selectedId === 'sow_week') {
+          } else if (lowerMsg === 'sow_week' || lowerMsg === 'sow_week') {
             const wk = new Date(); wk.setDate(wk.getDate() - 7);
             msgBody = wk.toLocaleDateString('en-IN');
             lowerMsg = msgBody.toLowerCase();
           }
           // Handle other button replies
-          if (selectedId === 'mera_schedule' || lowerMsg === 'mera_schedule') {
+          if (lowerMsg === 'mera_schedule' || lowerMsg === 'mera_schedule') {
             msgBody = 'mera schedule';
             lowerMsg = 'mera schedule';
-          } else if (selectedId === 'mera_calendar' || lowerMsg === 'mera_calendar') {
+          } else if (lowerMsg === 'mera_calendar' || lowerMsg === 'mera_calendar') {
             msgBody = 'mera calendar';
             lowerMsg = 'mera calendar';
-          } else if (selectedId === 'set_district' || lowerMsg === 'set_district') {
+          } else if (lowerMsg === 'set_district' || lowerMsg === 'set_district') {
             const distPrompt = lang === 'hi' ? 'Apna district naam bhejein (jaise: district Lucknow)' : 'Send your district name (e.g. district Lucknow)';
             await sendWhatsAppMessage(from, distPrompt);
             continue;
-          } else if (selectedId === 'fasal_register' || lowerMsg === 'fasal_register') {
+          } else if (lowerMsg === 'fasal_register' || lowerMsg === 'fasal_register') {
             msgBody = 'fasal register';
             lowerMsg = 'fasal register';
           }
