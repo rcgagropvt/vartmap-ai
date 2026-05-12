@@ -5753,120 +5753,42 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
   // Create tables on first load
   (async () => {
     try {
-      await pool.query(`DROP TABLE IF EXISTS crop_reminders_log CASCADE;
-        DROP TABLE IF EXISTS farmer_crop_registrations CASCADE;
-        DROP TABLE IF EXISTS crop_calendar_templates CASCADE;
-        CREATE TABLE crop_calendar_templates (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        crop VARCHAR(100) NOT NULL,
-        stage_name VARCHAR(200) NOT NULL,
-        day_offset INTEGER NOT NULL,
-        message_hi TEXT NOT NULL,
-        message_en TEXT NOT NULL,
-        task_type VARCHAR(50) DEFAULT 'general',
-        product_suggestion TEXT,
-        is_weather_sensitive BOOLEAN DEFAULT false,
-        skip_if_rain BOOLEAN DEFAULT false,
-        priority VARCHAR(20) DEFAULT 'medium',
-        created_at TIMESTAMP DEFAULT NOW()
-      )`);
-      
-      await pool.query(`CREATE TABLE IF NOT EXISTS farmer_crop_registrations (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        farmer_id UUID NOT NULL,
-        crop VARCHAR(100) NOT NULL,
-        sow_date DATE NOT NULL,
-        land_area NUMERIC(10,2),
-        status VARCHAR(20) DEFAULT 'active',
-        completed_stages JSONB DEFAULT '[]',
-        next_reminder_date DATE,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )`);
-      
-      await pool.query(`CREATE TABLE IF NOT EXISTS crop_reminders_log (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        registration_id UUID NOT NULL,
-        farmer_id UUID NOT NULL,
-        template_id UUID,
-        stage_name VARCHAR(200),
-        message_sent TEXT,
-        sent_at TIMESTAMP DEFAULT NOW(),
-        farmer_response VARCHAR(50),
-        responded_at TIMESTAMP,
-        weather_context JSONB,
-        status VARCHAR(20) DEFAULT 'sent'
-      )`);
-
-      // Seed default templates if empty
-      const { rows } = await pool.query("SELECT COUNT(*) as cnt FROM crop_calendar_templates");
-      if (parseInt(rows[0].cnt) === 0) {
-        console.log("Seeding crop calendar templates...");
-        const templates = [
-          // WHEAT
-          ['wheat', 'Germination Check', 5, 'Namaste! Aapke gehun ki buwai ko 5 din ho gaye. Kya ankuran aa gaya? Agar nahi aaya to mitti ki nami check karein.', 'Hello! 5 days since wheat sowing. Check if germination has started. If not, check soil moisture.', 'monitoring', null, false, false, 'high'],
-          ['wheat', 'First Irrigation (Crown Root)', 21, 'Gehun mein pehli sinchai ka samay aa gaya hai (Crown Root stage). Halki sinchai karein - zyada paani mat dein.', 'Time for first irrigation (Crown Root stage). Give light irrigation - do not overwater.', 'irrigation', null, true, true, 'high'],
-          ['wheat', 'Urea Top Dressing', 35, 'Gehun mein urea ki top dressing ka samay hai. 40-50 kg/acre urea dalein. Sinchai ke baad ya baarish ke pehle dalein.', 'Time for urea top dressing in wheat. Apply 40-50 kg/acre. Apply before irrigation or rain.', 'fertilization', 'Vartmaan Urea Plus', false, false, 'high'],
-          ['wheat', 'Weed Management', 30, 'Gehun mein kharpatwar ki check karein. Agar zyada hain to 2,4-D spray karein ya haath se nikal dein.', 'Check for weeds in wheat. If heavy, spray 2,4-D or do manual weeding.', 'weeding', null, false, false, 'medium'],
-          ['wheat', 'Second Irrigation', 40, 'Gehun mein doosri sinchai ka samay (tillering stage). Achhi sinchai dein.', 'Time for second irrigation (tillering stage). Give good irrigation.', 'irrigation', null, true, true, 'high'],
-          ['wheat', 'Rust/Disease Watch', 55, 'Gehun mein peela/bhura rust ki jaanch karein. Pattiyon pe peele/bhure dhabe dikhein to turant fungicide spray karein.', 'Check wheat for yellow/brown rust. If you see spots on leaves, spray fungicide immediately.', 'pest_watch', 'Vartmaan Fungicide Pro', false, false, 'high'],
-          ['wheat', 'Third Irrigation (Booting)', 65, 'Gehun mein teesri sinchai (booting stage). Yeh bahut zaroori hai - is samay paani ki kami se dano mein nuksan hota hai.', 'Third irrigation (booting stage). Very critical - water stress now reduces grain quality.', 'irrigation', null, true, true, 'critical'],
-          ['wheat', 'Ear Head Stage Nutrition', 75, 'Gehun mein bali nikalne ka samay. Potash spray (1% KCl) se dano ki quality badhegi.', 'Wheat ear-head stage. Potash spray (1% KCl) will improve grain quality.', 'fertilization', 'Vartmaan Potash Plus', false, false, 'medium'],
-          ['wheat', 'Fourth Irrigation (Grain Filling)', 85, 'Gehun mein chauthi sinchai (doodh stage). Halki sinchai dein - zyada paani se fasil gir sakti hai.', 'Fourth irrigation (milking stage). Give light irrigation - excess water can cause lodging.', 'irrigation', null, true, true, 'high'],
-          ['wheat', 'Harvest Readiness Check', 115, 'Gehun ki katai ka samay aane wala hai! Dane sakht ho jayein aur nami 14% se kam ho to katai karein. Mandi bhav check karein.', 'Wheat harvest time approaching! When grains are hard and moisture below 14%, harvest. Check mandi prices.', 'harvest', null, false, false, 'critical'],
-          ['wheat', 'Post Harvest Advisory', 120, 'Gehun ki katai ke baad - dhoop mein sukhayein, 12% nami tak. Storage mein kapde ki bori use karein. Mandi bhav: /mandi likhen.', 'Post harvest: dry in sun to 12% moisture. Use cloth bags for storage. Check mandi prices: type /mandi.', 'post_harvest', null, false, false, 'medium'],
-
-          // RICE (Paddy)
-          ['rice', 'Nursery Check', 7, 'Dhaan ki nursery ko 7 din hue. Kya paudhe 2-3 inch ke ho gaye? Paani ka level 1 inch rakhein.', 'Rice nursery is 7 days old. Are seedlings 2-3 inches? Keep water level at 1 inch.', 'monitoring', null, false, false, 'medium'],
-          ['rice', 'Transplanting Reminder', 21, 'Dhaan ki nursery 21 din ki ho gayi. Ab khet mein ropai ka samay hai. 2-3 paudhe per hill lagayein.', 'Rice nursery is 21 days old. Time to transplant. Plant 2-3 seedlings per hill.', 'planting', null, false, false, 'critical'],
-          ['rice', 'First Fertilizer', 28, 'Ropai ke 7 din baad - pehli khaad daalein. DAP 25 kg + Urea 20 kg per acre.', '7 days after transplanting - apply first fertilizer. DAP 25 kg + Urea 20 kg per acre.', 'fertilization', 'Vartmaan DAP Gold', false, false, 'high'],
-          ['rice', 'Weed Control', 35, 'Dhaan mein kharpatwar ka dhyan dein. Butachlor spray ya haath se godi karein.', 'Watch for weeds in rice. Use Butachlor spray or manual weeding.', 'weeding', null, false, false, 'medium'],
-          ['rice', 'Tillering Stage Urea', 45, 'Dhaan mein tiller banne ka samay. Urea 30 kg/acre dalein. Khet mein 2-3 cm paani rakhein.', 'Rice tillering stage. Apply Urea 30 kg/acre. Maintain 2-3 cm water in field.', 'fertilization', 'Vartmaan Urea Plus', false, false, 'high'],
-          ['rice', 'Pest Watch (BPH/Stem Borer)', 55, 'Dhaan mein brown planthopper aur tana chedak ki jaanch karein. Peele patton ya sukhe tillon pe dhyan dein.', 'Check rice for BPH and stem borer. Watch for yellowing leaves or dead tillers.', 'pest_watch', 'Vartmaan Pest Shield', false, false, 'high'],
-          ['rice', 'Panicle Stage Nutrition', 70, 'Dhaan mein bali nikalne ka samay. Potash 20 kg/acre daalein. Paani ka level maintain karein.', 'Rice panicle initiation. Apply Potash 20 kg/acre. Maintain water level.', 'fertilization', 'Vartmaan Potash Plus', false, false, 'high'],
-          ['rice', 'Drain Field Before Harvest', 100, 'Dhaan ki katai 15-20 din mein hogi. Ab khet se paani nikal dein.', 'Rice harvest in 15-20 days. Drain the field now.', 'irrigation', null, false, false, 'medium'],
-          ['rice', 'Harvest Time', 115, 'Dhaan ki katai ka samay! 80% dane pakk gaye hain. Subah ke samay katai karein. Mandi bhav check karein.', 'Rice harvest time! 80% grains are mature. Harvest in morning. Check mandi prices.', 'harvest', null, false, false, 'critical'],
-
-          // SUGARCANE
-          ['sugarcane', 'Germination Check', 15, 'Ganne ki buwai ko 15 din hue. Ankuran check karein. Agar kam hai to gap filling karein.', 'Sugarcane sowing is 15 days old. Check germination. Do gap filling if needed.', 'monitoring', null, false, false, 'high'],
-          ['sugarcane', 'First Irrigation', 7, 'Ganne mein pehli sinchai karein. Halki sinchai - kood mein paani bharne dein.', 'Give first irrigation to sugarcane. Light irrigation - fill the furrows.', 'irrigation', null, true, true, 'high'],
-          ['sugarcane', 'First Earthing Up', 45, 'Ganne mein pehli mitti chadhaane ka samay. Kharpatwar bhi saaf karein.', 'Time for first earthing up in sugarcane. Also clear weeds.', 'weeding', null, false, false, 'high'],
-          ['sugarcane', 'Urea Application', 60, 'Ganne mein urea dalein - 60 kg/acre. Mitti chadhaane ke baad sinchai karein.', 'Apply urea in sugarcane - 60 kg/acre. Irrigate after earthing up.', 'fertilization', 'Vartmaan Urea Plus', false, false, 'high'],
-          ['sugarcane', 'Second Earthing Up', 90, 'Ganne mein doosri baar mitti chadhaayein. Isse ganna girne se bachega.', 'Second earthing up in sugarcane. This prevents lodging.', 'weeding', null, false, false, 'medium'],
-          ['sugarcane', 'Pest Check (Top Borer)', 75, 'Ganne mein top borer ki jaanch karein. Dead heart dikhne par turant spray karein.', 'Check for top borer in sugarcane. Spray immediately if dead hearts seen.', 'pest_watch', 'Vartmaan Pest Shield', false, false, 'high'],
-          ['sugarcane', 'Grand Growth Nutrition', 120, 'Ganne ka grand growth phase. Potash 40 kg/acre + Zinc spray karein.', 'Sugarcane grand growth phase. Apply Potash 40 kg/acre + Zinc spray.', 'fertilization', 'Vartmaan Potash Plus', false, false, 'high'],
-          ['sugarcane', 'Tying/Propping', 150, 'Ganne ko baandhne/support dene ka samay. 2-3 ganne ek saath baandhein.', 'Time to tie/prop sugarcane. Tie 2-3 canes together for support.', 'monitoring', null, false, false, 'medium'],
-          ['sugarcane', 'Harvest Planning', 300, 'Ganne ki katai 30-60 din mein hogi. Sugar mill se sampark karein. Rassi bandh dein.', 'Sugarcane harvest in 30-60 days. Contact sugar mill. Tie the canes.', 'harvest', null, false, false, 'high'],
-
-          // MUSTARD
-          ['mustard', 'Germination Check', 5, 'Sarson ki buwai ko 5 din hue. Ankuran jaanch karein. Nami kami hai to halki sinchai dein.', 'Mustard sowing 5 days ago. Check germination. Light irrigation if moisture is low.', 'monitoring', null, false, false, 'medium'],
-          ['mustard', 'Thinning', 20, 'Sarson mein chhatai karein - paudhon ke beech 15 cm jagah rakhein.', 'Thin mustard plants - maintain 15 cm spacing between plants.', 'monitoring', null, false, false, 'medium'],
-          ['mustard', 'First Irrigation', 30, 'Sarson mein pehli sinchai ka samay (phool aane se pehle). Halki sinchai dein.', 'First irrigation for mustard (before flowering). Give light irrigation.', 'irrigation', null, true, true, 'high'],
-          ['mustard', 'Aphid Watch', 45, 'Sarson mein mahu (aphid) ki jaanch karein. Peeli chippchipa keede dikhein to spray karein.', 'Check mustard for aphids. If you see sticky yellow insects, spray immediately.', 'pest_watch', 'Vartmaan Pest Shield', false, false, 'high'],
-          ['mustard', 'Flowering Nutrition', 50, 'Sarson mein phool aa rahe hain. Boron spray (0.2%) se faliyan zyada aayengi.', 'Mustard is flowering. Boron spray (0.2%) will increase pod formation.', 'fertilization', null, false, false, 'medium'],
-          ['mustard', 'Second Irrigation', 60, 'Sarson mein doosri sinchai (fali banne ka samay). Zaroori hai achhi paidawaar ke liye.', 'Second irrigation for mustard (pod formation). Essential for good yield.', 'irrigation', null, true, true, 'high'],
-          ['mustard', 'Harvest Time', 110, 'Sarson ki katai ka samay! 75% faliyan peeli pad jayein to katai karein. Subah karein - dane girenge nahi.', 'Mustard harvest time! When 75% pods turn yellow, harvest in morning to avoid shattering.', 'harvest', null, false, false, 'critical'],
-
-          // POTATO
-          ['potato', 'Germination Check', 15, 'Aalu ki buwai ko 15 din hue. Kya paudhe nikal aaye? Agar nahi to mitti ki nami check karein.', 'Potato planting 15 days ago. Are sprouts showing? If not, check soil moisture.', 'monitoring', null, false, false, 'high'],
-          ['potato', 'First Earthing Up', 25, 'Aalu mein pehli mitti chadhaane ka samay. Paudhon ke aas-paas mitti lagayein.', 'First earthing up for potato. Hill up soil around the plants.', 'weeding', null, false, false, 'high'],
-          ['potato', 'First Irrigation', 10, 'Aalu mein pehli sinchai dein. Halki sinchai - waterlogging se bimari aati hai.', 'First irrigation for potato. Light irrigation - waterlogging causes disease.', 'irrigation', null, true, true, 'high'],
-          ['potato', 'Urea Top Dressing', 30, 'Aalu mein urea ki top dressing karein - 35 kg/acre. Mitti chadhaane ke saath karein.', 'Urea top dressing for potato - 35 kg/acre. Apply with earthing up.', 'fertilization', 'Vartmaan Urea Plus', false, false, 'high'],
-          ['potato', 'Late Blight Watch', 45, 'Aalu mein jhulsa (late blight) ki jaanch. Pattiyon pe kaale dhabe dikhein to Mancozeb spray karein.', 'Check potato for late blight. If black spots on leaves, spray Mancozeb immediately.', 'pest_watch', 'Vartmaan Fungicide Pro', false, false, 'critical'],
-          ['potato', 'Second Earthing Up', 45, 'Aalu mein doosri mitti chadhaayein. Isse aalu hare nahi honge.', 'Second earthing up for potato. This prevents greening of tubers.', 'weeding', null, false, false, 'high'],
-          ['potato', 'Haulm Cutting', 75, 'Aalu ki patti kaatne (dehaulming) ka samay. Katai ke 10-15 din baad khudai karein.', 'Time for haulm cutting in potato. Harvest 10-15 days after cutting.', 'monitoring', null, false, false, 'high'],
-          ['potato', 'Harvest', 90, 'Aalu ki khudai ka samay! Dhoop mein 2-3 ghante sukhayein. Cold storage mein rakhein ya mandi bhejein.', 'Potato harvest time! Dry in sun for 2-3 hours. Store in cold storage or send to mandi.', 'harvest', null, false, false, 'critical']
-        ];
-
-        for (const t of templates) {
-          await pool.query(
-            "INSERT INTO crop_calendar_templates (crop, stage_name, day_offset, message_hi, message_en, task_type, product_suggestion, is_weather_sensitive, skip_if_rain, priority) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
-            t
-          );
-        }
-        console.log("Seeded " + templates.length + " crop calendar templates");
-      }
-    } catch(e) { console.log("Crop calendar table setup:", e.message); }
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS crop_calendar_templates (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          crop VARCHAR(100) NOT NULL,
+          stage_name VARCHAR(200) NOT NULL,
+          day_offset INTEGER NOT NULL,
+          task_type VARCHAR(100),
+          product_suggestion TEXT,
+          message_hi TEXT,
+          message_en TEXT,
+          activity TEXT,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS farmer_crop_registrations (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          farmer_id UUID REFERENCES farmers(id),
+          crop VARCHAR(100) NOT NULL,
+          sow_date DATE NOT NULL,
+          land_area DECIMAL,
+          status VARCHAR(20) DEFAULT 'active',
+          completed_stages TEXT[] DEFAULT '{}',
+          next_reminder_date DATE,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS crop_reminders_log (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          registration_id UUID REFERENCES farmer_crop_registrations(id),
+          farmer_id UUID REFERENCES farmers(id),
+          stage_name VARCHAR(200),
+          message_sent TEXT,
+          sent_at TIMESTAMP DEFAULT NOW()
+        );
+      `);
+      console.log('Crop calendar tables verified (IF NOT EXISTS)');
+    } catch(e) { console.log('Crop calendar tables check:', e.message); }
   })();
 
   // --- CROP CALENDAR API ROUTES ---
