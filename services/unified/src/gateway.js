@@ -918,9 +918,9 @@ async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, 
 
   switch (stage) {
     case 'new': {
-      const welcome = lang === 'hi' ? botConfig.welcome_hi : botConfig.welcome_en;
+      const welcome = (farmerData.language || 'hi') === 'hi' ? botConfig.welcome_hi : botConfig.welcome_en;
       await sendWhatsAppMessage(from, welcome);
-      const askName = lang === 'hi'
+      const askName = (farmerData.language || 'hi') === 'hi'
         ? 'Sabse pehle, aapka shubh naam kya hai?'
         : 'First, what is your name?';
       await sendWhatsAppMessage(from, askName);
@@ -935,7 +935,7 @@ async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, 
     case 'awaiting_name': {
       const name = msgBody.trim().substring(0, 100);
       if (!name || name.length < 2) {
-        await sendWhatsAppMessage(from, lang === 'hi'
+        await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi'
           ? 'Kripya apna naam batayein (kam se kam 2 akshar):'
           : 'Please tell your name (at least 2 characters):');
         return true;
@@ -944,7 +944,7 @@ async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, 
         "UPDATE farmers SET name = $1, onboarding_stage = 'awaiting_location', updated_at = NOW() WHERE id = $2",
         [name, farmerId]
       );
-      const locMsg = lang === 'hi'
+      const locMsg = (farmerData.language || 'hi') === 'hi'
         ? `Dhanyavaad ${name} ji! Ab apni kheti ki location share karein - neeche "Share Location" button dabayein. Isse hum aapke kshetra ki mandi, mausam aur mitti ki jaankari de payenge.\n\nAgar aap skip karna chahein toh "skip" likhein.`
         : `Thank you ${name}! Now please share your farm location by tapping "Share Location" below. This helps us provide local mandi prices, weather & soil info.\n\nType "skip" to continue without sharing location.`;
       await sendLocationRequest(from, locMsg);
@@ -968,64 +968,64 @@ async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, 
           `UPDATE farmers SET location = $1, village = $2, pin_code = $3, onboarding_stage = 'awaiting_crops', updated_at = NOW() WHERE id = $4`,
           [JSON.stringify(locationJson), geo?.village || '', geo?.pin_code || '', farmerId]
         );
-        const confirmLoc = lang === 'hi'
+        const confirmLoc = (farmerData.language || 'hi') === 'hi'
           ? `Location mil gayi! ${geo?.village ? geo.village + ', ' : ''}${geo?.district || ''}, ${geo?.state || ''}\n\nAb apni mukhya fasal chunein:`
           : `Got your location! ${geo?.village ? geo.village + ', ' : ''}${geo?.district || ''}, ${geo?.state || ''}\n\nNow select your main crop:`;
         const sections = [{
-          title: lang === 'hi' ? 'Pramukh Fasalein' : 'Major Crops',
+          title: (farmerData.language || 'hi') === 'hi' ? 'Pramukh Fasalein' : 'Major Crops',
           rows: [
-            { id: 'crop_rice', title: lang === 'hi' ? 'Dhaan (Chawal)' : 'Rice', description: '' },
-            { id: 'crop_wheat', title: lang === 'hi' ? 'Gehun' : 'Wheat', description: '' },
-            { id: 'crop_cotton', title: lang === 'hi' ? 'Kapas' : 'Cotton', description: '' },
-            { id: 'crop_sugarcane', title: lang === 'hi' ? 'Ganna' : 'Sugarcane', description: '' },
-            { id: 'crop_soybean', title: lang === 'hi' ? 'Soyabean' : 'Soybean', description: '' },
-            { id: 'crop_maize', title: lang === 'hi' ? 'Makka' : 'Maize', description: '' },
-            { id: 'crop_tomato', title: lang === 'hi' ? 'Tamatar' : 'Tomato', description: '' },
-            { id: 'crop_onion', title: lang === 'hi' ? 'Pyaaz' : 'Onion', description: '' },
-            { id: 'crop_potato', title: lang === 'hi' ? 'Aloo' : 'Potato', description: '' },
-            { id: 'crop_banana', title: lang === 'hi' ? 'Kela' : 'Banana', description: '' }
+            { id: 'crop_rice', title: (farmerData.language || 'hi') === 'hi' ? 'Dhaan (Chawal)' : 'Rice', description: '' },
+            { id: 'crop_wheat', title: (farmerData.language || 'hi') === 'hi' ? 'Gehun' : 'Wheat', description: '' },
+            { id: 'crop_cotton', title: (farmerData.language || 'hi') === 'hi' ? 'Kapas' : 'Cotton', description: '' },
+            { id: 'crop_sugarcane', title: (farmerData.language || 'hi') === 'hi' ? 'Ganna' : 'Sugarcane', description: '' },
+            { id: 'crop_soybean', title: (farmerData.language || 'hi') === 'hi' ? 'Soyabean' : 'Soybean', description: '' },
+            { id: 'crop_maize', title: (farmerData.language || 'hi') === 'hi' ? 'Makka' : 'Maize', description: '' },
+            { id: 'crop_tomato', title: (farmerData.language || 'hi') === 'hi' ? 'Tamatar' : 'Tomato', description: '' },
+            { id: 'crop_onion', title: (farmerData.language || 'hi') === 'hi' ? 'Pyaaz' : 'Onion', description: '' },
+            { id: 'crop_potato', title: (farmerData.language || 'hi') === 'hi' ? 'Aloo' : 'Potato', description: '' },
+            { id: 'crop_banana', title: (farmerData.language || 'hi') === 'hi' ? 'Kela' : 'Banana', description: '' }
           ]
         }];
         await sendWhatsAppMessage(from, confirmLoc);
         await sendInteractiveList(
           from,
-          lang === 'hi' ? 'Fasal Chunein' : 'Select Crop',
-          lang === 'hi' ? 'Apni mukhya fasal chunein (baad mein aur jod sakte hain):' : 'Select your main crop (you can add more later):',
-          lang === 'hi' ? 'Fasal Dekhein' : 'View Crops',
+          (farmerData.language || 'hi') === 'hi' ? 'Fasal Chunein' : 'Select Crop',
+          (farmerData.language || 'hi') === 'hi' ? 'Apni mukhya fasal chunein (baad mein aur jod sakte hain):' : 'Select your main crop (you can add more later):',
+          (farmerData.language || 'hi') === 'hi' ? 'Fasal Dekhein' : 'View Crops',
           sections
         );
         return true;
       } else if (msgBody.toLowerCase().includes('skip') || msgBody.includes('\u091B\u094B\u0921\u093C')) {
         await pool.query("UPDATE farmers SET onboarding_stage = 'awaiting_crops', updated_at = NOW() WHERE id = $1", [farmerId]);
-        const skipMsg = lang === 'hi'
+        const skipMsg = (farmerData.language || 'hi') === 'hi'
           ? 'Koi baat nahi! Baad mein location share kar sakte hain.\n\nAb apni mukhya fasal chunein:'
           : 'No problem! You can share location later.\n\nNow select your main crop:';
         const sections = [{
-          title: lang === 'hi' ? 'Pramukh Fasalein' : 'Major Crops',
+          title: (farmerData.language || 'hi') === 'hi' ? 'Pramukh Fasalein' : 'Major Crops',
           rows: [
-            { id: 'crop_rice', title: lang === 'hi' ? 'Dhaan (Chawal)' : 'Rice', description: '' },
-            { id: 'crop_wheat', title: lang === 'hi' ? 'Gehun' : 'Wheat', description: '' },
-            { id: 'crop_cotton', title: lang === 'hi' ? 'Kapas' : 'Cotton', description: '' },
-            { id: 'crop_sugarcane', title: lang === 'hi' ? 'Ganna' : 'Sugarcane', description: '' },
-            { id: 'crop_soybean', title: lang === 'hi' ? 'Soyabean' : 'Soybean', description: '' },
-            { id: 'crop_maize', title: lang === 'hi' ? 'Makka' : 'Maize', description: '' },
-            { id: 'crop_tomato', title: lang === 'hi' ? 'Tamatar' : 'Tomato', description: '' },
-            { id: 'crop_onion', title: lang === 'hi' ? 'Pyaaz' : 'Onion', description: '' },
-            { id: 'crop_potato', title: lang === 'hi' ? 'Aloo' : 'Potato', description: '' },
-            { id: 'crop_banana', title: lang === 'hi' ? 'Kela' : 'Banana', description: '' }
+            { id: 'crop_rice', title: (farmerData.language || 'hi') === 'hi' ? 'Dhaan (Chawal)' : 'Rice', description: '' },
+            { id: 'crop_wheat', title: (farmerData.language || 'hi') === 'hi' ? 'Gehun' : 'Wheat', description: '' },
+            { id: 'crop_cotton', title: (farmerData.language || 'hi') === 'hi' ? 'Kapas' : 'Cotton', description: '' },
+            { id: 'crop_sugarcane', title: (farmerData.language || 'hi') === 'hi' ? 'Ganna' : 'Sugarcane', description: '' },
+            { id: 'crop_soybean', title: (farmerData.language || 'hi') === 'hi' ? 'Soyabean' : 'Soybean', description: '' },
+            { id: 'crop_maize', title: (farmerData.language || 'hi') === 'hi' ? 'Makka' : 'Maize', description: '' },
+            { id: 'crop_tomato', title: (farmerData.language || 'hi') === 'hi' ? 'Tamatar' : 'Tomato', description: '' },
+            { id: 'crop_onion', title: (farmerData.language || 'hi') === 'hi' ? 'Pyaaz' : 'Onion', description: '' },
+            { id: 'crop_potato', title: (farmerData.language || 'hi') === 'hi' ? 'Aloo' : 'Potato', description: '' },
+            { id: 'crop_banana', title: (farmerData.language || 'hi') === 'hi' ? 'Kela' : 'Banana', description: '' }
           ]
         }];
         await sendWhatsAppMessage(from, skipMsg);
         await sendInteractiveList(
           from,
-          lang === 'hi' ? 'Fasal Chunein' : 'Select Crop',
-          lang === 'hi' ? 'Apni mukhya fasal chunein:' : 'Select your main crop:',
-          lang === 'hi' ? 'Fasal Dekhein' : 'View Crops',
+          (farmerData.language || 'hi') === 'hi' ? 'Fasal Chunein' : 'Select Crop',
+          (farmerData.language || 'hi') === 'hi' ? 'Apni mukhya fasal chunein:' : 'Select your main crop:',
+          (farmerData.language || 'hi') === 'hi' ? 'Fasal Dekhein' : 'View Crops',
           sections
         );
         return true;
       } else {
-        const retry = lang === 'hi'
+        const retry = (farmerData.language || 'hi') === 'hi'
           ? 'Kripya neeche "Share Location" button dabayein, ya skip karne ke liye "skip" likhein.'
           : 'Please tap "Share Location" button below, or type "skip" to continue.';
         await sendLocationRequest(from, retry);
@@ -1041,7 +1041,7 @@ async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, 
         selectedCrop = msgBody.trim();
       }
       if (!selectedCrop || selectedCrop.length < 2) {
-        await sendWhatsAppMessage(from, lang === 'hi' ? 'Kripya apni fasal batayein ya list se chunein:' : 'Please tell your crop or select from list:');
+        await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi' ? 'Kripya apni fasal batayein ya list se chunein:' : 'Please tell your crop or select from list:');
         return true;
       }
       const crops = selectedCrop.split(',').map(c => c.trim()).filter(Boolean);
@@ -1049,7 +1049,7 @@ async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, 
         "UPDATE farmers SET crops = $1, onboarding_stage = 'awaiting_land_size', updated_at = NOW() WHERE id = $2",
         [crops, farmerId]
       );
-      const askLand = lang === 'hi'
+      const askLand = (farmerData.language || 'hi') === 'hi'
         ? `Bahut accha! "${crops.join(', ')}" - Aapki kitni zameen hai? (acre mein likhein, jaise "5" ya "2.5")\n\nSkip karne ke liye "skip" likhein.`
         : `Great! "${crops.join(', ')}" - How much land do you have? (in acres, e.g. "5" or "2.5")\n\nType "skip" to continue without this.`;
       await sendWhatsAppMessage(from, askLand);
@@ -1066,7 +1066,7 @@ async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, 
         const sizeText = msgBody.replace(/[^0-9.]/g, '');
         const acres = parseFloat(sizeText);
         if (isNaN(acres) || acres <= 0 || acres > 10000) {
-          await sendWhatsAppMessage(from, lang === 'hi'
+          await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi'
             ? 'Kripya sahi sankhya likhein (jaise 2, 5, 10.5) ya "skip" likhein:'
             : 'Please enter a valid number (e.g. 2, 5, 10.5) or type "skip":');
           return true;
@@ -1076,7 +1076,7 @@ async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, 
           [acres, farmerId]
         );
       }
-      const complete = lang === 'hi'
+      const complete = (farmerData.language || 'hi') === 'hi'
         ? `Shaandaar! Aapka registration pura ho gaya.\n\nAap ab yeh kar sakte hain:\n1. Mandi Bhav - "mandi" likhein\n2. Mausam - "mausam" likhein\n3. Fasal Salah - foto bhejein\n4. Mitti Jaanch - "soil" likhein\n\nKoi bhi sawaal puchein!`
         : `Excellent! Your registration is complete.\n\nYou can now:\n1. Mandi Prices - type "mandi"\n2. Weather - type "weather"\n3. Crop Advice - send a photo\n4. Soil Info - type "soil"\n\nAsk me anything!`;
       await sendWhatsAppMessage(from, complete);
@@ -1278,7 +1278,7 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
     const steps = linkedFlow.steps.sort((a, b) => (a.step_order || 0) - (b.step_order || 0));
     for (const step of steps) {
       if (step.response_type === 'text' || step.step_type === 'text') {
-        const text = lang === 'hi' ? (step.message_hi || step.content_hi || step.message_en || step.content_en || '') : (step.message_en || step.content_en || step.message_hi || step.content_hi || '');
+        const text = (farmerData.language || 'hi') === 'hi' ? (step.message_hi || step.content_hi || step.message_en || step.content_en || '') : (step.message_en || step.content_en || step.message_hi || step.content_hi || '');
         if (text) await sendWhatsAppMessage(from, text);
       } else if (step.response_type === 'ai_query' || step.step_type === 'ai_query') {
         // Let AI handle with a specific prompt context
@@ -1287,23 +1287,23 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
         try {
           const btns = typeof step.options === 'string' ? JSON.parse(step.options) : (step.options || []);
           if (btns.length > 0) {
-            const text = lang === 'hi' ? (step.message_hi || step.content_hi || '') : (step.message_en || step.content_en || '');
+            const text = (farmerData.language || 'hi') === 'hi' ? (step.message_hi || step.content_hi || '') : (step.message_en || step.content_en || '');
             await sendWhatsAppButtons(from, text || 'Choose an option:', btns.slice(0, 3).map(b => ({ id: b.id || b.key, title: (b.title || b.label || '').substring(0, 20) })));
           }
         } catch (e) { console.error('Flow button parse error:', e.message); }
       } else if (step.response_type === 'location_request') {
-        const locText = lang === 'hi' ? (step.message_hi || 'Apni location share karein') : (step.message_en || 'Share your location');
+        const locText = (farmerData.language || 'hi') === 'hi' ? (step.message_hi || 'Apni location share karein') : (step.message_en || 'Share your location');
         await sendLocationRequest(from, locText);
       } else if (step.response_type === 'interactive_list') {
         try {
           const listOpts = typeof step.options === 'string' ? JSON.parse(step.options) : (step.options || []);
-          const listText = lang === 'hi' ? (step.message_hi || '') : (step.message_en || '');
+          const listText = (farmerData.language || 'hi') === 'hi' ? (step.message_hi || '') : (step.message_en || '');
           const sections = [{ title: 'Options', rows: listOpts.map(o => ({ id: o.id || o.key, title: (o.title || o.label || '').substring(0, 24), description: o.description || '' })) }];
           await sendInteractiveList(from, '', listText || 'Choose:', 'Select', sections);
         } catch (e) { console.error('Flow list parse error:', e.message); }
       } else if (step.response_type === 'media' || step.response_type === 'image') {
         if (step.media_url) {
-          const mediaCaption = lang === 'hi' ? (step.message_hi || '') : (step.message_en || '');
+          const mediaCaption = (farmerData.language || 'hi') === 'hi' ? (step.message_hi || '') : (step.message_en || '');
           await sendWhatsAppImage(from, step.media_url, mediaCaption);
         }
       }
@@ -1319,7 +1319,7 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
     const crops = Array.isArray(farmerData.crops) ? farmerData.crops : (farmerData.crops || '').split(',');
     const primaryCrop = crops[0] ? translateCrop(crops[0].trim()) : '';
     if (primaryCrop) {
-      await sendWhatsAppMessage(from, lang === 'hi' ? '🌾 "' + primaryCrop + '" ka mandi bhav dhundh raha hoon...' : 'Looking up mandi prices for "' + primaryCrop + '"...');
+      await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi' ? '🌾 "' + primaryCrop + '" ka mandi bhav dhundh raha hoon...' : 'Looking up mandi prices for "' + primaryCrop + '"...');
       let prices = await getMandiPrices(primaryCrop, '');
       if (!prices.length) prices = await getMandiPrices(crops[0].trim(), '');
       const reply = formatMandiPrices(prices, primaryCrop);
@@ -1328,7 +1328,7 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
     // Show crop selection list for next lookup
     setPendingAction(farmerId, 'mandi_crop');
     await sendWhatsAppList(from,
-      lang === 'hi' ? '🌾 Kis fasal ka bhav dekhna hai? Neeche se chunein ya naam type karein:' : 'Select a crop or type its name:',
+      (farmerData.language || 'hi') === 'hi' ? '🌾 Kis fasal ka bhav dekhna hai? Neeche se chunein ya naam type karein:' : 'Select a crop or type its name:',
       'Fasal Chunein',
       [{ title: 'Pramukh Fasalein', rows: popularCrops }]
     );
@@ -1341,7 +1341,7 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
   // GOVERNMENT SCHEMES
 
       if (menuKey === 'govt_schemes' || menuKey === 'government_schemes' || menuKey === 'sarkari_yojana') {
-    await sendWhatsAppMessage(from, lang === 'hi' ? '🏛️ Sarkari yojanayen dhundh raha hoon...' : 'Looking up government schemes...');
+    await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi' ? '🏛️ Sarkari yojanayen dhundh raha hoon...' : 'Looking up government schemes...');
     const schemes = await getGovtSchemes(farmerData.state_name || '');
     const reply = formatGovtSchemes(schemes, farmerData);
     await sendWhatsAppMessage(from, reply);
@@ -1354,7 +1354,7 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
   if (menuKey === 'soil_info' || menuKey === 'mitti') {
     const district = farmerData.district || farmerData.village || '';
     if (district) {
-      await sendWhatsAppMessage(from, lang === 'hi' ? '🌍 "' + district + '" ki mitti ki jankari dhundh raha hoon...' : 'Looking up soil data for "' + district + '"...');
+      await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi' ? '🌍 "' + district + '" ki mitti ki jankari dhundh raha hoon...' : 'Looking up soil data for "' + district + '"...');
       const soilData = await getSoilData('', district);
       const reply = formatSoilData(soilData, district);
       await sendWhatsAppMessage(from, reply);
@@ -1363,12 +1363,12 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
     setPendingAction(farmerId, 'soil_district');
     if (popularDistricts.length <= 3) {
       await sendWhatsAppButtons(from,
-        lang === 'hi' ? '🌍 Kis district ki mitti ki jankari chahiye? Chunein ya naam type karein:' : 'Select district or type name:',
+        (farmerData.language || 'hi') === 'hi' ? '🌍 Kis district ki mitti ki jankari chahiye? Chunein ya naam type karein:' : 'Select district or type name:',
         popularDistricts.map(d => ({ id: d.id, title: d.title }))
       );
     } else {
       await sendWhatsAppList(from,
-        lang === 'hi' ? '🌍 Kis district ki mitti ki jankari chahiye? Chunein ya naam type karein:' : 'Select district or type name:',
+        (farmerData.language || 'hi') === 'hi' ? '🌍 Kis district ki mitti ki jankari chahiye? Chunein ya naam type karein:' : 'Select district or type name:',
         'District Chunein',
         [{ title: 'Districts', rows: popularDistricts }]
       );
@@ -1383,19 +1383,19 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
   if (menuKey === 'weather' || menuKey === 'mausam') {
     const district = farmerData.district || farmerData.village || '';
     if (district) {
-      await sendWhatsAppMessage(from, lang === 'hi' ? '🌤️ "' + district + '" ka mausam dhundh raha hoon...' : 'Looking up weather for "' + district + '"...');
+      await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi' ? '🌤️ "' + district + '" ka mausam dhundh raha hoon...' : 'Looking up weather for "' + district + '"...');
       const weatherMsg = await getWeather(district);
       if (weatherMsg) {
         await sendWhatsAppMessage(from, weatherMsg);
         setPendingAction(farmerId, 'weather_city');
-        await sendWhatsAppMessage(from, lang === 'hi' ? 'Kisi aur shehar ka mausam jaanne ke liye naam likhen, ya "menu" type karein.' : 'Type another city name, or type "menu".');
+        await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi' ? 'Kisi aur shehar ka mausam jaanne ke liye naam likhen, ya "menu" type karein.' : 'Type another city name, or type "menu".');
       } else {
-        await sendWhatsAppMessage(from, lang === 'hi' ? '❌ "' + district + '" ka mausam nahi mil paya. Kripya sahi shehar/district naam likhen.' : 'Could not find weather for "' + district + '". Please type correct city name.');
+        await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi' ? '❌ "' + district + '" ka mausam nahi mil paya. Kripya sahi shehar/district naam likhen.' : 'Could not find weather for "' + district + '". Please type correct city name.');
         setPendingAction(farmerId, 'weather_city');
       }
     } else {
       setPendingAction(farmerId, 'weather_city');
-      await sendWhatsAppMessage(from, lang === 'hi'
+      await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi'
         ? '🌤️ Mausam ki jankari ke liye apna shehar/district type karein (jaise: Karnal, Lucknow, Indore)'
         : 'Type your city/district name for weather info');
     }
@@ -1428,7 +1428,7 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
   if (menuKey === 'fertilizer_advice') {
     setPendingAction(farmerId, 'fertilizer_crop');
     await sendWhatsAppList(from,
-      lang === 'hi'
+      (farmerData.language || 'hi') === 'hi'
         ? '🧪 *Khad Salah*\n\nKis fasal ke liye khad ki salah chahiye? Neeche se chunein ya fasal ka naam type karein:'
         : 'Which crop do you need fertilizer advice for?',
       'Fasal Chunein',
@@ -1442,7 +1442,7 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
   // CROP DOCTOR
   if (menuKey === 'crop_doctor') {
     setPendingAction(farmerId, 'crop_doctor_photo');
-    await sendWhatsAppMessage(from, lang === 'hi'
+    await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi'
       ? '🔬 *Fasal Doctor*\n\nApni beemaar fasal ki photo bhejein, hum AI se bimari pahchaanenge!\n\n📸 *Photo kaise lein:*\n• Paas se lein (close-up)\n• Rog wali patti ya hissa dikhayein\n• Acchi roshni mein lein\n\nPhoto bhejein ya samasya likhen:'
       : '🔬 *Crop Doctor*\n\nSend a photo of the affected crop for AI diagnosis!\n\n📸 *Photo tips:*\n• Take a close-up\n• Show the affected leaf/part\n• Good lighting\n\nSend photo or describe the problem:');
     activateAiChat(farmerId);
@@ -1452,7 +1452,7 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
 
   // MODERN FARMING
   if (menuKey === 'modern_farming') {
-    await sendWhatsAppMessage(from, lang === 'hi'
+    await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi'
       ? '🌱 *Adhunik Kheti*\n\nAap kisi bhi kheti se judi jaankari poochh sakte hain:\n• Nayi techniques\n• Beej aur ugaane ka tarika\n• Keetnashak aur dawaiyan\n• Organic kheti\n\nApna sawaal poochhein:'
       : '🌱 *Modern Farming*\n\nAsk about any farming topic:\n• New techniques\n• Seeds & cultivation\n• Pest management\n• Organic farming\n\nAsk your question:');
     activateAiChat(farmerId);
@@ -1463,7 +1463,7 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
     // AI CHAT MODE
   if (menuKey === 'ai_chat' || menuKey === 'ai_se_baat') {
     activateAiChat(farmerId);
-    await sendWhatsAppMessage(from, lang === 'hi'
+    await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi'
       ? '🤖 *AI Chat Mode ON*\n\nAap ab AI se seedha baat kar sakte hain. Apna sawaal poochhein!\n\n⏱️ 10 minute baad menu wapas aa jayega.\n📋 Menu dekhne ke liye "menu" type karein.'
       : '🤖 *AI Chat Mode ON*\n\nYou can now chat directly with AI. Ask your question!\n\n⏱️ Session expires in 10 minutes.\n📋 Type "menu" to go back.');
     return true;
@@ -1471,7 +1471,7 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
 
   // TALK TO EXPERT
   if (menuKey === 'talk_to_expert') {
-    await sendWhatsAppMessage(from, lang === 'hi'
+    await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi'
       ? '👨‍🔬 Aapka sandesh hamare visheshagya ko bhej diya gaya hai. Woh jaldi se aapko call karenge.\n\n📞 Seedha baat karne ke liye call karein: 1800-XXX-XXXX\n\n_"menu" type karein aur options dekhein._'
       : 'Your message has been forwarded to our expert. They will call you soon.\n\n📞 Direct call: 1800-XXX-XXXX\n\nType "menu" for options.');
     return true;
@@ -1647,6 +1647,7 @@ app.post('/webhook', async (req, res) => {
             await pool.query('UPDATE farmers SET total_interactions = COALESCE(total_interactions, 0) + 1, last_interaction_at = NOW(), updated_at = NOW() WHERE phone = $1', [from]);
           }
           const farmerData = farmer.rows[0];
+          const lang = farmerData.language || 'hi';
           const farmerId = farmerData.id;
 
           // 2. Find or create chat session
@@ -1733,8 +1734,8 @@ app.post('/webhook', async (req, res) => {
             const lang = farmerData.language || 'hi';
             setPendingAction(farmerId, 'finance_type');
             await sendWhatsAppButtons(from,
-              lang === 'hi' ? '📒 *Farm Hisaab-Kitaab*\n\nAap kya karna chahte hain?' : '📒 *Farm Finance*\n\nWhat would you like to do?',
-              [{ id: 'finance_income', title: lang === 'hi' ? '💰 Aay Jodein' : '💰 Add Income' }, { id: 'finance_expense', title: lang === 'hi' ? '💸 Kharch Jodein' : '💸 Add Expense' }, { id: 'finance_summary', title: lang === 'hi' ? '📊 Hisaab Dekhein' : '📊 View Summary' }]
+              (farmerData.language || 'hi') === 'hi' ? '📒 *Farm Hisaab-Kitaab*\n\nAap kya karna chahte hain?' : '📒 *Farm Finance*\n\nWhat would you like to do?',
+              [{ id: 'finance_income', title: (farmerData.language || 'hi') === 'hi' ? '💰 Aay Jodein' : '💰 Add Income' }, { id: 'finance_expense', title: (farmerData.language || 'hi') === 'hi' ? '💸 Kharch Jodein' : '💸 Add Expense' }, { id: 'finance_summary', title: (farmerData.language || 'hi') === 'hi' ? '📊 Hisaab Dekhein' : '📊 View Summary' }]
             );
             await pool.query(
               "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
@@ -1777,7 +1778,7 @@ app.post('/webhook', async (req, res) => {
             msgBody = 'mera calendar';
             lowerMsg = 'mera calendar';
           } else if (lowerMsg === 'set_district' || lowerMsg === 'set_district') {
-            const distPrompt = lang === 'hi' ? 'Apna district naam bhejein (jaise: district Lucknow)' : 'Send your district name (e.g. district Lucknow)';
+            const distPrompt = (farmerData.language || 'hi') === 'hi' ? 'Apna district naam bhejein (jaise: district Lucknow)' : 'Send your district name (e.g. district Lucknow)';
             await sendWhatsAppMessage(from, distPrompt);
             continue;
           } else if (lowerMsg === 'fasal_register' || lowerMsg === 'fasal_register') {
@@ -1793,12 +1794,12 @@ app.post('/webhook', async (req, res) => {
                 const { rows: distMatch } = await pool.query("SELECT id, name FROM districts_master WHERE LOWER(name) LIKE $1 LIMIT 1", ['%' + distName.toLowerCase() + '%']);
                 if (distMatch.length) {
                   await pool.query("UPDATE farmers SET district_id = $1 WHERE id = $2", [distMatch[0].id, farmerId]);
-                  const dMsg = lang === 'hi'
+                  const dMsg = (farmerData.language || 'hi') === 'hi'
                     ? '\u2705 District set: *' + distMatch[0].name + '*\nAb aapka khaad schedule aapke area ke hisaab se adjust hoga!'
                     : '\u2705 District set: *' + distMatch[0].name + '*\nYour nutrition schedule will now be adjusted for your area!';
                   await sendWhatsAppMessage(from, dMsg);
                 } else {
-                  const noD = lang === 'hi' ? '\u274C "' + distName + '" nahi mila. Sahi district naam bhejein.' : '\u274C District "' + distName + '" not found. Send correct name.';
+                  const noD = (farmerData.language || 'hi') === 'hi' ? '\u274C "' + distName + '" nahi mila. Sahi district naam bhejein.' : '\u274C District "' + distName + '" not found. Send correct name.';
                   await sendWhatsAppMessage(from, noD);
                 }
               } catch(de) { console.log('District update error:', de.message); }
@@ -1839,7 +1840,7 @@ app.post('/webhook', async (req, res) => {
                   }
                   await sendWhatsAppMessage(from, missingMsg);
                 await sendWhatsAppButtons(from,
-                  lang === 'hi' ? 'Kya karna chahte hain?' : 'What next?',
+                  (farmerData.language || 'hi') === 'hi' ? 'Kya karna chahte hain?' : 'What next?',
                   [
                     { id: 'set_district', title: 'District Set Karein' },
                     { id: 'mera_calendar', title: 'Mera Calendar' },
@@ -1850,30 +1851,30 @@ app.post('/webhook', async (req, res) => {
                 }
 
               } else {
-                const noMsg = lang === 'hi' ? 'Abhi koi active fasal calendar nahi hai. "Fasal register" bhejein.' : 'No active crop calendar. Send "Fasal register" to start.';
+                const noMsg = (farmerData.language || 'hi') === 'hi' ? 'Abhi koi active fasal calendar nahi hai. "Fasal register" bhejein.' : 'No active crop calendar. Send "Fasal register" to start.';
                 await sendWhatsAppMessage(from, noMsg);
               }
             } catch (nErr) {
               console.error('Nutrition schedule error:', nErr.message);
-              await sendWhatsAppMessage(from, lang === 'hi' ? 'Schedule load nahi ho paya.' : 'Could not load schedule.');
+              await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi' ? 'Schedule load nahi ho paya.' : 'Could not load schedule.');
             }
             continue;
           }
           if (lowerMsg.includes('fasal register') || lowerMsg.includes('crop register') || lowerMsg === 'register crop' || lowerMsg === 'meri fasal' || lowerMsg.includes('calendar register') || lowerMsg === 'fasal calendar' || lowerMsg === 'fasal_calendar') {
             const lang = farmerData.language || 'hi';
             const crops = ['wheat', 'rice', 'sugarcane', 'mustard', 'potato'];
-            const cropLabels = lang === 'hi' 
+            const cropLabels = (farmerData.language || 'hi') === 'hi' 
               ? ['Gehun (Wheat)', 'Dhaan (Rice)', 'Ganna (Sugarcane)', 'Sarson (Mustard)', 'Aalu (Potato)']
               : ['Wheat', 'Rice', 'Sugarcane', 'Mustard', 'Potato'];
 
             const sections = [{
-              title: lang === 'hi' ? 'Fasal chunein' : 'Select Crop',
-              rows: crops.map((c, i) => ({ id: 'crop_reg_' + c, title: cropLabels[i], description: lang === 'hi' ? 'Calendar shuru karein' : 'Start calendar' }))
+              title: (farmerData.language || 'hi') === 'hi' ? 'Fasal chunein' : 'Select Crop',
+              rows: crops.map((c, i) => ({ id: 'crop_reg_' + c, title: cropLabels[i], description: (farmerData.language || 'hi') === 'hi' ? 'Calendar shuru karein' : 'Start calendar' }))
             }];
 
             await sendWhatsAppList(from,
-              lang === 'hi' ? '🌾 Fasal Calendar Registration\n\nKonsiKonsi fasal ka calendar shuru karna chahte hain? Buwai ki taareekh dene ke baad har stage pe automatic reminder milega.' : '🌾 Crop Calendar Registration\n\nWhich crop? After sowing date, you get automatic stage reminders.',
-              lang === 'hi' ? 'Fasal chunein' : 'Select Crop',
+              (farmerData.language || 'hi') === 'hi' ? '🌾 Fasal Calendar Registration\n\nKonsiKonsi fasal ka calendar shuru karna chahte hain? Buwai ki taareekh dene ke baad har stage pe automatic reminder milega.' : '🌾 Crop Calendar Registration\n\nWhich crop? After sowing date, you get automatic stage reminders.',
+              (farmerData.language || 'hi') === 'hi' ? 'Fasal chunein' : 'Select Crop',
               sections
             );
             setPendingAction(farmerId, 'crop_calendar_select');
@@ -1885,9 +1886,9 @@ app.post('/webhook', async (req, res) => {
             const { rows: regs } = await pool.query("SELECT * FROM farmer_crop_registrations WHERE farmer_id=$1 AND status='active' ORDER BY created_at DESC", [farmerId]);
 
             if (regs.length === 0) {
-              await sendWhatsAppMessage(from, lang === 'hi' ? 'Aapne abhi koi fasal register nahi ki. "fasal register" likhen shuru karne ke liye.' : 'No crops registered. Type "crop register" to start.');
+              await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi' ? 'Aapne abhi koi fasal register nahi ki. "fasal register" likhen shuru karne ke liye.' : 'No crops registered. Type "crop register" to start.');
             } else {
-              let msg = lang === 'hi' ? '📋 *Aapki Registered Fasalein:*\n\n' : '📋 *Your Registered Crops:*\n\n';
+              let msg = (farmerData.language || 'hi') === 'hi' ? '📋 *Aapki Registered Fasalein:*\n\n' : '📋 *Your Registered Crops:*\n\n';
               for (const r of regs) {
                 const sowDate = new Date(r.sow_date);
                 const days = Math.floor((new Date() - sowDate) / (1000 * 60 * 60 * 24));
@@ -1903,7 +1904,7 @@ app.post('/webhook', async (req, res) => {
                 }
                 msg += '\n';
               }
-              msg += lang === 'hi' ? 'Nayi fasal: "fasal register"' : 'Add more: "crop register"';
+              msg += (farmerData.language || 'hi') === 'hi' ? 'Nayi fasal: "fasal register"' : 'Add more: "crop register"';
               await sendWhatsAppMessage(from, msg);
             }
             continue;
@@ -1952,7 +1953,7 @@ app.post('/webhook', async (req, res) => {
         if (crop) {
           setPendingAction(farmerId, 'crop_calendar_date', { crop: crop });
           await sendWhatsAppButtons(from,
-              lang === 'hi' ? 'Buwai kab ki? (ya date bhejein jaise 10/05/2026)' : 'When did you sow? (or send date like 10/05/2026)',
+              (farmerData.language || 'hi') === 'hi' ? 'Buwai kab ki? (ya date bhejein jaise 10/05/2026)' : 'When did you sow? (or send date like 10/05/2026)',
               [
                 { id: 'sow_today', title: 'Aaj' },
                 { id: 'sow_yesterday', title: 'Kal' },
@@ -1960,7 +1961,7 @@ app.post('/webhook', async (req, res) => {
               ]
             )
         } else {
-          await sendWhatsAppMessage(from, lang === 'hi' ? 'Kripya list mein se fasal chunein.' : 'Please select from the list.');
+          await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi' ? 'Kripya list mein se fasal chunein.' : 'Please select from the list.');
         }
         continue;
       }
@@ -1987,7 +1988,7 @@ app.post('/webhook', async (req, res) => {
             });
             const { rows: tCount } = await pool.query("SELECT COUNT(*) as cnt FROM crop_calendar_templates WHERE LOWER(crop)=LOWER($1)", [crop]);
             await sendWhatsAppMessage(from,
-              lang === 'hi'
+              (farmerData.language || 'hi') === 'hi'
                 ? '\u2705 *Fasal Calendar Registered!*\n\n🌾 Fasal: ' + crop.charAt(0).toUpperCase() + crop.slice(1) + '\n📅 Buwai: ' + sowDate.toLocaleDateString('en-IN') + '\n📋 ' + (tCount[0].cnt || 0) + ' stages ka calendar set\n\n\u{1F514} Har zaroori stage pe WhatsApp reminder milega!\n\nProgress: "mera calendar"'
                 : '\u2705 *Crop Calendar Registered!*\n\n🌾 Crop: ' + crop.charAt(0).toUpperCase() + crop.slice(1) + '\n📅 Sown: ' + sowDate.toLocaleDateString('en-IN') + '\n📋 ' + (tCount[0].cnt || 0) + ' stages set\n\n\u{1F514} You will get WhatsApp reminders at each stage!\n\nCheck: "my calendar"'
             );
@@ -1999,23 +2000,22 @@ app.post('/webhook', async (req, res) => {
               if (schedRes.data.actions && schedRes.data.actions.length > 0) {
                 await new Promise(r => setTimeout(r, 1500));
                 await sendWhatsAppButtons(from,
-                  lang === 'hi' ? 'Aap kya dekhna chahenge?' : 'What would you like to see?',
+                  (farmerData.language || 'hi') === 'hi' ? 'Aap kya dekhna chahenge?' : 'What would you like to see?',
                   [
                     { id: 'mera_schedule', title: 'Khaad Schedule' },
                     { id: 'mera_calendar', title: 'Mera Calendar' },
                     { id: 'set_district', title: 'District Set Karein' }
                   ]
                 )
-                await sendWhatsAppMessage(from, tipMsg);
               }
             } catch(nErr) { console.log('Post-reg nutrition msg error:', nErr.message); }
 
           } catch(regErr) {
             console.log('Crop reg error:', regErr.message);
-            await sendWhatsAppMessage(from, lang === 'hi' ? 'Registration mein error. Dobara try karein.' : 'Registration error. Try again.');
+            await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi' ? 'Registration mein error. Dobara try karein.' : 'Registration error. Try again.');
           }
         } else {
-          await sendWhatsAppMessage(from, lang === 'hi' ? 'Taareekh samajh nahi aayi. DD/MM/YYYY likhen (jaise 15/11/2024) ya "aaj" likhen.' : 'Could not parse date. Use DD/MM/YYYY or type "today".');
+          await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi' ? 'Taareekh samajh nahi aayi. DD/MM/YYYY likhen (jaise 15/11/2024) ya "aaj" likhen.' : 'Could not parse date. Use DD/MM/YYYY or type "today".');
         }
         continue;
       }
@@ -2026,7 +2026,7 @@ if (pendingAction && msgBody.trim()) {
             if (pendingAction === 'mandi_crop') {
               clearPendingAction(farmerId);
               let crop = cropIdMapping[msgBody.trim()] || translateCrop(msgBody.trim());
-              await sendWhatsAppMessage(from, lang === 'hi'
+              await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi'
                 ? '🌾 "' + crop + '" ka mandi bhav dhundh raha hoon...'
                 : 'Looking up prices for "' + crop + '"...');
               let prices = await getMandiPrices(crop, '');
@@ -2039,14 +2039,14 @@ if (pendingAction && msgBody.trim()) {
                 const stateRows = states.slice(0, 10).map(s => ({ id: 'state_' + s.replace(/\s/g, '_'), title: s.substring(0, 24) }));
                 pendingActions[farmerId] = { action: 'mandi_state', timestamp: Date.now(), crop: crop };
                 await sendWhatsAppList(from,
-                  lang === 'hi' ? '📍 Kisi khaas state ka bhav dekhein, ya "menu" type karein:' : 'Filter by state, or type "menu":',
+                  (farmerData.language || 'hi') === 'hi' ? '📍 Kisi khaas state ka bhav dekhein, ya "menu" type karein:' : 'Filter by state, or type "menu":',
                   'State Chunein',
                   [{ title: 'States', rows: stateRows }]
                 );
               } else {
                 setPendingAction(farmerId, 'mandi_crop');
                 await sendWhatsAppList(from,
-                  lang === 'hi' ? 'Kisi aur fasal ka bhav dekhein ya "menu" type karein:' : 'Check another crop or type "menu":',
+                  (farmerData.language || 'hi') === 'hi' ? 'Kisi aur fasal ka bhav dekhein ya "menu" type karein:' : 'Check another crop or type "menu":',
                   'Fasal Chunein',
                   [{ title: 'Pramukh Fasalein', rows: popularCrops }]
                 );
@@ -2067,7 +2067,7 @@ if (pendingAction && msgBody.trim()) {
               if (msgBody.trim().startsWith('state_')) {
                 state = msgBody.trim().replace('state_', '').replace(/_/g, ' ');
               }
-              await sendWhatsAppMessage(from, lang === 'hi'
+              await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi'
                 ? '🌾 "' + crop + '" ka bhav "' + state + '" mein dhundh raha hoon...'
                 : 'Looking up "' + crop + '" prices in "' + state + '"...');
               const prices = await getMandiPrices(crop, state);
@@ -2079,12 +2079,12 @@ if (pendingAction && msgBody.trim()) {
                 const distRows = districts.slice(0, 10).map(d => ({ id: 'mdist_' + d.replace(/\s/g, '_'), title: d.substring(0, 24) }));
                 pendingActions[farmerId] = { action: 'mandi_district', timestamp: Date.now(), crop: crop, state: state };
                 await sendWhatsAppList(from,
-                  lang === 'hi' ? '📍 Kisi khaas district ka bhav dekhein, ya "menu" type karein:' : 'Filter by district, or type "menu":',
+                  (farmerData.language || 'hi') === 'hi' ? '📍 Kisi khaas district ka bhav dekhein, ya "menu" type karein:' : 'Filter by district, or type "menu":',
                   'District Chunein',
                   [{ title: 'Districts', rows: distRows }]
                 );
               } else {
-                await sendWhatsAppMessage(from, lang === 'hi'
+                await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi'
                   ? '_"menu" type karein aur options dekhein._'
                   : '_Type "menu" for options._');
               }
@@ -2104,13 +2104,13 @@ const state = pendingData.state || '';
               if (district.startsWith('mdist_')) {
                 district = district.replace('mdist_', '').replace(/_/g, ' ');
               }
-              await sendWhatsAppMessage(from, lang === 'hi'
+              await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi'
                 ? '🌾 "' + crop + '" ka bhav "' + district + '" mein dhundh raha hoon...'
                 : 'Looking up "' + crop + '" prices in "' + district + '"...');
               const prices = await getMandiPrices(crop, state, district);
               const reply = formatMandiPrices(prices, crop + ' (' + district + ')');
               await sendWhatsAppMessage(from, reply);
-              await sendWhatsAppMessage(from, lang === 'hi'
+              await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi'
                 ? '_"menu" type karein aur options dekhein._'
                 : '_Type "menu" for options._');
               await pool.query(
@@ -2125,12 +2125,12 @@ const state = pendingData.state || '';
               const input = msgBody.trim().toLowerCase();
               if (input === 'finance_income' || input === 'income' || input === 'aay' || input === 'bikri') {
                 pendingActions[farmerId] = { action: 'finance_amount', timestamp: Date.now(), finType: 'income' };
-                await sendWhatsAppMessage(from, lang === 'hi'
+                await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi'
                   ? '💰 Kitni aay (income) hui? Sirf number likhein (jaise: 5000)'
                   : '💰 How much income? Enter amount (e.g. 5000)');
               } else if (input === 'finance_expense' || input === 'expense' || input === 'kharch' || input === 'kharcha') {
                 pendingActions[farmerId] = { action: 'finance_amount', timestamp: Date.now(), finType: 'expense' };
-                await sendWhatsAppMessage(from, lang === 'hi'
+                await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi'
                   ? '💸 Kitna kharch hua? Sirf number likhein (jaise: 2000)'
                   : '💸 How much expense? Enter amount (e.g. 2000)');
               } else if (input === 'finance_summary' || input === 'summary' || input === 'hisaab') {
@@ -2149,12 +2149,12 @@ const state = pendingData.state || '';
                   const inc = parseFloat((totals.rows.find(t => t.type === 'income') || {}).total || 0);
                   const exp = parseFloat((totals.rows.find(t => t.type === 'expense') || {}).total || 0);
                   const profit = inc - exp;
-                  const summaryMsg = lang === 'hi'
+                  const summaryMsg = (farmerData.language || 'hi') === 'hi'
                     ? '📊 *Is Mahine Ka Hisaab:*\n\n💰 Aay (Income): ₹' + inc.toLocaleString('en-IN') + '\n💸 Kharch (Expense): ₹' + exp.toLocaleString('en-IN') + '\n' + (profit >= 0 ? '✅ Munafa (Profit): ₹' + profit.toLocaleString('en-IN') : '❌ Nuksan (Loss): ₹' + Math.abs(profit).toLocaleString('en-IN')) + '\n\n_"menu" type karein aur options dekhein._'
                     : '📊 *This Month Summary:*\n\n💰 Income: ₹' + inc.toLocaleString('en-IN') + '\n💸 Expense: ₹' + exp.toLocaleString('en-IN') + '\n' + (profit >= 0 ? '✅ Profit: ₹' + profit.toLocaleString('en-IN') : '❌ Loss: ₹' + Math.abs(profit).toLocaleString('en-IN')) + '\n\n_Type "menu" for options._';
                   await sendWhatsAppMessage(from, summaryMsg);
                 } catch(fe) {
-                  await sendWhatsAppMessage(from, lang === 'hi' ? 'Kuch galat ho gaya. Kripya phir koshish karein.' : 'Something went wrong. Please try again.');
+                  await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi' ? 'Kuch galat ho gaya. Kripya phir koshish karein.' : 'Something went wrong. Please try again.');
                 }
               } else {
                 clearPendingAction(farmerId);
@@ -2171,7 +2171,7 @@ const state = pendingData.state || '';
               const pendData = getPendingData(farmerId);
               const amt = parseFloat(msgBody.trim().replace(/[^0-9.]/g, ''));
               if (isNaN(amt) || amt <= 0) {
-                await sendWhatsAppMessage(from, lang === 'hi' ? '❌ Sahi amount likhein (jaise: 5000)' : '❌ Enter valid amount (e.g. 5000)');
+                await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi' ? '❌ Sahi amount likhein (jaise: 5000)' : '❌ Enter valid amount (e.g. 5000)');
                 continue;
               }
               const categories = pendData.finType === 'expense'
@@ -2179,7 +2179,7 @@ const state = pendingData.state || '';
                 : [{ id: 'cat_crop_sale', title: 'Fasal Bikri (Crop Sale)' }, { id: 'cat_dairy', title: 'Dairy Income' }, { id: 'cat_labor_income', title: 'Majdoori Income' }, { id: 'cat_subsidy', title: 'Subsidy/Scheme' }, { id: 'cat_other_income', title: 'Anya (Other)' }];
               pendingActions[farmerId] = { action: 'finance_category', timestamp: Date.now(), finType: pendData.finType, amount: amt };
               await sendWhatsAppList(from,
-                lang === 'hi' ? '📋 ₹' + amt.toLocaleString('en-IN') + ' kis category mein hai?' : '📋 ₹' + amt.toLocaleString('en-IN') + ' - select category:',
+                (farmerData.language || 'hi') === 'hi' ? '📋 ₹' + amt.toLocaleString('en-IN') + ' kis category mein hai?' : '📋 ₹' + amt.toLocaleString('en-IN') + ' - select category:',
                 'Category Chunein',
                 [{ title: pendData.finType === 'expense' ? 'Kharch Categories' : 'Aay Categories', rows: categories }]
               );
@@ -2211,12 +2211,12 @@ const state = pendingData.state || '';
                   [farmerId, finType, amount, category]
                 );
                 const emoji = finType === 'income' ? '💰' : '💸';
-                const confirmMsg = lang === 'hi'
+                const confirmMsg = (farmerData.language || 'hi') === 'hi'
                   ? emoji + ' *Saved!*\n\n' + (finType === 'income' ? 'Aay' : 'Kharch') + ': ₹' + amount.toLocaleString('en-IN') + '\nCategory: ' + category + '\n\n_Aur entry karne ke liye "hisaab" likhein ya "menu" dekhein._'
                   : emoji + ' *Saved!*\n\n' + (finType === 'income' ? 'Income' : 'Expense') + ': ₹' + amount.toLocaleString('en-IN') + '\nCategory: ' + category + '\n\n_Type "hisaab" for more or "menu" for options._';
                 await sendWhatsAppMessage(from, confirmMsg);
               } catch(fe) {
-                await sendWhatsAppMessage(from, lang === 'hi' ? 'Entry save nahi ho payi. Phir try karein.' : 'Could not save. Try again.');
+                await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi' ? 'Entry save nahi ho payi. Phir try karein.' : 'Could not save. Try again.');
               }
               await pool.query(
                 "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
@@ -2229,13 +2229,13 @@ const state = pendingData.state || '';
             if (pendingAction === 'soil_district') {
               clearPendingAction(farmerId);
               let district = districtIdMapping[msgBody.trim()] || msgBody.trim();
-              await sendWhatsAppMessage(from, lang === 'hi'
+              await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi'
                 ? '🌍 "' + district + '" ki mitti ki jankari dhundh raha hoon...'
                 : 'Looking up soil data for "' + district + '"...');
               const soilData = await getSoilData('', district);
               const reply = formatSoilData(soilData, district);
               await sendWhatsAppMessage(from, reply);
-              await sendWhatsAppMessage(from, lang === 'hi'
+              await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi'
                 ? '_"menu" type karein aur options dekhein._'
                 : '_Type "menu" for options._');
               await pool.query(
@@ -2259,14 +2259,14 @@ const state = pendingData.state || '';
             if (pendingAction === 'weather_city') {
               clearPendingAction(farmerId);
               const city = msgBody.trim();
-              await sendWhatsAppMessage(from, lang === 'hi' ? '🌤️ "' + city + '" ka mausam dhundh raha hoon...' : 'Looking up weather for "' + city + '"...');
+              await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi' ? '🌤️ "' + city + '" ka mausam dhundh raha hoon...' : 'Looking up weather for "' + city + '"...');
               const weatherMsg = await getWeather(city);
               if (weatherMsg) {
                 await sendWhatsAppMessage(from, weatherMsg);
                 setPendingAction(farmerId, 'weather_city');
-                await sendWhatsAppMessage(from, lang === 'hi' ? 'Kisi aur shehar ka mausam jaanne ke liye naam likhen, ya "menu" type karein.' : 'Type another city name, or type "menu".');
+                await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi' ? 'Kisi aur shehar ka mausam jaanne ke liye naam likhen, ya "menu" type karein.' : 'Type another city name, or type "menu".');
               } else {
-                await sendWhatsAppMessage(from, lang === 'hi' ? '❌ "' + city + '" ka mausam nahi mil paya. Kripya sahi shehar naam likhen.' : 'Could not find weather for "' + city + '".');
+                await sendWhatsAppMessage(from, (farmerData.language || 'hi') === 'hi' ? '❌ "' + city + '" ka mausam nahi mil paya. Kripya sahi shehar naam likhen.' : 'Could not find weather for "' + city + '".');
                 setPendingAction(farmerId, 'weather_city');
               }
               await pool.query(
