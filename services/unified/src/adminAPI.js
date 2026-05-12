@@ -6255,7 +6255,8 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
       const farmer = farmers[0] || {};
       const lang = farmer.language || 'hi';
       let districtName = '';
-      if (reg.district_id) { const { rows: d } = await pool.query("SELECT district_name FROM districts_master WHERE id = $1", [reg.district_id]); if (d.length) districtName = d[0].district_name.toLowerCase(); }
+      if (farmer.district_id) { const { rows: d } = await pool.query("SELECT district_name FROM districts_master WHERE id = $1", [farmer.district_id]); if (d.length) districtName = d[0].district_name.toLowerCase(); }
+      if (!districtName && farmer.village) districtName = farmer.village.toLowerCase();
       const districtOffset = DISTRICT_OFFSETS[districtName] || 0;
       const actions = [];
       for (const reg of regs) {
