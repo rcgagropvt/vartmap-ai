@@ -1992,22 +1992,24 @@ app.post('/webhook', async (req, res) => {
                 ? '\u2705 *Fasal Calendar Registered!*\n\n🌾 Fasal: ' + crop.charAt(0).toUpperCase() + crop.slice(1) + '\n📅 Buwai: ' + sowDate.toLocaleDateString('en-IN') + '\n📋 ' + (tCount[0].cnt || 0) + ' stages ka calendar set\n\n\u{1F514} Har zaroori stage pe WhatsApp reminder milega!\n\nProgress: "mera calendar"'
                 : '\u2705 *Crop Calendar Registered!*\n\n🌾 Crop: ' + crop.charAt(0).toUpperCase() + crop.slice(1) + '\n📅 Sown: ' + sowDate.toLocaleDateString('en-IN') + '\n📋 ' + (tCount[0].cnt || 0) + ' stages set\n\n\u{1F514} You will get WhatsApp reminders at each stage!\n\nCheck: "my calendar"'
             );
-            // Send first nutrition action after registration
+            // Send first nutrition action + buttons after registration
             try {
               const axiosN = require('axios');
               const baseN = 'http://localhost:' + (process.env.PORT || 10000);
               const schedRes = await axiosN.get(baseN + '/api/v1/crop-calendar/next-action/' + farmerId);
               if (schedRes.data.actions && schedRes.data.actions.length > 0) {
                 await new Promise(r => setTimeout(r, 1500));
-                await sendWhatsAppButtons(from,
-                  (farmerData.language || 'hi') === 'hi' ? 'Aap kya dekhna chahenge?' : 'What would you like to see?',
-                  [
-                    { id: 'mera_schedule', title: 'Khaad Schedule' },
-                    { id: 'mera_calendar', title: 'Mera Calendar' },
-                    { id: 'set_district', title: 'District Set Karein' }
-                  ]
-                )
+                await sendWhatsAppMessage(from, schedRes.data.actions[0].message);
               }
+              await new Promise(r => setTimeout(r, 1000));
+              await sendWhatsAppButtons(from,
+                lang === 'hi' ? 'Aap kya dekhna chahenge?' : 'What would you like to see?',
+                [
+                  { id: 'mera_schedule', title: 'Khaad Schedule' },
+                  { id: 'mera_calendar', title: 'Mera Calendar' },
+                  { id: 'set_district', title: 'District Set Karein' }
+                ]
+              );
             } catch(nErr) { console.log('Post-reg nutrition msg error:', nErr.message); }
 
           } catch(regErr) {
