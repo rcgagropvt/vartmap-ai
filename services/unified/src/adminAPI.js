@@ -6211,7 +6211,30 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
   });
 
 
-  app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
+  
+  // List districts in districts_master
+  app.get("/api/v1/crop-calendar/list-districts", async (req, res) => {
+    try {
+      const { rows } = await pool.query("SELECT id, district_name, state_name FROM districts_master ORDER BY state_name, district_name LIMIT 100");
+      res.json({ count: rows.length, districts: rows });
+    } catch(e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // Add a public soil check endpoint
+  app.get("/api/v1/crop-calendar/soil-check/:district", async (req, res) => {
+    try {
+      const dist = req.params.district;
+      const { rows } = await pool.query("SELECT district_name, block_name, village_name, * FROM soil_nutrient_data WHERE LOWER(district_name) ILIKE $1 LIMIT 5", ['%' + dist.toLowerCase() + '%']);
+      if (rows.length) {
+        const cols = Object.keys(rows[0]);
+        res.json({ count: rows.length, columns: cols, sample: rows[0] });
+      } else {
+        res.json({ count: 0, message: 'No soil data found for ' + dist });
+      }
+    } catch(e) { res.status(500).json({ error: e.message }); }
+  });
+
+app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
     try {
       // Create tables
       await pool.query(`
