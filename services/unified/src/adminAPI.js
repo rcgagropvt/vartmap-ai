@@ -6110,21 +6110,39 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
       }
       let districtName = '';
       if (reg.district_id) {
-        const { rows: distRows } = await pool.query("SELECT district_name as name FROM districts_master WHERE id = $1", [reg.district_id]);
-        if (distRows.length) districtName = distRows[0].name.toLowerCase();
+        const { rows: distRows } = await pool.query("SELECT district_name FROM districts_master WHERE id = $1", [reg.district_id]);
+        if (distRows.length) districtName = distRows[0].district_name.toLowerCase();
       }
+      if (!districtName && farmer.village) districtName = farmer.village.toLowerCase();
         // Fallback: get district-level soil data from soil_nutrient_data
         if (!soilData) {
           let soilDistrict = districtName;
-          if (!soilDistrict && reg.village) soilDistrict = reg.village;
+          if (!soilDistrict && farmer.village) soilDistrict = farmer.village.toLowerCase();
           if (soilDistrict) {
-            const { rows: distSoil } = await pool.query("SELECT * FROM soil_nutrient_data WHERE LOWER(district_name) ILIKE $1 LIMIT 5", ['%' + soilDistrict + '%']);
+            const { rows: distSoil } = await pool.query("SELECT nitrogen_low_pct, nitrogen_medium_pct, phosphorus_low_pct, phosphorus_medium_pct, potassium_low_pct, potassium_medium_pct, organic_carbon_low_pct, avg_ph, avg_zinc, avg_boron, avg_sulphur, soil_type, block_name, recommendations FROM soil_nutrient_data WHERE LOWER(district_name) ILIKE $1 LIMIT 10", ['%' + soilDistrict + '%']);
             if (distSoil.length) {
-              const nLow = distSoil.filter(r => (r.nitrogen_status || r.n_status || r.nitrogen || '').toString().toLowerCase() === 'low' || parseFloat(r.n_kg_ha || r.nitrogen_kg_per_ha || 0) < 250).length;
-              const pLow = distSoil.filter(r => (r.phosphorus_status || r.p_status || r.phosphorus || '').toString().toLowerCase() === 'low' || parseFloat(r.p_kg_ha || r.phosphorus_kg_per_ha || 0) < 12).length;
-              const kLow = distSoil.filter(r => (r.potassium_status || r.k_status || r.potassium || '').toString().toLowerCase() === 'low' || parseFloat(r.k_kg_ha || r.potassium_kg_per_ha || 0) < 130).length;
-              const total = distSoil.length;
-              soilData = { n_status: nLow > total/2 ? 'low' : 'medium', p_status: pLow > total/2 ? 'low' : 'medium', k_status: kLow > total/2 ? 'low' : 'medium', ph: distSoil[0].ph, organic_carbon: distSoil[0].organic_carbon, micronutrients: distSoil[0].micronutrients, source: 'district_average', samples: total };
+              const avg = (arr, key) => arr.reduce((s, r) => s + parseFloat(r[key] || 0), 0) / arr.length;
+              const nLowPct = avg(distSoil, 'nitrogen_low_pct');
+              const pLowPct = avg(distSoil, 'phosphorus_low_pct');
+              const kLowPct = avg(distSoil, 'potassium_low_pct');
+              const ocLowPct = avg(distSoil, 'organic_carbon_low_pct');
+              soilData = {
+                n_status: nLowPct > 50 ? 'low' : nLowPct > 20 ? 'medium' : 'high',
+                p_status: pLowPct > 50 ? 'low' : pLowPct > 20 ? 'medium' : 'high',
+                k_status: kLowPct > 50 ? 'low' : kLowPct > 20 ? 'medium' : 'high',
+                oc_status: ocLowPct > 50 ? 'low' : 'medium',
+                ph: avg(distSoil, 'avg_ph'),
+                zinc_deficient_pct: 100 - avg(distSoil, 'avg_zinc'),
+                boron_deficient_pct: 100 - avg(distSoil, 'avg_boron'),
+                sulphur_deficient_pct: 100 - avg(distSoil, 'avg_sulphur'),
+                soil_type: distSoil[0].soil_type || 'unknown',
+                blocks_sampled: distSoil.map(r => r.block_name).filter(Boolean),
+                recommendations: distSoil[0].recommendations || {},
+                source: 'soil_nutrient_data (' + distSoil.length + ' blocks avg)',
+                n_low_pct: nLowPct.toFixed(1),
+                p_low_pct: pLowPct.toFixed(1),
+                k_low_pct: kLowPct.toFixed(1)
+              };
             }
           }
         }
