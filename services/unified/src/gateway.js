@@ -1754,6 +1754,27 @@ app.post('/webhook', async (req, res) => {
           }
 
           // --- CROP CALENDAR COMMANDS ---
+
+          // --- NUTRITION SCHEDULE ---
+          if (lowerMsg === 'mera schedule' || lowerMsg === 'nutrition schedule' || lowerMsg === 'khaad schedule' || lowerMsg === 'fertilizer schedule') {
+            try {
+              const axios3 = require('axios');
+              const baseUrl3 = 'http://localhost:' + (process.env.PORT || 10000);
+              const nRes = await axios3.get(baseUrl3 + '/api/v1/crop-calendar/next-action/' + farmerId);
+              if (nRes.data.actions && nRes.data.actions.length > 0) {
+                for (const action of nRes.data.actions) {
+                  await sendWhatsAppMessage(from, action.message);
+                }
+              } else {
+                const noMsg = lang === 'hi' ? 'Abhi koi active fasal calendar nahi hai. "Fasal register" bhejein.' : 'No active crop calendar. Send "Fasal register" to start.';
+                await sendWhatsAppMessage(from, noMsg);
+              }
+            } catch (nErr) {
+              console.error('Nutrition schedule error:', nErr.message);
+              await sendWhatsAppMessage(from, lang === 'hi' ? 'Schedule load nahi ho paya.' : 'Could not load schedule.');
+            }
+            continue;
+          }
           if (lowerMsg.includes('fasal register') || lowerMsg.includes('crop register') || lowerMsg === 'register crop' || lowerMsg === 'meri fasal' || lowerMsg.includes('calendar register') || lowerMsg === 'fasal calendar' || lowerMsg === 'fasal_calendar') {
             const lang = farmerData.language || 'hi';
             const crops = ['wheat', 'rice', 'sugarcane', 'mustard', 'potato'];
@@ -1767,28 +1788,7 @@ app.post('/webhook', async (req, res) => {
             }];
 
             await sendWhatsAppList(from,
-              lang === 'hi' ? '\u{1F33E} Fasal Calendar Registration\
-          // --- NUTRITION SCHEDULE ---
-          if (lowerMsg === 'mera schedule' || lowerMsg === 'nutrition schedule' || lowerMsg === 'khaad schedule' || lowerMsg === 'fertilizer schedule') {
-            try {
-              const axios3 = require('axios');
-              const baseUrl3 = 'http://localhost:' + (process.env.PORT || 10000);
-              const nRes = await axios3.get(baseUrl3 + '/api/v1/crop-calendar/next-action/' + farmerId);
-              if (nRes.data.actions && nRes.data.actions.length > 0) {
-                for (const action of nRes.data.actions) {
-                  await sendWhatsAppMessage(from, action.message);
-                }
-              } else {
-                const noMsg = lang === 'hi' ? 'Abhi koi active fasal calendar nahi hai. \"Fasal register\" bhejein shuru karne ke liye.' : 'No active crop calendar. Send \"Fasal register\" to start.';
-                await sendWhatsAppMessage(from, noMsg);
-              }
-            } catch (nErr) {
-              console.error('Nutrition schedule error:', nErr.message);
-              await sendWhatsAppMessage(from, lang === 'hi' ? 'Schedule load nahi ho paya. Baad mein try karein.' : 'Could not load schedule. Try later.');
-            }
-            continue;
-          }
-n\nKonsi fasal ka calendar shuru karna chahte hain? Buwai ki taareekh dene ke baad har stage pe automatic reminder milega.' : '\u{1F33E} Crop Calendar Registration\n\nWhich crop? After sowing date, you get automatic stage reminders.',
+              lang === 'hi' ? '🌾 Fasal Calendar Registration\n\nKonsiKonsi fasal ka calendar shuru karna chahte hain? Buwai ki taareekh dene ke baad har stage pe automatic reminder milega.' : '🌾 Crop Calendar Registration\n\nWhich crop? After sowing date, you get automatic stage reminders.',
               lang === 'hi' ? 'Fasal chunein' : 'Select Crop',
               sections
             );
@@ -1803,7 +1803,7 @@ n\nKonsi fasal ka calendar shuru karna chahte hain? Buwai ki taareekh dene ke ba
             if (regs.length === 0) {
               await sendWhatsAppMessage(from, lang === 'hi' ? 'Aapne abhi koi fasal register nahi ki. "fasal register" likhen shuru karne ke liye.' : 'No crops registered. Type "crop register" to start.');
             } else {
-              let msg = lang === 'hi' ? '\u{1F4CB} *Aapki Registered Fasalein:*\n\n' : '\u{1F4CB} *Your Registered Crops:*\n\n';
+              let msg = lang === 'hi' ? '📋 *Aapki Registered Fasalein:*\n\n' : '📋 *Your Registered Crops:*\n\n';
               for (const r of regs) {
                 const sowDate = new Date(r.sow_date);
                 const days = Math.floor((new Date() - sowDate) / (1000 * 60 * 60 * 24));
@@ -1811,7 +1811,7 @@ n\nKonsi fasal ka calendar shuru karna chahte hain? Buwai ki taareekh dene ke ba
                   "SELECT stage_name, day_offset FROM crop_calendar_templates WHERE LOWER(crop)=LOWER($1) AND day_offset > $2 ORDER BY day_offset LIMIT 1",
                   [r.crop, days]
                 );
-                msg += '\u{1F33E} *' + r.crop.charAt(0).toUpperCase() + r.crop.slice(1) + '*\n';
+                msg += '🌾 *' + r.crop.charAt(0).toUpperCase() + r.crop.slice(1) + '*\n';
                 msg += '   Buwai: ' + sowDate.toLocaleDateString('en-IN') + ' (' + days + ' din)\n';
                 if (nextStage.length > 0) {
                   const daysUntil = nextStage[0].day_offset - days;
@@ -1869,8 +1869,8 @@ n\nKonsi fasal ka calendar shuru karna chahte hain? Buwai ki taareekh dene ke ba
           setPendingAction(farmerId, 'crop_calendar_date', { crop: crop });
           await sendWhatsAppMessage(from,
             lang === 'hi' 
-              ? '\u{1F4C5} *' + crop.charAt(0).toUpperCase() + crop.slice(1) + '* select hua!\n\nBuwai ki taareekh batayen (DD/MM/YYYY)\nJaise: 15/11/2024\n\nYa "aaj" likhen agar aaj buwai ki hai.'
-              : '\u{1F4C5} *' + crop.charAt(0).toUpperCase() + crop.slice(1) + '* selected!\n\nEnter sowing date (DD/MM/YYYY)\nExample: 15/11/2024\n\nOr type "today".'
+              ? '📅 *' + crop.charAt(0).toUpperCase() + crop.slice(1) + '* select hua!\n\nBuwai ki taareekh batayen (DD/MM/YYYY)\nJaise: 15/11/2024\n\nYa "aaj" likhen agar aaj buwai ki hai.'
+              : '📅 *' + crop.charAt(0).toUpperCase() + crop.slice(1) + '* selected!\n\nEnter sowing date (DD/MM/YYYY)\nExample: 15/11/2024\n\nOr type "today".'
           );
         } else {
           await sendWhatsAppMessage(from, lang === 'hi' ? 'Kripya list mein se fasal chunein.' : 'Please select from the list.');
@@ -1901,8 +1901,8 @@ n\nKonsi fasal ka calendar shuru karna chahte hain? Buwai ki taareekh dene ke ba
             const { rows: tCount } = await pool.query("SELECT COUNT(*) as cnt FROM crop_calendar_templates WHERE LOWER(crop)=LOWER($1)", [crop]);
             await sendWhatsAppMessage(from,
               lang === 'hi'
-                ? '\u2705 *Fasal Calendar Registered!*\n\n\u{1F33E} Fasal: ' + crop.charAt(0).toUpperCase() + crop.slice(1) + '\n\u{1F4C5} Buwai: ' + sowDate.toLocaleDateString('en-IN') + '\n\u{1F4CB} ' + (tCount[0].cnt || 0) + ' stages ka calendar set\n\n\u{1F514} Har zaroori stage pe WhatsApp reminder milega!\n\nProgress: "mera calendar"'
-                : '\u2705 *Crop Calendar Registered!*\n\n\u{1F33E} Crop: ' + crop.charAt(0).toUpperCase() + crop.slice(1) + '\n\u{1F4C5} Sown: ' + sowDate.toLocaleDateString('en-IN') + '\n\u{1F4CB} ' + (tCount[0].cnt || 0) + ' stages set\n\n\u{1F514} You will get WhatsApp reminders at each stage!\n\nCheck: "my calendar"'
+                ? '\u2705 *Fasal Calendar Registered!*\n\n🌾 Fasal: ' + crop.charAt(0).toUpperCase() + crop.slice(1) + '\n📅 Buwai: ' + sowDate.toLocaleDateString('en-IN') + '\n📋 ' + (tCount[0].cnt || 0) + ' stages ka calendar set\n\n\u{1F514} Har zaroori stage pe WhatsApp reminder milega!\n\nProgress: "mera calendar"'
+                : '\u2705 *Crop Calendar Registered!*\n\n🌾 Crop: ' + crop.charAt(0).toUpperCase() + crop.slice(1) + '\n📅 Sown: ' + sowDate.toLocaleDateString('en-IN') + '\n📋 ' + (tCount[0].cnt || 0) + ' stages set\n\n\u{1F514} You will get WhatsApp reminders at each stage!\n\nCheck: "my calendar"'
             );
           } catch(regErr) {
             console.log('Crop reg error:', regErr.message);
