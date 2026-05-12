@@ -6087,6 +6087,13 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
         const { rows: soilRows } = await pool.query("SELECT * FROM soil_health_cards WHERE farmer_id = $1 ORDER BY sample_date DESC LIMIT 1", [reg.farmer_id]);
         if (soilRows.length) soilData = soilRows[0];
       }
+        // Fallback: get district-level soil data from soil_nutrient_data
+        if (!soilData && districtName) {
+          const { rows: distSoil } = await pool.query("SELECT AVG(CASE WHEN nitrogen_status='high' THEN 3 WHEN nitrogen_status='medium' THEN 2 ELSE 1 END) as n_avg, AVG(CASE WHEN phosphorus_status='high' THEN 3 WHEN phosphorus_status='medium' THEN 2 ELSE 1 END) as p_avg, AVG(CASE WHEN potassium_status='high' THEN 3 WHEN potassium_status='medium' THEN 2 ELSE 1 END) as k_avg, AVG(ph) as avg_ph, AVG(organic_carbon) as avg_oc FROM soil_nutrient_data WHERE LOWER(district_name) ILIKE $1 LIMIT 1", ['%' + districtName + '%']);
+          if (distSoil.length && distSoil[0].n_avg) {
+            soilData = { n_status: distSoil[0].n_avg <= 1.5 ? 'low' : distSoil[0].n_avg >= 2.5 ? 'high' : 'medium', p_status: distSoil[0].p_avg <= 1.5 ? 'low' : distSoil[0].p_avg >= 2.5 ? 'high' : 'medium', k_status: distSoil[0].k_avg <= 1.5 ? 'low' : distSoil[0].k_avg >= 2.5 ? 'high' : 'medium', ph: distSoil[0].avg_ph, organic_carbon: distSoil[0].avg_oc, source: 'district_average' };
+          }
+        }
       let districtName = '';
       if (reg.district_id) {
         const { rows: distRows } = await pool.query("SELECT name FROM districts_master WHERE id = $1", [reg.district_id]);

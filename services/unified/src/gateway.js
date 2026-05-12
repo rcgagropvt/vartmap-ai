@@ -1822,33 +1822,17 @@ app.post('/webhook', async (req, res) => {
                 try {
                   const fRes = await axiosN2.get(baseN2 + '/api/v1/crop-calendar/nutrition-schedule/' + nRes.data.actions[0].registration_id || '');
                 } catch(e2) {}
-                const farmerDist = farmerData.district_id;
                 const farmerSoil = farmerData.soil_type;
-                if (!farmerDist || !farmerSoil) {
-                  await new Promise(r => setTimeout(r, 1500));
-                  let missingMsg = '';
-                  if (lang === 'hi') {
-                    missingMsg = '\n\u{2139}\uFE0F *Behtar salah ke liye yeh jaankari dein:*\n';
-                    if (!farmerDist) missingMsg += '\u2022 Apna district batayein (jaise: "district Lucknow")\n';
-                    if (!farmerSoil) missingMsg += '\u2022 Mitti ki jaanch (Soil Health Card) karwaayein - hum NPK ke hisaab se khaad adjust karenge\n';
-                    missingMsg += '\nYeh jaankari dene se aapko bilkul sahi maatra ki salah milegi!';
-                  } else {
-                    missingMsg = '\n\u{2139}\uFE0F *For better recommendations:*\n';
-                    if (!farmerDist) missingMsg += '\u2022 Tell your district (e.g. "district Lucknow")\n';
-                    if (!farmerSoil) missingMsg += '\u2022 Get a Soil Health Card test - we adjust NPK doses based on your soil\n';
-                    missingMsg += '\nThis helps us give exact quantities for your farm!';
-                  }
-                  await sendWhatsAppMessage(from, missingMsg);
-                await sendWhatsAppButtons(from,
-                  (farmerData.language || 'hi') === 'hi' ? 'Kya karna chahte hain?' : 'What next?',
-                  [
-                    { id: 'set_district', title: 'District Set Karein' },
-                    { id: 'mera_calendar', title: 'Mera Calendar' },
-                    { id: 'fasal_register', title: 'Nayi Fasal Add' }
-                  ]
-                );
-
+                if (!farmerSoil) {
+                  await new Promise(r => setTimeout(r, 1000));
+                  const soilMsg = lang === 'hi'
+                    ? '\u{2139}\uFE0F *Aur sahi maatra ke liye:*\nApni mitti ki janch (Soil Health Card) karwaayein - hum NPK ke hisaab se khaad adjust karenge. Najdiki Krishi Vigyan Kendra se free mitti janch ho sakti hai!'
+                    : '\u{2139}\uFE0F *For more accurate doses:*\nGet a Soil Health Card test - we adjust NPK based on your soil. Visit nearest KVK for free soil testing!';
+                  await sendWhatsAppMessage(from, soilMsg);
                 }
+                await sendWhatsAppButtons(from, lang === 'hi' ? 'Aage?' : 'Next?', [{ id: 'mera_calendar', title: 'Mera Calendar' }, { id: 'fasal_register', title: 'Nayi Fasal Add' }, { id: 'mera_schedule', title: 'Schedule Refresh' }]);
+
+
 
               } else {
                 const noMsg = (farmerData.language || 'hi') === 'hi' ? 'Abhi koi active fasal calendar nahi hai. "Fasal register" bhejein.' : 'No active crop calendar. Send "Fasal register" to start.';
@@ -2003,11 +1987,11 @@ app.post('/webhook', async (req, res) => {
               }
               await new Promise(r => setTimeout(r, 1000));
               await sendWhatsAppButtons(from,
-                lang === 'hi' ? 'Aap kya dekhna chahenge?' : 'What would you like to see?',
+                lang === 'hi' ? 'Aage kya karna chahenge?' : 'What would you like to do next?',
                 [
                   { id: 'mera_schedule', title: 'Khaad Schedule' },
                   { id: 'mera_calendar', title: 'Mera Calendar' },
-                  { id: 'set_district', title: 'District Set Karein' }
+                  { id: 'fasal_register', title: 'Aur Fasal Add' }
                 ]
               );
             } catch(nErr) { console.log('Post-reg nutrition msg error:', nErr.message); }
