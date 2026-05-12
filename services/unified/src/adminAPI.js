@@ -6079,17 +6079,17 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
   app.get("/api/v1/crop-calendar/nutrition-schedule/:registrationId", async (req, res) => {
     try {
       const { registrationId } = req.params;
-      const { rows: regRows } = await pool.query("SELECT r.*, f.name, f.phone, f.district_id, f.land_holding_acres, f.soil_type, f.village FROM farmer_crop_registrations r JOIN farmers f ON f.id = r.farmer_id WHERE r.id = " + D + "1", [registrationId]);
+      const { rows: regRows } = await pool.query("SELECT r.*, f.name, f.phone, f.district_id, f.land_holding_acres, f.soil_type, f.village FROM farmer_crop_registrations r JOIN farmers f ON f.id = r.farmer_id WHERE r.id = $1", [registrationId]);
       if (!regRows.length) return res.status(404).json({ error: 'Registration not found' });
       const reg = regRows[0];
       let soilData = null;
       if (reg.farmer_id) {
-        const { rows: soilRows } = await pool.query("SELECT * FROM soil_health_cards WHERE farmer_id = " + D + "1 ORDER BY sample_date DESC LIMIT 1", [reg.farmer_id]);
+        const { rows: soilRows } = await pool.query("SELECT * FROM soil_health_cards WHERE farmer_id = $1 ORDER BY sample_date DESC LIMIT 1", [reg.farmer_id]);
         if (soilRows.length) soilData = soilRows[0];
       }
       let districtName = '';
       if (reg.district_id) {
-        const { rows: distRows } = await pool.query("SELECT name FROM districts_master WHERE id = " + D + "1", [reg.district_id]);
+        const { rows: distRows } = await pool.query("SELECT name FROM districts_master WHERE id = $1", [reg.district_id]);
         if (distRows.length) districtName = distRows[0].name.toLowerCase();
       }
       const cropKey = reg.crop.toLowerCase();
@@ -6126,13 +6126,13 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
   app.get("/api/v1/crop-calendar/next-action/:farmerId", async (req, res) => {
     try {
       const { farmerId } = req.params;
-      const { rows: regs } = await pool.query("SELECT * FROM farmer_crop_registrations WHERE farmer_id = " + D + "1 AND status = 'active'", [farmerId]);
+      const { rows: regs } = await pool.query("SELECT * FROM farmer_crop_registrations WHERE farmer_id = $1 AND status = 'active'", [farmerId]);
       if (!regs.length) return res.json({ message: 'No active crops' });
-      const { rows: farmers } = await pool.query("SELECT * FROM farmers WHERE id = " + D + "1", [farmerId]);
+      const { rows: farmers } = await pool.query("SELECT * FROM farmers WHERE id = $1", [farmerId]);
       const farmer = farmers[0] || {};
       const lang = farmer.language || 'hi';
       let districtName = '';
-      if (farmer.district_id) { const { rows: d } = await pool.query("SELECT name FROM districts_master WHERE id = " + D + "1", [farmer.district_id]); if (d.length) districtName = d[0].name.toLowerCase(); }
+      if (farmer.district_id) { const { rows: d } = await pool.query("SELECT name FROM districts_master WHERE id = $1", [farmer.district_id]); if (d.length) districtName = d[0].name.toLowerCase(); }
       const districtOffset = DISTRICT_OFFSETS[districtName] || 0;
       const actions = [];
       for (const reg of regs) {
