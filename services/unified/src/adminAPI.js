@@ -5903,7 +5903,28 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
   // Manual table init endpoint (call once after deploy)
   // One-time: deactivate expert menu item
   // Debug: check crop registrations (remove later)
-  app.get("/api/v1/crop-calendar/debug", async (req, res) => {
+  
+  // Set farmer district (one-time fix)
+  app.get("/api/v1/crop-calendar/set-district/:farmerId/:district", async (req, res) => {
+    try {
+      const { farmerId, district } = req.params;
+      // Try districts_master first
+      let distId = null;
+      const { rows: dm } = await pool.query("SELECT id, name FROM districts_master WHERE LOWER(name) ILIKE $1 OR LOWER(district_name) ILIKE $1 LIMIT 1", ['%' + district.toLowerCase() + '%']);
+      if (dm.length) { distId = dm[0].id; }
+      
+      if (distId) {
+        await pool.query("UPDATE farmers SET district_id = $1 WHERE id = $2", [distId, farmerId]);
+        res.json({ success: true, district: dm[0].name, district_id: distId });
+      } else {
+        // No districts_master entry - just store district name directly
+        await pool.query("UPDATE farmers SET village = $1 WHERE id = $2", [district, farmerId]);
+        res.json({ success: true, district_stored_as_village: district, note: 'No districts_master entry found' });
+      }
+    } catch(e) { res.status(500).json({ error: e.message }); }
+  });
+
+app.get("/api/v1/crop-calendar/debug", async (req, res) => {
     try {
       const { rows: regs } = await pool.query("SELECT r.id, r.farmer_id, r.crop, r.sow_date, r.status, f.phone, f.name FROM farmer_crop_registrations r LEFT JOIN farmers f ON f.id = r.farmer_id ORDER BY r.created_at DESC LIMIT 10");
       const { rows: farmers } = await pool.query("SELECT id, phone, name FROM farmers WHERE phone LIKE '%8953587717%'");
@@ -6087,18 +6108,26 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
         const { rows: soilRows } = await pool.query("SELECT * FROM soil_health_cards WHERE farmer_id = $1 ORDER BY sample_date DESC LIMIT 1", [reg.farmer_id]);
         if (soilRows.length) soilData = soilRows[0];
       }
-        // Fallback: get district-level soil data from soil_nutrient_data
-        if (!soilData && districtName) {
-          const { rows: distSoil } = await pool.query("SELECT AVG(CASE WHEN nitrogen_status='high' THEN 3 WHEN nitrogen_status='medium' THEN 2 ELSE 1 END) as n_avg, AVG(CASE WHEN phosphorus_status='high' THEN 3 WHEN phosphorus_status='medium' THEN 2 ELSE 1 END) as p_avg, AVG(CASE WHEN potassium_status='high' THEN 3 WHEN potassium_status='medium' THEN 2 ELSE 1 END) as k_avg, AVG(ph) as avg_ph, AVG(organic_carbon) as avg_oc FROM soil_nutrient_data WHERE LOWER(district_name) ILIKE $1 LIMIT 1", ['%' + districtName + '%']);
-          if (distSoil.length && distSoil[0].n_avg) {
-            soilData = { n_status: distSoil[0].n_avg <= 1.5 ? 'low' : distSoil[0].n_avg >= 2.5 ? 'high' : 'medium', p_status: distSoil[0].p_avg <= 1.5 ? 'low' : distSoil[0].p_avg >= 2.5 ? 'high' : 'medium', k_status: distSoil[0].k_avg <= 1.5 ? 'low' : distSoil[0].k_avg >= 2.5 ? 'high' : 'medium', ph: distSoil[0].avg_ph, organic_carbon: distSoil[0].avg_oc, source: 'district_average' };
-          }
-        }
       let districtName = '';
       if (reg.district_id) {
         const { rows: distRows } = await pool.query("SELECT name FROM districts_master WHERE id = $1", [reg.district_id]);
         if (distRows.length) districtName = distRows[0].name.toLowerCase();
       }
+        // Fallback: get district-level soil data from soil_nutrient_data
+        if (!soilData) {
+          let soilDistrict = districtName;
+          if (!soilDistrict && reg.village) soilDistrict = reg.village;
+          if (soilDistrict) {
+            const { rows: distSoil } = await pool.query("SELECT nitrogen_status, phosphorus_status, potassium_status, ph, organic_carbon, micronutrients FROM soil_nutrient_data WHERE LOWER(district_name) ILIKE $1 LIMIT 5", ['%' + soilDistrict + '%']);
+            if (distSoil.length) {
+              const nLow = distSoil.filter(r => r.nitrogen_status === 'low' || r.nitrogen_status === 'Low').length;
+              const pLow = distSoil.filter(r => r.phosphorus_status === 'low' || r.phosphorus_status === 'Low').length;
+              const kLow = distSoil.filter(r => r.potassium_status === 'low' || r.potassium_status === 'Low').length;
+              const total = distSoil.length;
+              soilData = { n_status: nLow > total/2 ? 'low' : 'medium', p_status: pLow > total/2 ? 'low' : 'medium', k_status: kLow > total/2 ? 'low' : 'medium', ph: distSoil[0].ph, organic_carbon: distSoil[0].organic_carbon, micronutrients: distSoil[0].micronutrients, source: 'district_average', samples: total };
+            }
+          }
+        }
       const cropKey = reg.crop.toLowerCase();
       const schedule = NUTRITION_SCHEDULES[cropKey];
       if (!schedule) return res.status(404).json({ error: 'No nutrition schedule for: ' + reg.crop });

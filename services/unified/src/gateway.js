@@ -964,10 +964,16 @@ async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, 
           longitude: locData.longitude,
           ...(geo || {})
         };
+        // Resolve district_id from geocoded district name
+        let resolvedDistrictId = null;
+        if (geo && geo.district) {
+          const { rows: distMatch } = await pool.query("SELECT id FROM districts_master WHERE LOWER(name) ILIKE $1 OR LOWER(district_name) ILIKE $1 LIMIT 1", ['%' + geo.district.toLowerCase() + '%']);
+          if (distMatch.length) resolvedDistrictId = distMatch[0].id;
+        }
         await pool.query(
-          `UPDATE farmers SET location = $1, village = $2, pin_code = $3, onboarding_stage = 'awaiting_crops', updated_at = NOW() WHERE id = $4`,
-          [JSON.stringify(locationJson), geo?.village || '', geo?.pin_code || '', farmerId]
-        );
+          `UPDATE farmers SET location = $1, village = $2, pin_code = $3, district_id = $4, onboarding_stage = 'awaiting_crops', updated_at = NOW() WHERE id = $5`,
+          [JSON.stringify(locationJson), geo?.village || '', geo?.pin_code || '', resolvedDistrictId, farmerId]
+        )
         const confirmLoc = (farmerData.language || 'hi') === 'hi'
           ? `Location mil gayi! ${geo?.village ? geo.village + ', ' : ''}${geo?.district || ''}, ${geo?.state || ''}\n\nAb apni mukhya fasal chunein:`
           : `Got your location! ${geo?.village ? geo.village + ', ' : ''}${geo?.district || ''}, ${geo?.state || ''}\n\nNow select your main crop:`;
