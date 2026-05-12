@@ -1233,7 +1233,7 @@ function formatSoilData(soilData, district) {
 // --- FLOW ENGINE ---
 async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botConfig) {
   const lang = farmerData.language || 'hi';
-  const lowerMsg = (msgBody || '').toLowerCase().trim();
+  let lowerMsg = (msgBody || '').toLowerCase().trim();
 
   // Check if message matches a menu key
   const menuItems = (botConfig.menu_items || []).filter(m => m.is_active !== false);
@@ -1728,7 +1728,7 @@ app.post('/webhook', async (req, res) => {
           }
 
           // 6. MENU / HELP trigger
-          const lowerMsg = (msgBody || '').toLowerCase().trim();
+          let lowerMsg = (msgBody || '').toLowerCase().trim();
           if (lowerMsg === 'hisaab' || lowerMsg === 'finance' || lowerMsg === 'khata' || lowerMsg === 'ledger') {
             const lang = farmerData.language || 'hi';
             setPendingAction(farmerId, 'finance_type');
