@@ -6244,15 +6244,14 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
           let adjustedDose = p.dose_per_ha * landHa;
           let soilNote = null;
           if (soilData) {
-            // NPK adjustments (from soil_adjustment multipliers)
-            if (stage.soil_adjustment) {
-              if (p.name.includes('Urea') && soilData.n_status === 'low') { adjustedDose *= (stage.soil_adjustment.low_n || 1); soilNote = 'N low (' + (soilData.n_low_pct || '84') + '%) - dose increased'; }
-              if (p.name.includes('Urea') && soilData.n_status === 'high') { adjustedDose *= (stage.soil_adjustment.high_n || 1); soilNote = 'N sufficient - dose reduced'; }
-              if ((p.name.includes('DAP') || p.name.includes('SSP')) && soilData.p_status === 'low') { adjustedDose *= (stage.soil_adjustment.low_p || 1); soilNote = 'P low - dose increased'; }
-              if ((p.name.includes('DAP') || p.name.includes('SSP')) && soilData.p_status === 'high') { adjustedDose *= (stage.soil_adjustment.high_p || 1); soilNote = 'P high (' + (soilData.p_low_pct || '') + '% low) - dose reduced'; }
-              if (p.name.includes('MOP') && soilData.k_status === 'low') { adjustedDose *= (stage.soil_adjustment.low_k || 1); soilNote = 'K low - dose increased'; }
-              if (p.name.includes('MOP') && soilData.k_status === 'high') { adjustedDose *= (stage.soil_adjustment.high_k || 1); soilNote = 'K sufficient - dose reduced'; }
-            }
+            // NPK adjustments - use stage.soil_adjustment if defined, else defaults
+            const sa = stage.soil_adjustment || {};
+            if (p.name.includes('Urea') && soilData.n_status === 'low') { adjustedDose *= (sa.low_n || 1.3); soilNote = 'N low (' + (soilData.n_low_pct || '84') + '%) - dose +' + Math.round(((sa.low_n || 1.3) - 1) * 100) + '%'; }
+            if (p.name.includes('Urea') && soilData.n_status === 'high') { adjustedDose *= (sa.high_n || 0.7); soilNote = 'N sufficient - dose reduced'; }
+            if ((p.name.includes('DAP') || p.name.includes('SSP')) && soilData.p_status === 'low') { adjustedDose *= (sa.low_p || 1.3); soilNote = 'P low - dose increased'; }
+            if ((p.name.includes('DAP') || p.name.includes('SSP')) && soilData.p_status === 'high') { adjustedDose *= (sa.high_p || 0.7); soilNote = 'P high (' + (soilData.p_low_pct || '') + '% low) - dose reduced'; }
+            if (p.name.includes('MOP') && soilData.k_status === 'low') { adjustedDose *= (sa.low_k || 1.3); soilNote = 'K low - dose increased'; }
+            if (p.name.includes('MOP') && soilData.k_status === 'high') { adjustedDose *= (sa.high_k || 0.7); soilNote = 'K sufficient - dose reduced'; }
             // Micronutrient adjustments based on deficiency %
             const zDef = parseFloat(soilData.zinc_deficient_pct || 0);
             const bDef = parseFloat(soilData.boron_deficient_pct || 0);
