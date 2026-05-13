@@ -1400,6 +1400,236 @@ app.post('/webhook', async (req, res) => {
                 [sessionId, farmerId, reply]
               );
               continue;
+            // === PRECISION FARMING INPUTS ===
+            if (pendingAction === 'yield_target') {
+              clearPendingAction(farmerId);
+              const input = msgBody.trim();
+              // Extract number from input like "100", "100 ton", "mera yield 80"
+              const yieldMatch = input.match(/(\d+\.?\d*)/);
+              if (!yieldMatch) {
+                await sendWhatsAppMessage(from, lang === 'hi'
+                  ? '\u274C Number samajh nahi aaya. Example: "100" ya "80 ton" type karein'
+                  : '\u274C Could not understand. Type a number like "100" or "80"');
+                setPendingAction(farmerId, 'yield_target');
+                continue;
+              }
+              const targetYield = parseFloat(yieldMatch[1]);
+              // Get farmer's active registration
+              const { rows: regs } = await pool.query(
+                "SELECT id, crop FROM farmer_crop_registrations WHERE farmer_id = $1 AND status = 'active' ORDER BY created_at DESC LIMIT 1",
+                [farmerId]
+              );
+              if (!regs.length) {
+                await sendWhatsAppMessage(from, lang === 'hi'
+                  ? '\u274C Pehle fasal register karein (Fasal Calendar > Register)'
+                  : '\u274C Please register a crop first');
+                continue;
+              }
+              const regId = regs[0].id;
+              const crop = regs[0].crop;
+              // Update in database
+              await pool.query("UPDATE farmer_crop_registrations SET target_yield = $1, updated_at = NOW() WHERE id = $2", [targetYield, regId]);
+              await sendWhatsAppMessage(from, lang === 'hi'
+                ? '\u2705 *Yield Target Set!*\n\n\uD83C\uDF3E Fasal: ' + crop + '\n\uD83C\uDFAF Target: ' + targetYield + ' ton/ha\n\n Ab aapka khaad schedule STCR equations se calculate hoga - precise dose milega har stage pe.\n\n\uD83D\uDCF1 "mera schedule" type karein updated doses dekhne ke liye'
+                : '\u2705 *Yield Target Set!*\n\nCrop: ' + crop + '\nTarget: ' + targetYield + ' t/ha\n\nYour fertilizer schedule will now use STCR equations for precise dosing.\n\nType "mera schedule" to see updated doses');
+              await sendWhatsAppButtons(from,
+                lang === 'hi' ? 'Aur kya karna hai?' : 'What next?',
+                [
+                  { id: 'mera_schedule', title: 'Mera Schedule' },
+                  { id: 'water_input', title: 'Pani Quality' },
+                  { id: 'menu', title: 'Menu' }
+                ]
+              );
+              continue;
+            }
+
+            if (pendingAction === 'water_quality') {
+              clearPendingAction(farmerId);
+              const input = msgBody.trim().toLowerCase();
+              // Parse: "EC 3.2" or "EC 3.2, pH 7.8" or "3.2 dS/m"
+              let ec = null, ph = null, sar = null, rsc = null;
+              const ecMatch = input.match(/ec\s*[=:]?\s*(\d+\.?\d*)/i);
+              const phMatch = input.match(/ph\s*[=:]?\s*(\d+\.?\d*)/i);
+              const sarMatch = input.match(/sar\s*[=:]?\s*(\d+\.?\d*)/i);
+              const rscMatch = input.match(/rsc\s*[=:]?\s*(\d+\.?\d*)/i);
+              if (ecMatch) ec = parseFloat(ecMatch[1]);
+              if (phMatch) ph = parseFloat(phMatch[1]);
+              if (sarMatch) sar = parseFloat(sarMatch[1]);
+              if (rscMatch) rsc = parseFloat(rscMatch[1]);
+              // If just a number, assume EC
+              if (!ec && !ph && !sar) {
+                const numMatch = input.match(/(\d+\.?\d*)/);
+                if (numMatch) ec = parseFloat(numMatch[1]);
+              }
+              if (!ec && !ph) {
+                await sendWhatsAppMessage(from, lang === 'hi'
+                  ? '\u274C Samajh nahi aaya. Example:\n"EC 3.2"\n"EC 2.5, pH 7.8"\n"EC 3.0, SAR 12, RSC 3.5"'
+                  : '\u274C Could not parse. Examples:\n"EC 3.2"\n"EC 2.5, pH 7.8"');
+                setPendingAction(farmerId, 'water_quality');
+                continue;
+              }
+              const { rows: regs } = await pool.query(
+                "SELECT id, crop FROM farmer_crop_registrations WHERE farmer_id = $1 AND status = 'active' ORDER BY created_at DESC LIMIT 1",
+                [farmerId]
+              );
+              if (!regs.length) {
+                await sendWhatsAppMessage(from, lang === 'hi'
+                  ? '\u274C Pehle fasal register karein'
+                  : '\u274C Register a crop first');
+                continue;
+              }
+              await pool.query(
+                "UPDATE farmer_crop_registrations SET water_ec = $1, water_ph = $2, water_sar = $3, water_rsc = $4, updated_at = NOW() WHERE id = $5",
+                [ec, ph, sar, rsc, regs[0].id]
+              );
+              // Build response with issues
+              let issues = [];
+              if (ec > 2.25) issues.push('\u26A0\uFE0F High EC (' + ec + ') - namak wala pani, chloride khaad kam karein');
+              if (ec > 4) issues.push('\u{1F6A8} Bahut zyada EC - fasal ko nuksan ho sakta hai');
+              if (ph && ph > 8) issues.push('\u26A0\uFE0F Alkaline pani (pH ' + ph + ') - Zinc lock ho jata hai');
+              if (rsc && rsc > 2.5) issues.push('\u26A0\uFE0F High RSC (' + rsc + ') - Gypsum ' + (rsc * 0.86).toFixed(1) + ' ton/ha lagayein');
+              if (sar && sar > 18) issues.push('\u26A0\uFE0F High SAR - sodium zyada, gypsum zaruri');
+              const statusMsg = issues.length ? issues.join('\n') : '\u2705 Pani ki quality theek hai';
+              await sendWhatsAppMessage(from, lang === 'hi'
+                ? '\uD83D\uDCA7 *Water Quality Updated*\n\nEC: ' + (ec || '-') + ' dS/m\npH: ' + (ph || '-') + (sar ? '\nSAR: ' + sar : '') + (rsc ? '\nRSC: ' + rsc + ' meq/L' : '') + '\n\n' + statusMsg + '\n\n\uD83D\uDCCA Ab aapke schedule mein pani ki quality ke hisaab se doses adjust honge'
+                : '\uD83D\uDCA7 *Water Quality Updated*\n\nEC: ' + (ec || '-') + '\npH: ' + (ph || '-') + '\n\n' + statusMsg);
+              await sendWhatsAppButtons(from,
+                lang === 'hi' ? 'Aage?' : 'Next?',
+                [
+                  { id: 'mera_schedule', title: 'Updated Schedule' },
+                  { id: 'soil_input', title: 'Mitti Test' },
+                  { id: 'menu', title: 'Menu' }
+                ]
+              );
+              continue;
+            }
+
+            if (pendingAction === 'soil_test') {
+              clearPendingAction(farmerId);
+              const input = msgBody.trim();
+              // Parse: "N 180, P 22, K 250, pH 7.2" or "180 22 250 7.2"
+              let n = null, p = null, k = null, oc = null, ph = null, zn = null;
+              const nMatch = input.match(/n\s*[=:]?\s*(\d+\.?\d*)/i);
+              const pMatch = input.match(/p\s*[=:]?\s*(\d+\.?\d*)/i);
+              const kMatch = input.match(/k\s*[=:]?\s*(\d+\.?\d*)/i);
+              const ocMatch = input.match(/oc\s*[=:]?\s*(\d+\.?\d*)/i);
+              const phMatch = input.match(/ph\s*[=:]?\s*(\d+\.?\d*)/i);
+              const znMatch = input.match(/zn|zinc\s*[=:]?\s*(\d+\.?\d*)/i);
+              if (nMatch) n = parseFloat(nMatch[1]);
+              if (pMatch) p = parseFloat(pMatch[1]);
+              if (kMatch) k = parseFloat(kMatch[1]);
+              if (ocMatch) oc = parseFloat(ocMatch[1]);
+              if (phMatch) ph = parseFloat(phMatch[1]);
+              if (znMatch && znMatch[1]) zn = parseFloat(znMatch[1]);
+              // If space-separated numbers: N P K pH
+              if (!n && !p) {
+                const nums = input.match(/(\d+\.?\d*)/g);
+                if (nums && nums.length >= 3) {
+                  n = parseFloat(nums[0]);
+                  p = parseFloat(nums[1]);
+                  k = parseFloat(nums[2]);
+                  if (nums[3]) ph = parseFloat(nums[3]);
+                }
+              }
+              if (!n || !p || !k) {
+                await sendWhatsAppMessage(from, lang === 'hi'
+                  ? '\u274C NPK values samajh nahi aaye.\n\nExample:\n"N 180, P 22, K 250, pH 7.2"\nya simply: "180 22 250 7.2"\n\n(Soil Health Card se dekhein)'
+                  : '\u274C Could not parse. Example:\n"N 180, P 22, K 250, pH 7.2"\nor: "180 22 250 7.2"');
+                setPendingAction(farmerId, 'soil_test');
+                continue;
+              }
+              const { rows: regs } = await pool.query(
+                "SELECT id, crop FROM farmer_crop_registrations WHERE farmer_id = $1 AND status = 'active' ORDER BY created_at DESC LIMIT 1",
+                [farmerId]
+              );
+              if (!regs.length) {
+                await sendWhatsAppMessage(from, lang === 'hi' ? '\u274C Pehle fasal register karein' : '\u274C Register a crop first');
+                continue;
+              }
+              await pool.query(
+                "UPDATE farmer_crop_registrations SET soil_test_n = $1, soil_test_p = $2, soil_test_k = $3, soil_test_oc = $4, soil_test_ph = $5, soil_test_zn = $6, soil_test_source = 'whatsapp_input', updated_at = NOW() WHERE id = $7",
+                [n, p, k, oc, ph, zn, regs[0].id]
+              );
+              const nSt = n < 240 ? 'LOW' : n > 480 ? 'HIGH' : 'MEDIUM';
+              const pSt = p < 12 ? 'LOW' : p > 25 ? 'HIGH' : 'MEDIUM';
+              const kSt = k < 140 ? 'LOW' : k > 280 ? 'HIGH' : 'MEDIUM';
+              await sendWhatsAppMessage(from, lang === 'hi'
+                ? '\u2705 *Soil Test Updated!*\n\n\uD83E\uDDEA N: ' + n + ' kg/ha (' + nSt + ')\n\uD83E\uDDEA P: ' + p + ' kg/ha (' + pSt + ')\n\uD83E\uDDEA K: ' + k + ' kg/ha (' + kSt + ')' + (ph ? '\npH: ' + ph : '') + (oc ? '\nOC: ' + oc + '%' : '') + '\n\n\uD83D\uDCCA Ab district average ki jagah AAPKE khet ki values se dose calculate hoga!\n\n\u2728 Ye NutriNet-level precision hai'
+                : '\u2705 *Soil Test Updated!*\n\nN: ' + n + ' (' + nSt + ')\nP: ' + p + ' (' + pSt + ')\nK: ' + k + ' (' + kSt + ')' + (ph ? '\npH: ' + ph : '') + '\n\nDoses will now use YOUR soil values instead of district averages.');
+              await sendWhatsAppButtons(from,
+                lang === 'hi' ? 'Aage?' : 'Next?',
+                [
+                  { id: 'mera_schedule', title: 'Updated Schedule' },
+                  { id: 'yield_input', title: 'Yield Target' },
+                  { id: 'menu', title: 'Menu' }
+                ]
+              );
+              continue;
+            }
+
+            // === TRIGGER INPUTS (from buttons) ===
+            if (pendingAction === 'waiting_precision_choice') {
+              clearPendingAction(farmerId);
+              if (lowerMsg === 'yield_input' || lowerMsg.includes('yield')) {
+                setPendingAction(farmerId, 'yield_target');
+                await sendWhatsAppMessage(from, lang === 'hi'
+                  ? '\uD83C\uDFAF *Yield Target Set Karein*\n\nAap kitna yield chahte hain? (ton/hectare mein)\n\nExample:\n\u2022 Wheat: 4-6 ton\n\u2022 Rice: 5-8 ton\n\u2022 Sugarcane: 60-120 ton\n\u2022 Potato: 25-40 ton\n\nBas number type karein:'
+                  : '\uD83C\uDFAF *Set Yield Target*\n\nHow much yield do you want (t/ha)?\nJust type the number:');
+                continue;
+              }
+              if (lowerMsg === 'water_input' || lowerMsg.includes('pani') || lowerMsg.includes('water')) {
+                setPendingAction(farmerId, 'water_quality');
+                await sendWhatsAppMessage(from, lang === 'hi'
+                  ? '\uD83D\uDCA7 *Pani Ki Quality*\n\nAapke bore-well/tube-well ka test report se bhejein:\n\n\u2022 EC: __ dS/m\n\u2022 pH: __\n\u2022 SAR: __ (optional)\n\u2022 RSC: __ meq/L (optional)\n\nExample: "EC 3.2, pH 7.8"\nya sirf EC: "3.2"'
+                  : '\uD83D\uDCA7 *Water Quality*\n\nEnter your water test values:\nExample: "EC 3.2, pH 7.8"');
+                continue;
+              }
+              if (lowerMsg === 'soil_input' || lowerMsg.includes('mitti') || lowerMsg.includes('soil')) {
+                setPendingAction(farmerId, 'soil_test');
+                await sendWhatsAppMessage(from, lang === 'hi'
+                  ? '\uD83E\uDDEA *Mitti Ka Test*\n\nSoil Health Card se values bhejein:\n\n\u2022 N (Nitrogen): __ kg/ha\n\u2022 P (Phosphorus): __ kg/ha\n\u2022 K (Potassium): __ kg/ha\n\u2022 pH: __ (optional)\n\u2022 OC: __% (optional)\n\nExample: "N 180, P 22, K 250, pH 7.2"\nya: "180 22 250 7.2"'
+                  : '\uD83E\uDDEA *Soil Test Input*\n\nEnter from your Soil Health Card:\n"N 180, P 22, K 250, pH 7.2"');
+                continue;
+              }
+            }
+
+
+            // === PRECISION FARMING TRIGGER (from menu/buttons) ===
+            if (lowerMsg === 'yield_input' || lowerMsg === 'set_yield') {
+              setPendingAction(farmerId, 'yield_target');
+              await sendWhatsAppMessage(from, lang === 'hi'
+                ? '\uD83C\uDFAF *Yield Target*\n\nKitna yield chahte hain (ton/hectare)?\n\nExample: Sugarcane 80-120, Wheat 4-6, Rice 5-8\n\nBas number type karein:'
+                : '\uD83C\uDFAF Enter target yield (t/ha):');
+              continue;
+            }
+            if (lowerMsg === 'water_input' || lowerMsg === 'pani_quality') {
+              setPendingAction(farmerId, 'water_quality');
+              await sendWhatsAppMessage(from, lang === 'hi'
+                ? '\uD83D\uDCA7 *Pani Quality*\n\nBore-well test se EC value bhejein.\nExample: "EC 3.2" ya "EC 2.5, pH 7.8, RSC 3.0"'
+                : '\uD83D\uDCA7 Enter water EC value. Example: "EC 3.2"');
+              continue;
+            }
+            if (lowerMsg === 'soil_input' || lowerMsg === 'mitti_test') {
+              setPendingAction(farmerId, 'soil_test');
+              await sendWhatsAppMessage(from, lang === 'hi'
+                ? '\uD83E\uDDEA *Soil Health Card Values*\n\nN, P, K values bhejein:\n"N 180, P 22, K 250, pH 7.2"\nya: "180 22 250 7.2"'
+                : '\uD83E\uDDEA Enter N, P, K from your Soil Health Card:');
+              continue;
+            }
+            if (lowerMsg === 'precision_farming' || lowerMsg === 'smart_khaad') {
+              setPendingAction(farmerId, 'waiting_precision_choice');
+              await sendWhatsAppButtons(from,
+                lang === 'hi' ? '\u2728 *Smart Khaad System*\n\nAapki fasal ke liye precise dose calculate karne ke liye ye info chahiye:' : '\u2728 *Precision Farming*\n\nChoose what to input:',
+                [
+                  { id: 'yield_input', title: 'Yield Target' },
+                  { id: 'water_input', title: 'Pani Quality' },
+                  { id: 'soil_input', title: 'Mitti Test' }
+                ]
+              );
+              continue;
+            }
+
+
             }
 
             if (pendingAction === 'mandi_district') {
