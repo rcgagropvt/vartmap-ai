@@ -5809,6 +5809,20 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
   app.get("/api/v1/crop-calendar/templates", auth, async (req, res) => {
     try {
       const { rows } = await pool.query("SELECT * FROM crop_calendar_templates ORDER BY crop, day_offset");
+    // Add precision columns if not exist
+    await pool.query("ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS target_yield NUMERIC").catch(()=>{});
+    await pool.query("ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS water_ec NUMERIC").catch(()=>{});
+    await pool.query("ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS water_ph NUMERIC").catch(()=>{});
+    await pool.query("ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS water_sar NUMERIC").catch(()=>{});
+    await pool.query("ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS water_rsc NUMERIC").catch(()=>{});
+    await pool.query("ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS soil_test_n NUMERIC").catch(()=>{});
+    await pool.query("ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS soil_test_p NUMERIC").catch(()=>{});
+    await pool.query("ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS soil_test_k NUMERIC").catch(()=>{});
+    await pool.query("ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS soil_test_oc NUMERIC").catch(()=>{});
+    await pool.query("ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS soil_test_ph NUMERIC").catch(()=>{});
+    await pool.query("ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS soil_test_zn NUMERIC").catch(()=>{});
+    await pool.query("ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS soil_test_source TEXT DEFAULT 'district_avg'").catch(()=>{});
+
       res.json({ templates: rows });
     } catch(e) { res.status(500).json({ error: e.message }); }
   });
@@ -7070,7 +7084,34 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
   });
 
 
-  app.get("/api/v1/crop-calendar/list-districts", async (req, res) => {
+  
+  // Migration: Add precision pipeline columns
+  app.post('/api/v1/crop-calendar/migrate-precision-columns', async (req, res) => {
+    try {
+      const columns = [
+        "ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS target_yield NUMERIC",
+        "ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS water_ec NUMERIC",
+        "ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS water_ph NUMERIC",
+        "ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS water_sar NUMERIC",
+        "ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS water_rsc NUMERIC",
+        "ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS soil_test_n NUMERIC",
+        "ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS soil_test_p NUMERIC",
+        "ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS soil_test_k NUMERIC",
+        "ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS soil_test_oc NUMERIC",
+        "ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS soil_test_ph NUMERIC",
+        "ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS soil_test_zn NUMERIC",
+        "ALTER TABLE farmer_crop_registrations ADD COLUMN IF NOT EXISTS soil_test_source TEXT DEFAULT 'district_avg'"
+      ];
+      for (const sql of columns) {
+        await pool.query(sql);
+      }
+      res.json({ success: true, message: "Added 12 precision columns to farmer_crop_registrations", columns_added: columns.length });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+app.get("/api/v1/crop-calendar/list-districts", async (req, res) => {
     try {
       const { rows } = await pool.query("SELECT id, district_name, state_name FROM districts_master ORDER BY state_name, district_name LIMIT 100");
       res.json({ count: rows.length, districts: rows });
