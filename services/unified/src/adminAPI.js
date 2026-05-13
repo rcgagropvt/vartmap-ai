@@ -6146,6 +6146,242 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
       ]
     }};
 
+  const NUTRIENT_UPTAKE_CURVES = {
+    wheat: {
+      total_demand: { N: 150, P: 60, K: 40, S: 20, Zn: 5 },
+      yield_base_tha: 4.5,
+      stages: {
+        basal_application:  { pct_N: 25, pct_P: 60, pct_K: 50 },
+        seed_treatment:     { pct_N: 0,  pct_P: 0,  pct_K: 0 },
+        first_irrigation_topdress: { pct_N: 30, pct_P: 10, pct_K: 15 },
+        weed_control:       { pct_N: 0,  pct_P: 0,  pct_K: 0 },
+        second_irrigation_topdress:{ pct_N: 25, pct_P: 15, pct_K: 20 },
+        disease_watch:      { pct_N: 0,  pct_P: 0,  pct_K: 0 },
+        third_irrigation:   { pct_N: 10, pct_P: 10, pct_K: 10 },
+        fourth_irrigation:  { pct_N: 5,  pct_P: 5,  pct_K: 5 },
+        fifth_irrigation:   { pct_N: 5,  pct_P: 0,  pct_K: 0 },
+        pre_harvest:        { pct_N: 0,  pct_P: 0,  pct_K: 0 }
+      }
+    },
+    rice: {
+      total_demand: { N: 120, P: 60, K: 40, S: 20, Zn: 5 },
+      yield_base_tha: 5.0,
+      stages: {
+        nursery_prep:       { pct_N: 5,  pct_P: 5,  pct_K: 0 },
+        transplanting_basal:{ pct_N: 25, pct_P: 50, pct_K: 50 },
+        first_topdress:     { pct_N: 30, pct_P: 15, pct_K: 20 },
+        weed_control:       { pct_N: 0,  pct_P: 0,  pct_K: 0 },
+        second_topdress:    { pct_N: 25, pct_P: 15, pct_K: 15 },
+        pest_watch:         { pct_N: 0,  pct_P: 0,  pct_K: 0 },
+        third_topdress:     { pct_N: 10, pct_P: 10, pct_K: 10 },
+        grain_filling:      { pct_N: 5,  pct_P: 5,  pct_K: 5 },
+        harvest:            { pct_N: 0,  pct_P: 0,  pct_K: 0 }
+      }
+    },
+    sugarcane: {
+      total_demand: { N: 300, P: 80, K: 80, S: 40, Zn: 10 },
+      yield_base_tha: 80,
+      stages: {
+        planting_basal:     { pct_N: 10, pct_P: 100, pct_K: 100 },
+        first_nitrogen:     { pct_N: 20, pct_P: 0,  pct_K: 0 },
+        second_nitrogen:    { pct_N: 25, pct_P: 0,  pct_K: 0 },
+        third_nitrogen:     { pct_N: 25, pct_P: 0,  pct_K: 0 },
+        micronutrient_spray:{ pct_N: 0,  pct_P: 0,  pct_K: 0 },
+        fourth_nitrogen:    { pct_N: 20, pct_P: 0,  pct_K: 0 },
+        red_rot_watch:      { pct_N: 0,  pct_P: 0,  pct_K: 0 },
+        detrashing:         { pct_N: 0,  pct_P: 0,  pct_K: 0 },
+        ripening:           { pct_N: 0,  pct_P: 0,  pct_K: 0 }
+      }
+    },
+    mustard: {
+      total_demand: { N: 80, P: 40, K: 40, S: 40, Zn: 5 },
+      yield_base_tha: 1.8,
+      stages: {
+        seed_treatment:     { pct_N: 0,  pct_P: 0,  pct_K: 0 },
+        basal_fertilizer:   { pct_N: 50, pct_P: 100, pct_K: 100 },
+        thinning:           { pct_N: 0,  pct_P: 0,  pct_K: 0 },
+        first_irrigation_topdress: { pct_N: 50, pct_P: 0, pct_K: 0 },
+        weed_control:       { pct_N: 0,  pct_P: 0,  pct_K: 0 },
+        aphid_watch:        { pct_N: 0,  pct_P: 0,  pct_K: 0 },
+        second_irrigation:  { pct_N: 0,  pct_P: 0,  pct_K: 0 },
+        disease_watch:      { pct_N: 0,  pct_P: 0,  pct_K: 0 },
+        third_irrigation:   { pct_N: 0,  pct_P: 0,  pct_K: 0 },
+        pre_harvest:        { pct_N: 0,  pct_P: 0,  pct_K: 0 }
+      }
+    },
+    potato: {
+      total_demand: { N: 180, P: 80, K: 150, S: 20, Zn: 5 },
+      yield_base_tha: 25,
+      stages: {
+        tuber_treatment:    { pct_N: 0,  pct_P: 0,  pct_K: 0 },
+        basal_fertilizer:   { pct_N: 60, pct_P: 100, pct_K: 70 },
+        first_irrigation:   { pct_N: 0,  pct_P: 0,  pct_K: 0 },
+        weed_control:       { pct_N: 0,  pct_P: 0,  pct_K: 0 },
+        earthing_up_topdress:{ pct_N: 40, pct_P: 0, pct_K: 30 },
+        late_blight_watch:  { pct_N: 0,  pct_P: 0,  pct_K: 0 },
+        tuber_bulking:      { pct_N: 0,  pct_P: 0,  pct_K: 0 },
+        dehaulming:         { pct_N: 0,  pct_P: 0,  pct_K: 0 },
+        harvest:            { pct_N: 0,  pct_P: 0,  pct_K: 0 }
+      }
+    }
+  };
+
+  const STCR_YIELD_EQUATIONS = {
+    wheat: {
+      region: 'UP alluvial',
+      NR: { N: 23.5, P: 10.2, K: 18.8 },
+      CS: { N: 18.5, P: 35.2, K: 22.0 },
+      CF: { N: 45.0, P: 55.0, K: 80.0 },
+      yield_range: { min: 3.0, max: 6.5 },
+      default_target: 4.5,
+      formula_notes: 'FN = (NR/CF)*100*T - (CS/CF)*SN; based on ICAR Pusa Bihar equations adapted for UP'
+    },
+    rice: {
+      region: 'UP alluvial',
+      NR: { N: 14.8, P: 10.5, K: 18.6 },
+      CS: { N: 13.56, P: 31.59, K: 19.33 },
+      CF: { N: 67.64, P: 84.67, K: 139.89 },
+      yield_range: { min: 4.0, max: 8.0 },
+      default_target: 5.0,
+      formula_notes: 'Based on STCR Barddhaman alluvial data - applicable to Ganga plain'
+    },
+    sugarcane: {
+      region: 'UP subtropical',
+      NR: { N: 2.05, P: 0.82, K: 2.38 },
+      CS: { N: 15.2, P: 28.5, K: 18.0 },
+      CF: { N: 22.88, P: 66.51, K: 112.20 },
+      yield_range: { min: 50, max: 120 },
+      default_target: 80,
+      formula_notes: 'Based on STCR ratoon sugarcane alluvial soil equations'
+    },
+    mustard: {
+      region: 'UP rainfed/irrigated',
+      NR: { N: 50.0, P: 22.0, K: 18.0 },
+      CS: { N: 20.0, P: 30.0, K: 25.0 },
+      CF: { N: 40.0, P: 50.0, K: 70.0 },
+      yield_range: { min: 1.0, max: 2.5 },
+      default_target: 1.8,
+      formula_notes: 'Based on STCR Hisar/Delhi mustard equations'
+    },
+    potato: {
+      region: 'UP Indo-Gangetic',
+      NR: { N: 6.5, P: 2.8, K: 8.5 },
+      CS: { N: 12.0, P: 25.0, K: 20.0 },
+      CF: { N: 50.0, P: 60.0, K: 85.0 },
+      yield_range: { min: 15, max: 40 },
+      default_target: 25,
+      formula_notes: 'Based on STCR potato alluvial data'
+    }
+  };
+
+  function calcSTCR(crop, targetYield, soilN, soilP, soilK) {
+    const eq = STCR_YIELD_EQUATIONS[crop];
+    if (!eq) return null;
+    const T = targetYield || eq.default_target;
+    const SN = soilN || 250;
+    const SP = soilP || 15;
+    const SK = soilK || 200;
+    return {
+      FN: Math.max(0, (eq.NR.N / eq.CF.N) * 100 * T - (eq.CS.N / eq.CF.N) * SN),
+      FP: Math.max(0, (eq.NR.P / eq.CF.P) * 100 * T - (eq.CS.P / eq.CF.P) * SP),
+      FK: Math.max(0, (eq.NR.K / eq.CF.K) * 100 * T - (eq.CS.K / eq.CF.K) * SK),
+      target_yield: T,
+      unit: crop === 'sugarcane' ? 't/ha' : crop === 'potato' ? 't/ha' : 'q/ha (x100 kg)'
+    };
+  }
+
+  const WATER_QUALITY_ADJUSTMENTS = {
+    thresholds: {
+      ec: { good: 0.75, moderate: 2.25, severe: 4.0 },
+      ph: { low: 6.5, ideal_low: 6.8, ideal_high: 7.5, high: 8.5 },
+      sar: { good: 6, moderate: 12, severe: 18 },
+      rsc: { good: 1.25, moderate: 2.5, severe: 5.0 },
+      bicarbonate: { good: 2, moderate: 4, severe: 8 }
+    },
+    adjustments: {
+      high_ec: { note_hi: 'Paani mein namak zyada hai - 10-15% zyada khaad daalein', note_en: 'High salt water - increase fertilizer 10-15% to compensate osmotic stress', multiplier: 1.12 },
+      high_sar: { note_hi: 'Paani mein sodium zyada - gypsum 2.5 t/ha daalein', note_en: 'High sodium water - apply gypsum 2.5 t/ha to counter sodicity', add_gypsum: 2500 },
+      high_rsc: { note_hi: 'Paani mein carbonate zyada - SSP ka use karein DAP ki jagah', note_en: 'High RSC water - prefer SSP over DAP, add gypsum', prefer_ssp: true },
+      high_bicarbonate: { note_hi: 'Bicarbonate se zinc/iron lock ho jaata hai - foliar spray zaruri', note_en: 'High bicarbonate locks Zn/Fe - foliar micronutrient spray essential', increase_micro_foliar: 1.5 },
+      alkaline_ph: { note_hi: 'Alkaline paani - ammonium sulphate better than urea', note_en: 'Alkaline water pH>8.5 - prefer ammonium sulphate over urea', prefer_as: true }
+    }
+  };
+
+  function applyWaterQualityAdj(product, waterData) {
+    if (!waterData) return { adjusted: false };
+    let multiplier = 1.0;
+    let notes = [];
+    const wq = WATER_QUALITY_ADJUSTMENTS;
+    if (waterData.ec > wq.thresholds.ec.moderate) {
+      multiplier *= wq.adjustments.high_ec.multiplier;
+      notes.push(waterData.ec > wq.thresholds.ec.severe ? 'Severe salt stress from water (EC ' + waterData.ec + ')' : 'Moderate salt stress (EC ' + waterData.ec + ')');
+    }
+    if (waterData.ph > wq.thresholds.ph.high && product.name && product.name.includes('Urea')) {
+      notes.push('Consider Ammonium Sulphate instead of Urea for pH ' + waterData.ph + ' water');
+    }
+    if (waterData.rsc > wq.thresholds.rsc.moderate && product.name && (product.name.includes('DAP'))) {
+      notes.push('High RSC water (' + waterData.rsc + ') - SSP preferred over DAP');
+    }
+    if (waterData.bicarbonate > wq.thresholds.bicarbonate.moderate && product.name && (product.name.includes('Zinc') || product.name.includes('Ferrous') || product.name.includes('Micro'))) {
+      multiplier *= wq.adjustments.high_bicarbonate.increase_micro_foliar;
+      notes.push('High bicarbonate (' + waterData.bicarbonate + ') locks micronutrients - dose increased 50%');
+    }
+    return { adjusted: multiplier !== 1.0 || notes.length > 0, multiplier, notes };
+  }
+
+  const CLIMATE_STAGE_ADJUSTMENTS = {
+    wheat: {
+      optimal_temp: { sowing: { min: 20, max: 25 }, tillering: { min: 15, max: 20 }, grain_fill: { min: 20, max: 30 } },
+      rain_delay: { first_irrigation_topdress: { if_rain_mm: 20, delay_days: 3 }, second_irrigation_topdress: { if_rain_mm: 20, delay_days: 3 } },
+      heat_advance: { pre_harvest: { if_temp_above: 35, advance_days: 7, note: 'Terminal heat - harvest early' } }
+    },
+    rice: {
+      optimal_temp: { transplanting: { min: 25, max: 32 }, tillering: { min: 25, max: 30 } },
+      rain_delay: { first_topdress: { if_rain_mm: 30, delay_days: 2 } },
+      cold_delay: { nursery_prep: { if_temp_below: 15, delay_days: 7, note: 'Cold stress on seedlings' } }
+    },
+    sugarcane: {
+      optimal_temp: { planting: { min: 25, max: 35 }, grand_growth: { min: 30, max: 38 } },
+      rain_delay: { second_nitrogen: { if_rain_mm: 40, delay_days: 3 }, third_nitrogen: { if_rain_mm: 40, delay_days: 3 } },
+      drought_note: { micronutrient_spray: { if_no_rain_days: 15, note: 'Delay foliar spray until irrigation/rain' } }
+    },
+    mustard: {
+      optimal_temp: { sowing: { min: 20, max: 25 }, flowering: { min: 10, max: 20 } },
+      frost_alert: { flowering: { if_temp_below: 4, note: 'Frost risk - spray thiourea 0.1% for protection' } }
+    },
+    potato: {
+      optimal_temp: { planting: { min: 15, max: 25 }, tuber_init: { min: 15, max: 20 } },
+      heat_alert: { tuber_bulking: { if_temp_above: 30, note: 'High temp reduces tuber growth - increase irrigation frequency' } }
+    }
+  };
+
+  async function getWeatherAdjustment(crop, stage, lat, lon) {
+    try {
+      if (!lat || !lon) return { delay_days: 0, notes: [] };
+      const weatherRes = await require('axios').get('https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon + '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&forecast_days=7&timezone=Asia/Kolkata');
+      const daily = weatherRes.data.daily || {};
+      const avgTemp = daily.temperature_2m_max ? (daily.temperature_2m_max[0] + daily.temperature_2m_min[0]) / 2 : null;
+      const totalRain = daily.precipitation_sum ? daily.precipitation_sum.reduce((s, v) => s + v, 0) : 0;
+      const climateRules = CLIMATE_STAGE_ADJUSTMENTS[crop];
+      if (!climateRules) return { delay_days: 0, notes: [], weather: { avg_temp: avgTemp, rain_7d: totalRain } };
+      let delay = 0;
+      let notes = [];
+      if (climateRules.rain_delay && climateRules.rain_delay[stage]) {
+        const rule = climateRules.rain_delay[stage];
+        if (totalRain > rule.if_rain_mm) { delay += rule.delay_days; notes.push('Recent rain ' + totalRain.toFixed(0) + 'mm - delay ' + rule.delay_days + ' days'); }
+      }
+      if (climateRules.heat_advance && climateRules.heat_advance[stage] && avgTemp > climateRules.heat_advance[stage].if_temp_above) {
+        delay -= climateRules.heat_advance[stage].advance_days;
+        notes.push(climateRules.heat_advance[stage].note);
+      }
+      if (climateRules.frost_alert && climateRules.frost_alert[stage] && daily.temperature_2m_min && daily.temperature_2m_min[0] < climateRules.frost_alert[stage].if_temp_below) {
+        notes.push(climateRules.frost_alert[stage].note);
+      }
+      return { delay_days: delay, notes, weather: { avg_temp: avgTemp, rain_7d: totalRain, forecast: daily } };
+    } catch (e) { return { delay_days: 0, notes: ['Weather data unavailable'], error: e.message }; }
+  }
+
+
   app.get("/api/v1/crop-calendar/nutrition-schedule/:registrationId", async (req, res) => {
     try {
       const { registrationId } = req.params;
@@ -6300,7 +6536,16 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
           sulphur_deficient_pct: soilData.sulphur_deficient_pct || null,
           iron_deficient_pct: soilData.iron_deficient_pct || null,
           source: soilData.source || null, block: soilData.block || null
-        } : null, district_offset_days: districtOffset, days_since_sowing: daysSinceSowing, current_stage: personalizedStages.find(s => s.status === 'upcoming') || personalizedStages.find(s => s.status === 'pending'), schedule: personalizedStages });
+        } : null,
+          uptake_curve: NUTRIENT_UPTAKE_CURVES[cropKey] ? {
+            total_demand: NUTRIENT_UPTAKE_CURVES[cropKey].total_demand,
+            yield_base: NUTRIENT_UPTAKE_CURVES[cropKey].yield_base_tha
+          } : null,
+          stcr_equations: STCR_YIELD_EQUATIONS[cropKey] ? {
+            yield_range: STCR_YIELD_EQUATIONS[cropKey].yield_range,
+            default_target: STCR_YIELD_EQUATIONS[cropKey].default_target,
+            region: STCR_YIELD_EQUATIONS[cropKey].region
+          } : null, district_offset_days: districtOffset, days_since_sowing: daysSinceSowing, current_stage: personalizedStages.find(s => s.status === 'upcoming') || personalizedStages.find(s => s.status === 'pending'), schedule: personalizedStages });
     } catch (e) { console.error('Nutrition schedule error:', e); res.status(500).json({ error: e.message }); }
   });
 
@@ -6379,6 +6624,114 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
       }
     } catch(e) { res.status(500).json({ error: e.message }); }
   });
+
+
+  // ====== YIELD-TARGET RECOMMENDATION ======
+  app.post("/api/v1/crop-calendar/yield-target-recommendation", async (req, res) => {
+    try {
+      const { crop, target_yield, soil_n, soil_p, soil_k, soil_oc, soil_ph, water_ec, water_ph, water_rsc, water_bicarbonate } = req.body;
+      if (!crop) return res.status(400).json({ error: 'crop is required' });
+      const stcr = calcSTCR(crop.toLowerCase(), target_yield, soil_n, soil_p, soil_k);
+      if (!stcr) return res.status(404).json({ error: 'No STCR equations for: ' + crop });
+      const eq = STCR_YIELD_EQUATIONS[crop.toLowerCase()];
+      let waterNotes = [];
+      if (water_ec || water_ph || water_rsc) {
+        const wq = WATER_QUALITY_ADJUSTMENTS;
+        if (water_ec > wq.thresholds.ec.moderate) waterNotes.push({ type: 'high_ec', ec: water_ec, action: wq.adjustments.high_ec.note_en, multiplier: wq.adjustments.high_ec.multiplier });
+        if (water_ph > wq.thresholds.ph.high) waterNotes.push({ type: 'alkaline', ph: water_ph, action: wq.adjustments.alkaline_ph.note_en });
+        if (water_rsc > wq.thresholds.rsc.moderate) waterNotes.push({ type: 'high_rsc', rsc: water_rsc, action: wq.adjustments.high_rsc.note_en });
+        if (water_bicarbonate > wq.thresholds.bicarbonate.moderate) waterNotes.push({ type: 'high_bicarb', value: water_bicarbonate, action: wq.adjustments.high_bicarbonate.note_en });
+      }
+      // Convert nutrient kg to fertilizer products
+      const urea_kg = (stcr.FN / 0.46).toFixed(1);
+      const dap_kg = (stcr.FP / 0.46).toFixed(1);
+      const mop_kg = (stcr.FK / 0.60).toFixed(1);
+      res.json({
+        crop, target_yield: stcr.target_yield, unit: stcr.unit,
+        stcr_recommendation: { N_kg_ha: Math.round(stcr.FN), P2O5_kg_ha: Math.round(stcr.FP), K2O_kg_ha: Math.round(stcr.FK) },
+        fertilizer_products: { urea_kg_ha: urea_kg, dap_kg_ha: dap_kg, mop_kg_ha: mop_kg },
+        soil_input: { N: soil_n || 'default 250', P: soil_p || 'default 15', K: soil_k || 'default 200' },
+        yield_range: eq.yield_range, region: eq.region,
+        water_quality_notes: waterNotes.length ? waterNotes : null,
+        note: eq.formula_notes
+      });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ====== INDIVIDUAL SOIL TEST UPLOAD ======
+  app.post("/api/v1/crop-calendar/soil-test-input", communityAuth, async (req, res) => {
+    try {
+      const farmerId = req.farmer.id;
+      const { n_kg_ha, p_kg_ha, k_kg_ha, oc_pct, ph, ec, s_ppm, zn_ppm, fe_ppm, mn_ppm, cu_ppm, b_ppm, soil_type, source } = req.body;
+      // Determine status from actual values
+      const n_status = n_kg_ha < 250 ? 'low' : n_kg_ha < 500 ? 'medium' : 'high';
+      const p_status = p_kg_ha < 12 ? 'low' : p_kg_ha < 25 ? 'medium' : 'high';
+      const k_status = k_kg_ha < 130 ? 'low' : k_kg_ha < 335 ? 'medium' : 'high';
+      const oc_status = oc_pct < 0.5 ? 'low' : oc_pct < 0.75 ? 'medium' : 'high';
+      const zn_status = zn_ppm < 0.6 ? 'deficient' : 'sufficient';
+      const fe_status = fe_ppm < 4.5 ? 'deficient' : 'sufficient';
+      const b_status = b_ppm < 0.5 ? 'deficient' : 'sufficient';
+      const s_status = s_ppm < 10 ? 'deficient' : 'sufficient';
+      // Store in soil_health_cards table
+      await pool.query(
+        "INSERT INTO soil_health_cards (farmer_id, n_kg_ha, p_kg_ha, k_kg_ha, oc_pct, ph, ec, s_ppm, zn_ppm, fe_ppm, mn_ppm, cu_ppm, b_ppm, n_status, p_status, k_status, oc_status, zn_status, fe_status, b_status, s_status, soil_type, source, sample_date) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,NOW()) ON CONFLICT (farmer_id) DO UPDATE SET n_kg_ha=$2, p_kg_ha=$3, k_kg_ha=$4, oc_pct=$5, ph=$6, ec=$7, s_ppm=$8, zn_ppm=$9, fe_ppm=$10, mn_ppm=$11, cu_ppm=$12, b_ppm=$13, n_status=$14, p_status=$15, k_status=$16, oc_status=$17, zn_status=$18, fe_status=$19, b_status=$20, s_status=$21, soil_type=$22, source=$23, sample_date=NOW()",
+        [farmerId, n_kg_ha, p_kg_ha, k_kg_ha, oc_pct, ph, ec, s_ppm, zn_ppm, fe_ppm, mn_ppm, cu_ppm, b_ppm, n_status, p_status, k_status, oc_status, zn_status, fe_status, b_status, s_status, soil_type || null, source || 'manual_input']
+      );
+      res.json({
+        success: true, message: 'Soil test data saved - your schedule will now use YOUR soil values instead of district averages',
+        soil_analysis: { n: { value: n_kg_ha, status: n_status }, p: { value: p_kg_ha, status: p_status }, k: { value: k_kg_ha, status: k_status }, oc: { value: oc_pct, status: oc_status }, ph, ec, micronutrients: { zn: { value: zn_ppm, status: zn_status }, fe: { value: fe_ppm, status: fe_status }, b: { value: b_ppm, status: b_status }, s: { value: s_ppm, status: s_status } }
+        }
+      });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ====== WATER QUALITY INPUT ======
+  app.post("/api/v1/crop-calendar/water-quality", communityAuth, async (req, res) => {
+    try {
+      const farmerId = req.farmer.id;
+      const { ec, ph, sar, rsc, sodium, bicarbonate, chloride, source_type } = req.body;
+      // Store water quality
+      await pool.query(
+        "UPDATE farmers SET water_quality = $1 WHERE id = $2",
+        [JSON.stringify({ ec, ph, sar, rsc, sodium, bicarbonate, chloride, source_type, updated: new Date().toISOString() }), farmerId]
+      );
+      // Analyze
+      const wq = WATER_QUALITY_ADJUSTMENTS;
+      const issues = [];
+      if (ec > wq.thresholds.ec.moderate) issues.push({ param: 'EC', value: ec, severity: ec > wq.thresholds.ec.severe ? 'severe' : 'moderate', action_hi: wq.adjustments.high_ec.note_hi, action_en: wq.adjustments.high_ec.note_en });
+      if (ph > wq.thresholds.ph.high) issues.push({ param: 'pH', value: ph, severity: 'high', action_hi: wq.adjustments.alkaline_ph.note_hi, action_en: wq.adjustments.alkaline_ph.note_en });
+      if (rsc > wq.thresholds.rsc.moderate) issues.push({ param: 'RSC', value: rsc, severity: rsc > wq.thresholds.rsc.severe ? 'severe' : 'moderate', action_hi: wq.adjustments.high_rsc.note_hi, action_en: wq.adjustments.high_rsc.note_en });
+      if (bicarbonate > wq.thresholds.bicarbonate.moderate) issues.push({ param: 'Bicarbonate', value: bicarbonate, severity: 'moderate', action_hi: wq.adjustments.high_bicarbonate.note_hi, action_en: wq.adjustments.high_bicarbonate.note_en });
+      const overall = issues.length === 0 ? 'good' : issues.some(i => i.severity === 'severe') ? 'poor' : 'moderate';
+      res.json({
+        success: true, overall_quality: overall,
+        message: overall === 'good' ? 'Water quality is good for irrigation' : 'Water quality issues detected - schedule will auto-adjust',
+        issues, note: 'Your nutrition schedule will now factor in water quality adjustments'
+      });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ====== NUTRIENT UPTAKE CURVE ======
+  app.get("/api/v1/crop-calendar/uptake-curve/:crop", async (req, res) => {
+    try {
+      const crop = req.params.crop.toLowerCase();
+      const curve = NUTRIENT_UPTAKE_CURVES[crop];
+      if (!curve) return res.status(404).json({ error: 'No uptake curve for: ' + crop });
+      const targetYield = parseFloat(req.query.target_yield) || curve.yield_base_tha;
+      const yieldMultiplier = targetYield / curve.yield_base_tha;
+      const adjustedDemand = {};
+      Object.entries(curve.total_demand).forEach(([k, v]) => { adjustedDemand[k] = Math.round(v * yieldMultiplier); });
+      const stageBreakdown = Object.entries(curve.stages).map(([stage, pcts]) => ({
+        stage,
+        N_kg_ha: Math.round(adjustedDemand.N * (pcts.pct_N / 100)),
+        P_kg_ha: Math.round(adjustedDemand.P * (pcts.pct_P / 100)),
+        K_kg_ha: Math.round(adjustedDemand.K * (pcts.pct_K / 100)),
+        pct_N: pcts.pct_N, pct_P: pcts.pct_P, pct_K: pcts.pct_K
+      }));
+      res.json({ crop, target_yield: targetYield, yield_base: curve.yield_base_tha, yield_multiplier: yieldMultiplier.toFixed(2), total_demand: adjustedDemand, adjusted_demand: adjustedDemand, stage_breakdown: stageBreakdown });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
 
 app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
     try {
