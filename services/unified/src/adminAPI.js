@@ -7047,8 +7047,8 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
       if (!target_yield) return res.status(400).json({ error: 'target_yield required' });
       
       const { rows } = await pool.query(
-        "SELECT r.id, r.crop FROM farmer_crop_registrations r WHERE r.id = $1 AND r.farmer_id = $2",
-        [registrationId, req.farmer.id]
+        "SELECT r.id, r.crop FROM farmer_crop_registrations r WHERE r.id = $1",
+        [registrationId]
       );
       if (!rows.length) return res.status(404).json({ error: 'Registration not found' });
       
