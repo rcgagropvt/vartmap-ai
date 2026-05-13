@@ -6226,6 +6226,12 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
     }
   };
 
+  
+
+  
+
+  
+
   const STCR_YIELD_EQUATIONS = {
     wheat: {
       region: 'UP alluvial',
