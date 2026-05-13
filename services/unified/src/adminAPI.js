@@ -6610,6 +6610,190 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
 
   
   // List districts in districts_master
+  
+﻿  // === CROP CALENDAR WHATSAPP REMINDER SYSTEM ===
+  app.post("/api/v1/crop-calendar/send-reminders", auth, async (req, res) => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const { rows: dueRegs } = await pool.query(
+        `SELECT r.id, r.farmer_id, r.crop, r.sow_date, r.land_area, r.next_reminder_date,
+                f.phone, f.name, f.district_id, f.land_holding_acres, f.village
+         FROM farmer_crop_registrations r
+         JOIN farmers f ON f.id = r.farmer_id
+         WHERE r.status = 'active'
+           AND r.next_reminder_date <= $1
+           AND f.phone IS NOT NULL`,
+        [today]
+      );
+
+      if (!dueRegs.length) return res.json({ sent: 0, message: 'No reminders due today' });
+
+      const gatewayUrl = process.env.GATEWAY_URL || 'https://vartmap-whatsapp-gateway.onrender.com';
+      let sent = 0, failed = 0, errors = [];
+
+      for (const reg of dueRegs) {
+        try {
+          const sowDate = new Date(reg.sow_date);
+          const daysSinceSowing = Math.floor((Date.now() - sowDate.getTime()) / (1000*60*60*24));
+          const cropKey = reg.crop.toLowerCase();
+          const schedule = NUTRITION_SCHEDULES[cropKey];
+          if (!schedule) continue;
+
+          let currentStage = null, nextStage = null;
+          for (let i = 0; i < schedule.stages.length; i++) {
+            if (daysSinceSowing >= schedule.stages[i].day_offset) {
+              currentStage = schedule.stages[i];
+              if (i + 1 < schedule.stages.length) nextStage = schedule.stages[i + 1];
+            }
+          }
+          if (!currentStage && schedule.stages.length) nextStage = schedule.stages[0];
+          const stageToSend = nextStage || currentStage;
+          if (!stageToSend) continue;
+
+          // Get soil data
+          let soilData = null;
+          if (reg.district_id) {
+            const { rows: distRows } = await pool.query("SELECT district_name FROM districts_master WHERE id = $1", [reg.district_id]);
+            if (distRows.length) {
+              const { rows: soilRows } = await pool.query(
+                "SELECT nitrogen_low_pct, phosphorus_low_pct, potassium_low_pct, avg_zinc, avg_boron FROM soil_nutrient_data WHERE LOWER(district_name) ILIKE $1",
+                ['%' + distRows[0].district_name.toLowerCase() + '%']
+              );
+              if (soilRows.length) {
+                const avg = (rows, col) => rows.reduce((s, r) => s + (parseFloat(r[col]) || 0), 0) / rows.length;
+                soilData = {
+                  n_status: avg(soilRows, 'nitrogen_low_pct') > 50 ? 'low' : 'medium',
+                  p_status: avg(soilRows, 'phosphorus_low_pct') > 50 ? 'low' : 'high',
+                  k_status: avg(soilRows, 'potassium_low_pct') > 50 ? 'low' : 'high',
+                  zinc_deficient_pct: 100 - avg(soilRows, 'avg_zinc'),
+                  boron_deficient_pct: 100 - avg(soilRows, 'avg_boron')
+                };
+              }
+            }
+          }
+
+          const landAcres = parseFloat(reg.land_area) || parseFloat(reg.land_holding_acres) || 1;
+          const landHa = landAcres * 0.4047;
+
+          // Build product lines with soil adjustments
+          let productLines = [];
+          if (stageToSend.products) {
+            for (const prod of stageToSend.products) {
+              let dose = prod.dose_per_ha * landHa;
+              let note = '';
+              if (soilData) {
+                if (prod.name.includes('Urea') && soilData.n_status === 'low') { dose *= 1.3; note = ' (N low +30%)'; }
+                if ((prod.name.includes('DAP') || prod.name.includes('SSP')) && soilData.p_status === 'high') { dose *= 0.7; note = ' (P high -30%)'; }
+                if (prod.name.includes('MOP') && soilData.k_status === 'high') { dose *= 0.7; note = ' (K high -30%)'; }
+                if (prod.name.includes('Zinc') && soilData.zinc_deficient_pct > 50) { dose *= 1.3; note = ' (Zn +30%)'; }
+                if (prod.name.includes('Borax') && soilData.boron_deficient_pct > 40) { dose *= 1.25; note = ' (B +25%)'; }
+              }
+              productLines.push('  \u2022 ' + prod.name + ': ' + dose.toFixed(1) + ' ' + prod.unit + note);
+            }
+          }
+
+          const nextStageDate = new Date(sowDate);
+          nextStageDate.setDate(nextStageDate.getDate() + stageToSend.day_offset);
+          const dateStr = nextStageDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
+
+          const message = [
+            '\uD83C\uDF3E *' + reg.crop.toUpperCase() + ' - Khaad Schedule*',
+            '\uD83D\uDC64 ' + reg.name + ' | ' + landAcres + ' acre',
+            '',
+            '\uD83D\uDCC5 *' + (stageToSend.title_hi || stageToSend.title_en) + '*',
+            'Date: ' + dateStr + ' (Day ' + stageToSend.day_offset + ')',
+            '',
+            '\uD83E\uDDEA *Products / Khaad:*',
+            ...productLines,
+            '',
+            stageToSend.note_hi ? '\uD83D\uDCDD ' + stageToSend.note_hi : '',
+            '',
+            '\uD83C\uDF0D Soil-adjusted for your area',
+            '\uD83D\uDCF1 Full schedule: VartMap App > Fasal Calendar'
+          ].filter(l => l !== '').join('\n');
+
+          const phone = reg.phone.startsWith('91') ? reg.phone : '91' + reg.phone.replace(/^\+/, '');
+          await axios.post(gatewayUrl + '/api/v1/send-message', {
+            phone, message, session_id: 'crop-reminder', farmer_id: reg.farmer_id
+          });
+
+          await pool.query(
+            "INSERT INTO crop_reminders_log (registration_id, farmer_id, stage_name, message_sent) VALUES ($1, $2, $3, $4)",
+            [reg.id, reg.farmer_id, stageToSend.stage, message]
+          );
+
+          // Update next_reminder_date to 7 days before next stage
+          let nextReminderDate = null;
+          const stageIdx = schedule.stages.findIndex(s => s.stage === stageToSend.stage);
+          if (stageIdx > -1 && stageIdx + 1 < schedule.stages.length) {
+            const upcoming = schedule.stages[stageIdx + 1];
+            const upcomingDate = new Date(sowDate);
+            upcomingDate.setDate(upcomingDate.getDate() + upcoming.day_offset - 7);
+            nextReminderDate = upcomingDate.toISOString().split('T')[0];
+          }
+          await pool.query("UPDATE farmer_crop_registrations SET next_reminder_date = $1, updated_at = NOW() WHERE id = $2", [nextReminderDate, reg.id]);
+          sent++;
+        } catch (err) {
+          failed++;
+          errors.push({ reg_id: reg.id, error: err.message });
+        }
+      }
+      res.json({ sent, failed, total_due: dueRegs.length, errors: errors.slice(0, 5) });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Manual: Send full nutrition schedule to a farmer via WhatsApp
+  app.post("/api/v1/crop-calendar/send-schedule/:registrationId", auth, async (req, res) => {
+    try {
+      const { registrationId } = req.params;
+      const { rows } = await pool.query(
+        `SELECT r.*, f.phone, f.name, f.district_id FROM farmer_crop_registrations r
+         JOIN farmers f ON f.id = r.farmer_id WHERE r.id = $1`,
+        [registrationId]
+      );
+      if (!rows.length) return res.status(404).json({ error: 'Registration not found' });
+      const reg = rows[0];
+      if (!reg.phone) return res.status(400).json({ error: 'No phone number' });
+
+      // Call our own nutrition-schedule endpoint internally
+      const PORT = process.env.PORT || 10000;
+      const schedResp = await axios.get('http://localhost:' + PORT + '/api/v1/crop-calendar/nutrition-schedule/' + registrationId);
+      const sched = schedResp.data;
+
+      let lines = [
+        '\uD83C\uDF3E *' + reg.crop.toUpperCase() + ' - Full Khaad Schedule*',
+        '\uD83D\uDC64 ' + reg.name + ' | ' + sched.registration.land_acres + ' acre',
+        '\uD83C\uDF0D District: ' + (sched.farmer.district || 'N/A') + ' | N: ' + (sched.soil_data ? sched.soil_data.nitrogen : 'N/A'),
+        ''
+      ];
+
+      for (const stage of sched.schedule) {
+        const icon = stage.status === 'completed' ? '\u2705' : '\u23F3';
+        lines.push(icon + ' *' + (stage.title_hi || stage.title_en) + '* (Day ' + stage.day_offset + ' - ' + stage.scheduled_date + ')');
+        if (stage.products) {
+          for (const p of stage.products) {
+            const sn = p.soil_note ? ' [' + p.soil_note + ']' : '';
+            lines.push('   \u2022 ' + p.name + ': ' + p.adjusted_dose + ' ' + p.unit + sn);
+          }
+        }
+      }
+      lines.push('');
+      lines.push('\uD83D\uDCF1 VartMap App > Fasal Calendar > ' + reg.crop);
+
+      const message = lines.join('\n');
+      const phone = reg.phone.startsWith('91') ? reg.phone : '91' + reg.phone.replace(/^\+/, '');
+      const gatewayUrl = process.env.GATEWAY_URL || 'https://vartmap-whatsapp-gateway.onrender.com';
+      await axios.post(gatewayUrl + '/api/v1/send-message', { phone, message, session_id: 'manual-schedule', farmer_id: reg.farmer_id });
+
+      res.json({ sent: true, phone, message_length: message.length, stages: sched.schedule.length });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+
   app.get("/api/v1/crop-calendar/list-districts", async (req, res) => {
     try {
       const { rows } = await pool.query("SELECT id, district_name, state_name FROM districts_master ORDER BY state_name, district_name LIMIT 100");
