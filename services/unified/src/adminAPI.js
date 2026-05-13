@@ -6184,6 +6184,7 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
               oc_status: parseFloat(br.organic_carbon_low_pct) > 50 ? 'low' : 'medium',
               ph: parseFloat(br.avg_ph),
               zinc_deficient_pct: 100 - parseFloat(br.avg_zinc || 0),
+              iron_deficient_pct: 100 - parseFloat(br.avg_iron || 0),
               boron_deficient_pct: 100 - parseFloat(br.avg_boron || 0),
               sulphur_deficient_pct: 100 - parseFloat(br.avg_sulphur || 0),
               soil_type: br.soil_type || 'unknown',
@@ -6241,20 +6242,66 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
         const stageDate = new Date(sowDate); stageDate.setDate(stageDate.getDate() + adjustedDayOffset);
         const adjustedProducts = (stage.products || []).map(p => {
           let adjustedDose = p.dose_per_ha * landHa;
-          if (stage.soil_adjustment && soilData) {
-            if (p.name.includes('Urea') && soilData.n_status === 'low') adjustedDose *= (stage.soil_adjustment.low_n || 1);
-            if (p.name.includes('Urea') && soilData.n_status === 'high') adjustedDose *= (stage.soil_adjustment.high_n || 1);
-            if ((p.name.includes('DAP') || p.name.includes('SSP')) && soilData.p_status === 'low') adjustedDose *= (stage.soil_adjustment.low_p || 1);
-            if ((p.name.includes('DAP') || p.name.includes('SSP')) && soilData.p_status === 'high') adjustedDose *= (stage.soil_adjustment.high_p || 1);
-            if (p.name.includes('MOP') && soilData.k_status === 'low') adjustedDose *= (stage.soil_adjustment.low_k || 1);
-            if (p.name.includes('MOP') && soilData.k_status === 'high') adjustedDose *= (stage.soil_adjustment.high_k || 1);
+          let soilNote = null;
+          if (soilData) {
+            // NPK adjustments (from soil_adjustment multipliers)
+            if (stage.soil_adjustment) {
+              if (p.name.includes('Urea') && soilData.n_status === 'low') { adjustedDose *= (stage.soil_adjustment.low_n || 1); soilNote = 'N low (' + (soilData.n_low_pct || '84') + '%) - dose increased'; }
+              if (p.name.includes('Urea') && soilData.n_status === 'high') { adjustedDose *= (stage.soil_adjustment.high_n || 1); soilNote = 'N sufficient - dose reduced'; }
+              if ((p.name.includes('DAP') || p.name.includes('SSP')) && soilData.p_status === 'low') { adjustedDose *= (stage.soil_adjustment.low_p || 1); soilNote = 'P low - dose increased'; }
+              if ((p.name.includes('DAP') || p.name.includes('SSP')) && soilData.p_status === 'high') { adjustedDose *= (stage.soil_adjustment.high_p || 1); soilNote = 'P high (' + (soilData.p_low_pct || '') + '% low) - dose reduced'; }
+              if (p.name.includes('MOP') && soilData.k_status === 'low') { adjustedDose *= (stage.soil_adjustment.low_k || 1); soilNote = 'K low - dose increased'; }
+              if (p.name.includes('MOP') && soilData.k_status === 'high') { adjustedDose *= (stage.soil_adjustment.high_k || 1); soilNote = 'K sufficient - dose reduced'; }
+            }
+            // Micronutrient adjustments based on deficiency %
+            const zDef = parseFloat(soilData.zinc_deficient_pct || 0);
+            const bDef = parseFloat(soilData.boron_deficient_pct || 0);
+            const sDef = parseFloat(soilData.sulphur_deficient_pct || 0);
+            const feDef = parseFloat(soilData.iron_deficient_pct || 0);
+            // Zinc: if >50% deficient, increase 30%; if <20% deficient, reduce 30%
+            if (p.name.includes('Zinc') || p.name.includes('ZnSO')) {
+              if (zDef > 50) { adjustedDose *= 1.3; soilNote = 'Zn ' + zDef.toFixed(0) + '% deficient - dose increased 30%'; }
+              else if (zDef < 20) { adjustedDose *= 0.7; soilNote = 'Zn only ' + zDef.toFixed(0) + '% deficient - dose reduced'; }
+              else { soilNote = 'Zn ' + zDef.toFixed(0) + '% deficient'; }
+            }
+            // Boron: if >40% deficient, increase 25%; if <15%, reduce
+            if (p.name.includes('Borax') || p.name.includes('Boron')) {
+              if (bDef > 40) { adjustedDose *= 1.25; soilNote = 'B ' + bDef.toFixed(0) + '% deficient - dose increased 25%'; }
+              else if (bDef < 15) { adjustedDose *= 0.7; soilNote = 'B only ' + bDef.toFixed(0) + '% deficient - dose reduced'; }
+              else { soilNote = 'B ' + bDef.toFixed(0) + '% deficient'; }
+            }
+            // Iron/FeSO4: if >50% deficient, increase 30%
+            if (p.name.includes('Ferrous') || p.name.includes('FeSO')) {
+              if (feDef > 50) { adjustedDose *= 1.3; soilNote = 'Fe ' + feDef.toFixed(0) + '% deficient - dose increased 30%'; }
+              else if (feDef < 15) { adjustedDose *= 0.5; soilNote = 'Fe only ' + feDef.toFixed(0) + '% deficient - dose halved'; }
+              else { soilNote = 'Fe ' + feDef.toFixed(0) + '% deficient'; }
+            }
+            // Sulphur: adjust gypsum/sulphur products
+            if (p.name.includes('Sulphur') || p.name.includes('Gypsum')) {
+              if (sDef > 50) { adjustedDose *= 1.25; soilNote = 'S ' + sDef.toFixed(0) + '% deficient - dose increased 25%'; }
+              else if (sDef < 20) { adjustedDose *= 0.7; soilNote = 'S sufficient - dose reduced'; }
+            }
+            // Micronutrient mixture: scale based on worst deficiency
+            if (p.name.includes('Micronutrient Mix') || p.name.includes('Micro')) {
+              const worstDef = Math.max(zDef, bDef, feDef);
+              if (worstDef > 60) { adjustedDose *= 1.3; soilNote = 'Multiple micronutrient deficiencies (worst: ' + worstDef.toFixed(0) + '%) - dose increased'; }
+              else if (worstDef < 20) { adjustedDose *= 0.8; soilNote = 'Low micronutrient deficiency - standard dose'; }
+            }
           }
-          return { ...p, adjusted_dose: Math.round(adjustedDose * 10) / 10, for_land: landAcres + ' acres' };
+          return { ...p, adjusted_dose: Math.round(adjustedDose * 10) / 10, for_land: landAcres + ' acres', soil_note: soilNote };
         });
         const status = daysSinceSowing >= adjustedDayOffset ? 'completed' : (daysSinceSowing >= adjustedDayOffset - 3 ? 'upcoming' : 'pending');
         return { stage: stage.stage, title_hi: stage.title_hi, title_en: stage.title_en, day_offset: adjustedDayOffset, scheduled_date: stageDate.toISOString().split('T')[0], status, days_from_now: adjustedDayOffset - daysSinceSowing, products: adjustedProducts, note_hi: stage.note_hi || null, note_en: stage.note_en || null };
       });
-      res.json({ registration: { id: reg.id, crop: reg.crop, sow_date: reg.sow_date, land_acres: landAcres, land_ha: landHa }, farmer: { name: reg.name, district: districtName, soil_type: reg.soil_type }, soil_data: soilData ? { nitrogen: soilData.n_status, phosphorus: soilData.p_status, potassium: soilData.k_status, ph: soilData.ph } : null, district_offset_days: districtOffset, days_since_sowing: daysSinceSowing, current_stage: personalizedStages.find(s => s.status === 'upcoming') || personalizedStages.find(s => s.status === 'pending'), schedule: personalizedStages });
+      res.json({ registration: { id: reg.id, crop: reg.crop, sow_date: reg.sow_date, land_acres: landAcres, land_ha: landHa }, farmer: { name: reg.name, district: districtName, soil_type: reg.soil_type }, soil_data: soilData ? {
+          nitrogen: soilData.n_status, phosphorus: soilData.p_status, potassium: soilData.k_status,
+          organic_carbon: soilData.oc_status, ph: soilData.ph,
+          zinc_deficient_pct: soilData.zinc_deficient_pct || null,
+          boron_deficient_pct: soilData.boron_deficient_pct || null,
+          sulphur_deficient_pct: soilData.sulphur_deficient_pct || null,
+          iron_deficient_pct: soilData.iron_deficient_pct || null,
+          source: soilData.source || null, block: soilData.block || null
+        } : null, district_offset_days: districtOffset, days_since_sowing: daysSinceSowing, current_stage: personalizedStages.find(s => s.status === 'upcoming') || personalizedStages.find(s => s.status === 'pending'), schedule: personalizedStages });
     } catch (e) { console.error('Nutrition schedule error:', e); res.status(500).json({ error: e.message }); }
   });
 
