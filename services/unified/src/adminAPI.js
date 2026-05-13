@@ -5772,6 +5772,18 @@ app.get('/api/v1/finance/farmer/:farmerId', auth, async (req, res) => {
           crop VARCHAR(100) NOT NULL,
           sow_date DATE NOT NULL,
           land_area DECIMAL,
+          target_yield DECIMAL,
+          water_ec DECIMAL,
+          water_ph DECIMAL,
+          water_sar DECIMAL,
+          water_rsc DECIMAL,
+          soil_test_n DECIMAL,
+          soil_test_p DECIMAL,
+          soil_test_k DECIMAL,
+          soil_test_oc DECIMAL,
+          soil_test_ph DECIMAL,
+          soil_test_zn DECIMAL,
+          soil_test_source VARCHAR(50) DEFAULT 'district_avg',
           status VARCHAR(20) DEFAULT 'active',
           completed_stages TEXT[] DEFAULT '{}',
           next_reminder_date DATE,
@@ -6391,9 +6403,10 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
   app.get("/api/v1/crop-calendar/nutrition-schedule/:registrationId", async (req, res) => {
     try {
       const { registrationId } = req.params;
-      const { rows: regRows } = await pool.query("SELECT r.*, f.name, f.phone, f.district_id, f.land_holding_acres, f.soil_type, f.village FROM farmer_crop_registrations r JOIN farmers f ON f.id = r.farmer_id WHERE r.id = $1", [registrationId]);
+      const { rows: regRows } = await pool.query("SELECT r.*, f.name, f.phone, f.district_id, f.land_holding_acres, f.soil_type, f.village, f.water_quality FROM farmer_crop_registrations r JOIN farmers f ON f.id = r.farmer_id WHERE r.id = $1", [registrationId]);
       if (!regRows.length) return res.status(404).json({ error: 'Registration not found' });
       const reg = regRows[0];
+      const regData = reg;
       let soilData = null;
       if (reg.farmer_id) {
         const { rows: soilRows } = await pool.query("SELECT * FROM soil_health_cards WHERE farmer_id = $1 ORDER BY sample_date DESC LIMIT 1", [reg.farmer_id]);
@@ -6479,62 +6492,204 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
       const sowDate = new Date(reg.sow_date);
       const today = new Date(new Date().getTime() + 5.5 * 60 * 60 * 1000); // IST
       const daysSinceSowing = Math.floor((today - sowDate) / (1000*60*60*24));
+        // === INTEGRATED PRECISION: Yield target, water quality, weather ===
+        const targetYield = regData.target_yield || null;
+        const waterData = (regData.water_ec || regData.water_ph) ? { ec: regData.water_ec, ph: regData.water_ph, sar: regData.water_sar, rsc: regData.water_rsc } : null;
+        const regData_soil = regData.soil_test_n ? { n: regData.soil_test_n, p: regData.soil_test_p, k: regData.soil_test_k, oc: regData.soil_test_oc, ph: regData.soil_test_ph, zn: regData.soil_test_zn, source: 'individual_soil_test' } : null;
+        
+        // Override soilData with individual test if available
+        if (regData_soil) {
+          soilData = soilData || {};
+          soilData.n_status = regData_soil.n < 240 ? 'low' : regData_soil.n > 480 ? 'high' : 'medium';
+          soilData.p_status = regData_soil.p < 12 ? 'low' : regData_soil.p > 25 ? 'high' : 'medium';
+          soilData.k_status = regData_soil.k < 140 ? 'low' : regData_soil.k > 280 ? 'high' : 'medium';
+          soilData.ph = regData_soil.ph;
+          soilData.n_low_pct = regData_soil.n < 240 ? Math.round((240 - regData_soil.n) / 240 * 100) : 0;
+          soilData.p_low_pct = regData_soil.p < 12 ? Math.round((12 - regData_soil.p) / 12 * 100) : 0;
+          soilData.source = 'individual_soil_test';
+          if (regData_soil.zn) soilData.zinc_deficient_pct = regData_soil.zn < 0.6 ? Math.round((0.6 - regData_soil.zn) / 0.6 * 100) : 0;
+        }
+        
+        // Fetch 7-day weather forecast
+        let weatherData = null;
+        try {
+          const coords = { 'basti': [26.79, 82.73], 'gorakhpur': [26.75, 83.37], 'deoria': [26.5, 83.78], 'azamgarh': [26.07, 83.19], 'lucknow': [26.85, 80.95] };
+          const distName = (soilData && soilData.district) || 'basti';
+          const [lat, lon] = coords[distName.toLowerCase()] || coords['basti'];
+          const meteoResp = await axios.get('https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon + '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,relative_humidity_2m_mean&timezone=Asia/Kolkata&forecast_days=7', { timeout: 5000 });
+          weatherData = meteoResp.data;
+        } catch(e) { /* weather fetch failed - continue without */ }
+        
+
       const personalizedStages = schedule.stages.map(stage => {
         const adjustedDayOffset = stage.day_offset + districtOffset;
-        const stageDate = new Date(sowDate); stageDate.setDate(stageDate.getDate() + adjustedDayOffset);
+        
+        // === CLIMATE INTEGRATION: Shift stage timing based on weather ===
+        let climateShift = 0;
+        let climateNote = null;
+        if (weatherData && weatherData.daily) {
+          const stageDate = new Date(sowDate);
+          stageDate.setDate(stageDate.getDate() + adjustedDayOffset);
+          const today = new Date();
+          const daysUntilStage = Math.floor((stageDate - today) / (1000*60*60*24));
+          
+          if (daysUntilStage <= 7 && daysUntilStage >= 0) {
+            // Check 7-day forecast for this stage
+            const rainSum = weatherData.daily.precipitation_sum ? 
+              weatherData.daily.precipitation_sum.slice(0, Math.min(7, daysUntilStage + 1)).reduce((s, v) => s + v, 0) : 0;
+            const maxTemp = weatherData.daily.temperature_2m_max ? 
+              Math.max(...weatherData.daily.temperature_2m_max.slice(0, 7)) : 35;
+            const minTemp = weatherData.daily.temperature_2m_min ?
+              Math.min(...weatherData.daily.temperature_2m_min.slice(0, 7)) : 15;
+            
+            if (rainSum > 50 && stage.products && stage.products.some(p => p.method === 'broadcasting' || p.method === 'top_dressing')) {
+              climateShift = 3;
+              climateNote = 'Heavy rain forecast (' + rainSum.toFixed(0) + 'mm) - delay 3 days';
+            }
+            if (minTemp < 4 && cropKey === 'wheat') {
+              climateNote = (climateNote ? climateNote + '; ' : '') + 'Frost risk - apply KCl foliar spray';
+            }
+            if (maxTemp > 40) {
+              climateNote = (climateNote ? climateNote + '; ' : '') + 'Heat stress - increase irrigation, KNO3 foliar';
+            }
+          }
+        }
+        
+        const finalDayOffset = adjustedDayOffset + climateShift;
+        const stageDate = new Date(sowDate); stageDate.setDate(stageDate.getDate() + finalDayOffset);
+        
+        // === UPTAKE CURVE: Calculate demand-based dose ===
+        const uptakeCurve = NUTRIENT_UPTAKE_CURVES[cropKey];
+        const stageUptake = uptakeCurve && uptakeCurve.stages[stage.stage] ? uptakeCurve.stages[stage.stage] : null;
+        
+        // === STCR YIELD-TARGET: Override total NPK if target_yield set ===
+        let stcrOverride = null;
+        if (targetYield && STCR_YIELD_EQUATIONS[cropKey]) {
+          const soilN = regData.soil_test_n || (soilData ? (soilData.n_status === 'low' ? 180 : soilData.n_status === 'high' ? 350 : 250) : 250);
+          const soilP = regData.soil_test_p || (soilData ? (soilData.p_status === 'low' ? 10 : soilData.p_status === 'high' ? 50 : 25) : 25);
+          const soilK = regData.soil_test_k || (soilData ? (soilData.k_status === 'low' ? 120 : soilData.k_status === 'high' ? 300 : 200) : 200);
+          stcrOverride = calcSTCR(cropKey, targetYield, soilN, soilP, soilK);
+        }
+        
         const adjustedProducts = (stage.products || []).map(p => {
           let adjustedDose = p.dose_per_ha * landHa;
           let soilNote = null;
-          if (soilData) {
-            // NPK adjustments - use stage.soil_adjustment if defined, else defaults
+          let doseMethod = 'standard';
+          
+          // === PRIORITY 1: STCR yield-target override ===
+          if (stcrOverride && stageUptake) {
+            if (p.name.includes('Urea') && stageUptake.pct_N > 0) {
+              const totalN = stcrOverride.FN;
+              const stageN = totalN * (stageUptake.pct_N / 100);
+              adjustedDose = (stageN / 0.46) * landHa; // Urea is 46% N
+              soilNote = 'STCR: ' + targetYield + 't target, N=' + stageN.toFixed(0) + 'kg at ' + stageUptake.pct_N + '% demand';
+              doseMethod = 'stcr_uptake';
+            }
+            if ((p.name.includes('DAP') || p.name.includes('SSP')) && stageUptake.pct_P > 0) {
+              const totalP = stcrOverride.FP;
+              const stageP = totalP * (stageUptake.pct_P / 100);
+              const factor = p.name.includes('DAP') ? 0.46 : 0.16;
+              adjustedDose = (stageP / factor) * landHa;
+              soilNote = 'STCR: P=' + stageP.toFixed(0) + 'kg at ' + stageUptake.pct_P + '% demand';
+              doseMethod = 'stcr_uptake';
+            }
+            if (p.name.includes('MOP') && stageUptake.pct_K > 0) {
+              const totalK = stcrOverride.FK;
+              const stageK = totalK * (stageUptake.pct_K / 100);
+              adjustedDose = (stageK / 0.60) * landHa;
+              soilNote = 'STCR: K=' + stageK.toFixed(0) + 'kg at ' + stageUptake.pct_K + '% demand';
+              doseMethod = 'stcr_uptake';
+            }
+          }
+          // === PRIORITY 2: Uptake curve without STCR (use base demand) ===
+          else if (stageUptake && uptakeCurve.total_demand) {
+            if (p.name.includes('Urea') && stageUptake.pct_N > 0) {
+              const stageN = uptakeCurve.total_demand.N * (stageUptake.pct_N / 100);
+              adjustedDose = (stageN / 0.46) * landHa;
+              doseMethod = 'uptake_curve';
+            }
+            if ((p.name.includes('DAP') || p.name.includes('SSP')) && stageUptake.pct_P > 0) {
+              const stageP = uptakeCurve.total_demand.P * (stageUptake.pct_P / 100);
+              const factor = p.name.includes('DAP') ? 0.46 : 0.16;
+              adjustedDose = (stageP / factor) * landHa;
+              doseMethod = 'uptake_curve';
+            }
+            if (p.name.includes('MOP') && stageUptake.pct_K > 0) {
+              const stageK = uptakeCurve.total_demand.K * (stageUptake.pct_K / 100);
+              adjustedDose = (stageK / 0.60) * landHa;
+              doseMethod = 'uptake_curve';
+            }
+          }
+          
+          // === PRIORITY 3: Soil-based adjustments (on top of above, or standalone) ===
+          if (soilData && doseMethod === 'standard') {
             const sa = stage.soil_adjustment || {};
             if (p.name.includes('Urea') && soilData.n_status === 'low') { adjustedDose *= (sa.low_n || 1.3); soilNote = 'N low (' + (soilData.n_low_pct || '84') + '%) - dose +' + Math.round(((sa.low_n || 1.3) - 1) * 100) + '%'; }
             if (p.name.includes('Urea') && soilData.n_status === 'high') { adjustedDose *= (sa.high_n || 0.7); soilNote = 'N sufficient - dose reduced'; }
             if ((p.name.includes('DAP') || p.name.includes('SSP')) && soilData.p_status === 'low') { adjustedDose *= (sa.low_p || 1.3); soilNote = 'P low - dose increased'; }
-            if ((p.name.includes('DAP') || p.name.includes('SSP')) && soilData.p_status === 'high') { adjustedDose *= (sa.high_p || 0.7); soilNote = 'P high (' + (soilData.p_low_pct || '') + '% low) - dose reduced'; }
+            if ((p.name.includes('DAP') || p.name.includes('SSP')) && soilData.p_status === 'high') { adjustedDose *= (sa.high_p || 0.7); soilNote = 'P high (' + (soilData.p_low_pct || '0.2') + '% low) - dose reduced'; }
             if (p.name.includes('MOP') && soilData.k_status === 'low') { adjustedDose *= (sa.low_k || 1.3); soilNote = 'K low - dose increased'; }
             if (p.name.includes('MOP') && soilData.k_status === 'high') { adjustedDose *= (sa.high_k || 0.7); soilNote = 'K sufficient - dose reduced'; }
-            // Micronutrient adjustments based on deficiency %
-            const zDef = parseFloat(soilData.zinc_deficient_pct || 0);
-            const bDef = parseFloat(soilData.boron_deficient_pct || 0);
-            const sDef = parseFloat(soilData.sulphur_deficient_pct || 0);
-            const feDef = parseFloat(soilData.iron_deficient_pct || 0);
-            // Zinc: if >50% deficient, increase 30%; if <20% deficient, reduce 30%
-            if (p.name.includes('Zinc') || p.name.includes('ZnSO')) {
-              if (zDef > 50) { adjustedDose *= 1.3; soilNote = 'Zn ' + zDef.toFixed(0) + '% deficient - dose increased 30%'; }
-              else if (zDef < 20) { adjustedDose *= 0.7; soilNote = 'Zn only ' + zDef.toFixed(0) + '% deficient - dose reduced'; }
-              else { soilNote = 'Zn ' + zDef.toFixed(0) + '% deficient'; }
+          }
+          
+          // Micronutrient adjustments (always apply on top)
+          if (soilData) {
+            if (p.name.includes('Zinc') && soilData.zinc_deficient_pct > 50) { adjustedDose *= 1.3; soilNote = (soilNote ? soilNote + '; ' : '') + 'Zn ' + Math.round(soilData.zinc_deficient_pct) + '% deficient +30%'; }
+            else if (p.name.includes('Zinc') && soilData.zinc_deficient_pct < 20) { adjustedDose *= 0.7; soilNote = (soilNote ? soilNote + '; ' : '') + 'Zn sufficient -30%'; }
+            if (p.name.includes('Borax') && soilData.boron_deficient_pct > 40) { adjustedDose *= 1.25; soilNote = (soilNote ? soilNote + '; ' : '') + 'B ' + Math.round(soilData.boron_deficient_pct) + '% deficient +25%'; }
+            else if (p.name.includes('Borax') && soilData.boron_deficient_pct < 15) { adjustedDose *= 0.7; soilNote = (soilNote ? soilNote + '; ' : '') + 'B sufficient -30%'; }
+            if (p.name.includes('Ferrous') || p.name.includes('FeSO4')) {
+              if (soilData.iron_deficient_pct > 50) { adjustedDose *= 1.3; soilNote = (soilNote ? soilNote + '; ' : '') + 'Fe ' + Math.round(soilData.iron_deficient_pct) + '% deficient +30%'; }
+              else if (soilData.iron_deficient_pct < 15) { adjustedDose *= 0.5; soilNote = (soilNote ? soilNote + '; ' : '') + 'Fe ' + Math.round(soilData.iron_deficient_pct || 0) + '% deficient - dose halved'; }
             }
-            // Boron: if >40% deficient, increase 25%; if <15%, reduce
-            if (p.name.includes('Borax') || p.name.includes('Boron')) {
-              if (bDef > 40) { adjustedDose *= 1.25; soilNote = 'B ' + bDef.toFixed(0) + '% deficient - dose increased 25%'; }
-              else if (bDef < 15) { adjustedDose *= 0.7; soilNote = 'B only ' + bDef.toFixed(0) + '% deficient - dose reduced'; }
-              else { soilNote = 'B ' + bDef.toFixed(0) + '% deficient'; }
-            }
-            // Iron/FeSO4: if >50% deficient, increase 30%
-            if (p.name.includes('Ferrous') || p.name.includes('FeSO')) {
-              if (feDef > 50) { adjustedDose *= 1.3; soilNote = 'Fe ' + feDef.toFixed(0) + '% deficient - dose increased 30%'; }
-              else if (feDef < 15) { adjustedDose *= 0.5; soilNote = 'Fe only ' + feDef.toFixed(0) + '% deficient - dose halved'; }
-              else { soilNote = 'Fe ' + feDef.toFixed(0) + '% deficient'; }
-            }
-            // Sulphur: adjust gypsum/sulphur products
-            if (p.name.includes('Sulphur') || p.name.includes('Gypsum')) {
-              if (sDef > 50) { adjustedDose *= 1.25; soilNote = 'S ' + sDef.toFixed(0) + '% deficient - dose increased 25%'; }
-              else if (sDef < 20) { adjustedDose *= 0.7; soilNote = 'S sufficient - dose reduced'; }
-            }
-            // Micronutrient mixture: scale based on worst deficiency
-            if (p.name.includes('Micronutrient Mix') || p.name.includes('Micro')) {
-              const worstDef = Math.max(zDef, bDef, feDef);
-              if (worstDef > 60) { adjustedDose *= 1.3; soilNote = 'Multiple micronutrient deficiencies (worst: ' + worstDef.toFixed(0) + '%) - dose increased'; }
-              else if (worstDef < 20) { adjustedDose *= 0.8; soilNote = 'Low micronutrient deficiency - standard dose'; }
+            if (p.name.includes('Micronutrient') || p.name.includes('micronutrient')) {
+              const worstDef = Math.max(soilData.zinc_deficient_pct || 0, soilData.boron_deficient_pct || 0, soilData.iron_deficient_pct || 0);
+              if (worstDef > 60) { adjustedDose *= 1.3; soilNote = (soilNote ? soilNote + '; ' : '') + 'Multiple deficiencies (worst: ' + Math.round(worstDef) + '%) +30%'; }
+              else if (worstDef < 20) { adjustedDose *= 0.8; }
             }
           }
-          return { ...p, adjusted_dose: Math.round(adjustedDose * 10) / 10, for_land: landAcres + ' acres', soil_note: soilNote };
+          
+          // === WATER QUALITY ADJUSTMENTS ===
+          if (waterData) {
+            const wq = WATER_QUALITY_ADJUSTMENTS;
+            if (waterData.ec > (wq.thresholds.ec.moderate || 2.25)) {
+              if (p.name.includes('Urea')) {
+                soilNote = (soilNote ? soilNote + '; ' : '') + 'High EC water - prefer Amm.Sulphate';
+              }
+              if (p.name.includes('MOP') || p.name.includes('Chloride')) {
+                adjustedDose *= 0.7;
+                soilNote = (soilNote ? soilNote + '; ' : '') + 'High EC - reduce chloride fertilizer 30%';
+              }
+            }
+            if (waterData.rsc > 2.5) {
+              soilNote = (soilNote ? soilNote + '; ' : '') + 'High RSC water - apply Gypsum ' + (waterData.rsc * 0.86).toFixed(1) + ' t/ha';
+            }
+            if (waterData.ph > 8.0 && p.name.includes('Zinc')) {
+              adjustedDose *= 1.2;
+              soilNote = (soilNote ? soilNote + '; ' : '') + 'Alkaline water locks Zn - dose +20%';
+            }
+          }
+          
+          return { ...p, adjusted_dose: Math.round(adjustedDose * 10) / 10, for_land: landAcres + ' acres', soil_note: soilNote, dose_method: doseMethod };
         });
-        const status = daysSinceSowing >= adjustedDayOffset ? 'completed' : (daysSinceSowing >= adjustedDayOffset - 3 ? 'upcoming' : 'pending');
-        return { stage: stage.stage, title_hi: stage.title_hi, title_en: stage.title_en, day_offset: adjustedDayOffset, scheduled_date: stageDate.toISOString().split('T')[0], status, days_from_now: adjustedDayOffset - daysSinceSowing, products: adjustedProducts, note_hi: stage.note_hi || null, note_en: stage.note_en || null };
+        
+        const status = daysSinceSowing >= finalDayOffset ? 'completed' : (daysSinceSowing >= finalDayOffset - 3 ? 'upcoming' : 'pending');
+        return { 
+          stage: stage.stage, title_hi: stage.title_hi, title_en: stage.title_en, 
+          day_offset: finalDayOffset, 
+          original_day_offset: stage.day_offset + districtOffset,
+          climate_shift: climateShift,
+          climate_note: climateNote,
+          scheduled_date: stageDate.toISOString().split('T')[0], 
+          status, days_from_now: finalDayOffset - daysSinceSowing, 
+          products: adjustedProducts, 
+          note_hi: stage.note_hi || null, note_en: stage.note_en || null 
+        };
       });
-      res.json({ registration: { id: reg.id, crop: reg.crop, sow_date: reg.sow_date, land_acres: landAcres, land_ha: landHa }, farmer: { name: reg.name, district: districtName, soil_type: reg.soil_type }, soil_data: soilData ? {
+      
+        const precisionMode = { yield_target: targetYield || 'not set', water_quality: waterData ? 'active' : 'not set', soil_source: (soilData && soilData.source) || 'district_avg', weather: weatherData ? 'live_7day' : 'unavailable', uptake_curve: NUTRIENT_UPTAKE_CURVES[cropKey] ? 'active' : 'not available' };
+        res.json({
+          precision_mode: precisionMode, registration: { id: reg.id, crop: reg.crop, sow_date: reg.sow_date, land_acres: landAcres, land_ha: landHa }, farmer: { name: reg.name, district: districtName, soil_type: reg.soil_type }, soil_data: soilData ? {
           nitrogen: soilData.n_status, phosphorus: soilData.p_status, potassium: soilData.k_status,
           organic_carbon: soilData.oc_status, ph: soilData.ph,
           zinc_deficient_pct: soilData.zinc_deficient_pct || null,
@@ -6794,6 +6949,127 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
   });
 
 
+  
+  // === INDIVIDUAL SOIL TEST: Farmer uploads their Soil Health Card values ===
+  app.post("/api/v1/crop-calendar/soil-test-upload/:registrationId", communityAuth, async (req, res) => {
+    try {
+      const { registrationId } = req.params;
+      const { nitrogen, phosphorus, potassium, organic_carbon, ph, zinc, boron, iron, sulphur, source } = req.body;
+      
+      // Validate registration belongs to farmer
+      const { rows } = await pool.query(
+        "SELECT id FROM farmer_crop_registrations WHERE id = $1 AND farmer_id = $2",
+        [registrationId, req.farmer.id]
+      );
+      if (!rows.length) return res.status(404).json({ error: 'Registration not found' });
+      
+      // Update with individual soil test values
+      await pool.query(
+        `UPDATE farmer_crop_registrations SET 
+          soil_test_n = $1, soil_test_p = $2, soil_test_k = $3, 
+          soil_test_oc = $4, soil_test_ph = $5, soil_test_zn = $6,
+          soil_test_source = $7, updated_at = NOW()
+        WHERE id = $8`,
+        [nitrogen || null, phosphorus || null, potassium || null, organic_carbon || null, ph || null, zinc || null, source || 'manual_input', registrationId]
+      );
+      
+      // Determine status
+      const nStatus = nitrogen ? (nitrogen < 240 ? 'low' : nitrogen > 480 ? 'high' : 'medium') : null;
+      const pStatus = phosphorus ? (phosphorus < 12 ? 'low' : phosphorus > 25 ? 'high' : 'medium') : null;
+      const kStatus = potassium ? (potassium < 140 ? 'low' : potassium > 280 ? 'high' : 'medium') : null;
+      
+      res.json({ 
+        updated: true, 
+        registration_id: registrationId,
+        soil_analysis: { nitrogen: nStatus, phosphorus: pStatus, potassium: kStatus, ph, organic_carbon },
+        note: 'Individual soil test values will now override district averages for dose calculations'
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // === UPDATE WATER QUALITY for a registration ===
+  app.post("/api/v1/crop-calendar/water-quality-update/:registrationId", communityAuth, async (req, res) => {
+    try {
+      const { registrationId } = req.params;
+      const { ec, ph, sar, rsc } = req.body;
+      
+      const { rows } = await pool.query(
+        "SELECT id FROM farmer_crop_registrations WHERE id = $1 AND farmer_id = $2",
+        [registrationId, req.farmer.id]
+      );
+      if (!rows.length) return res.status(404).json({ error: 'Registration not found' });
+      
+      await pool.query(
+        "UPDATE farmer_crop_registrations SET water_ec = $1, water_ph = $2, water_sar = $3, water_rsc = $4, updated_at = NOW() WHERE id = $5",
+        [ec || null, ph || null, sar || null, rsc || null, registrationId]
+      );
+      
+      // Analyze water quality
+      const issues = [];
+      if (ec > 2.25) issues.push('High salinity (EC ' + ec + ') - reduce chloride fertilizers, increase irrigation');
+      if (sar > 18) issues.push('High sodium (SAR ' + sar + ') - apply gypsum');
+      if (rsc > 2.5) issues.push('High RSC (' + rsc + ') - apply gypsum ' + (rsc * 0.86).toFixed(1) + ' t/ha');
+      if (ph > 8.0) issues.push('Alkaline water (pH ' + ph + ') - zinc lockout risk, increase Zn dose');
+      
+      res.json({
+        updated: true,
+        registration_id: registrationId,
+        water_analysis: { ec, ph, sar, rsc, classification: ec > 4 ? 'hazardous' : ec > 2.25 ? 'marginal' : 'safe' },
+        issues: issues.length ? issues : ['Water quality is acceptable'],
+        note: 'Water quality adjustments will now be applied to your fertilizer schedule'
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // === UPDATE YIELD TARGET ===
+  app.post("/api/v1/crop-calendar/set-yield-target/:registrationId", communityAuth, async (req, res) => {
+    try {
+      const { registrationId } = req.params;
+      const { target_yield } = req.body;
+      if (!target_yield) return res.status(400).json({ error: 'target_yield required' });
+      
+      const { rows } = await pool.query(
+        "SELECT r.id, r.crop FROM farmer_crop_registrations r WHERE r.id = $1 AND r.farmer_id = $2",
+        [registrationId, req.farmer.id]
+      );
+      if (!rows.length) return res.status(404).json({ error: 'Registration not found' });
+      
+      const crop = rows[0].crop.toLowerCase();
+      const eq = STCR_YIELD_EQUATIONS[crop];
+      if (!eq) return res.status(400).json({ error: 'No STCR data for ' + crop });
+      
+      if (target_yield < eq.yield_range.min || target_yield > eq.yield_range.max) {
+        return res.status(400).json({ 
+          error: 'Target yield out of range', 
+          valid_range: eq.yield_range, 
+          unit: crop === 'sugarcane' ? 't/ha' : crop === 'potato' ? 't/ha' : 't/ha'
+        });
+      }
+      
+      await pool.query("UPDATE farmer_crop_registrations SET target_yield = $1, updated_at = NOW() WHERE id = $2", [target_yield, registrationId]);
+      
+      // Calculate what STCR recommends
+      const stcr = calcSTCR(crop, target_yield, 250, 25, 200);
+      
+      res.json({
+        updated: true,
+        registration_id: registrationId,
+        crop: crop,
+        target_yield: target_yield,
+        unit: crop === 'sugarcane' || crop === 'potato' ? 't/ha' : 't/ha',
+        stcr_recommendation: { N_kg_ha: Math.round(stcr.FN), P2O5_kg_ha: Math.round(stcr.FP), K2O_kg_ha: Math.round(stcr.FK) },
+        note: 'Doses will now be calculated using STCR equations + uptake curves for ' + target_yield + ' t/ha target'
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+
   app.get("/api/v1/crop-calendar/list-districts", async (req, res) => {
     try {
       const { rows } = await pool.query("SELECT id, district_name, state_name FROM districts_master ORDER BY state_name, district_name LIMIT 100");
@@ -7032,7 +7308,7 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
   app.post("/api/v1/farmer/crop-calendar/register", communityAuth, async (req, res) => {
     try {
       const farmerId = req.farmer.id;
-      const { crop, sow_date, land_area } = req.body;
+      const { crop, sow_date, land_area, target_yield, water_ec, water_ph, water_sar, water_rsc, soil_test_n, soil_test_p, soil_test_k, soil_test_oc, soil_test_ph, soil_test_zn } = req.body;
       if (!crop || !sow_date) return res.status(400).json({ error: "crop and sow_date required" });
 
       const { rows: templates } = await pool.query(
@@ -7043,7 +7319,7 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
       nextDate.setDate(nextDate.getDate() + firstDay);
 
       const { rows } = await pool.query(
-        "INSERT INTO farmer_crop_registrations (farmer_id, crop, sow_date, land_area, next_reminder_date) VALUES ($1,$2,$3,$4,$5) RETURNING *",
+        "INSERT INTO farmer_crop_registrations (farmer_id, crop, sow_date, land_area, target_yield, water_ec, water_ph, water_sar, water_rsc, soil_test_n, soil_test_p, soil_test_k, soil_test_oc, soil_test_ph, soil_test_zn, soil_test_source, next_reminder_date) VALUES ($1,$2,$3,$4,$5) RETURNING *",
         [farmerId, crop.toLowerCase(), sow_date, land_area || null, nextDate.toISOString().split('T')[0]]
       );
       res.json({ registration: rows[0] });
