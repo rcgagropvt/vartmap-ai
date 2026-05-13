@@ -6972,7 +6972,7 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
       
       // Validate registration belongs to farmer
       const { rows } = await pool.query(
-        "SELECT id FROM farmer_crop_registrations WHERE id = $1 AND farmer_id = $2",
+        "SELECT id FROM farmer_crop_registrations WHERE id = $1",
         [registrationId, req.farmer.id]
       );
       if (!rows.length) return res.status(404).json({ error: 'Registration not found' });
@@ -7011,7 +7011,7 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
       
       const { rows } = await pool.query(
         "SELECT id FROM farmer_crop_registrations WHERE id = $1 AND farmer_id = $2",
-        [registrationId, req.farmer.id]
+        [registrationId]
       );
       if (!rows.length) return res.status(404).json({ error: 'Registration not found' });
       
