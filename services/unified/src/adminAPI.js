@@ -6253,12 +6253,12 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
     },
     sugarcane: {
       region: 'UP subtropical',
-      NR: { N: 2.05, P: 0.82, K: 2.38 },
-      CS: { N: 15.2, P: 28.5, K: 18.0 },
-      CF: { N: 22.88, P: 66.51, K: 112.20 },
+      NR: { N: 1.25, P: 0.35, K: 1.75 },
+      CS: { N: 12.8, P: 38.5, K: 15.2 },
+      CF: { N: 42.3, P: 25.7, K: 82.6 },
       yield_range: { min: 50, max: 120 },
       default_target: 80,
-      formula_notes: 'Based on STCR ratoon sugarcane alluvial soil equations'
+      formula_notes: 'Based on STCR plant sugarcane UP alluvial soils (IISS validated)'
     },
     mustard: {
       region: 'UP rainfed/irrigated',
