@@ -5986,7 +5986,9 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
           products: [
             { type: 'fertilizer', name: 'SSP (Single Super Phosphate)', dose_per_ha: 500, unit: 'kg', method: 'furrow_placement', note_hi: 'Nali mein buvai ke samay', note_en: 'In furrow at planting' },
             { type: 'fertilizer', name: 'MOP', dose_per_ha: 133, unit: 'kg', method: 'furrow_placement', note_hi: 'SSP ke saath', note_en: 'With SSP in furrow' },
-            { type: 'biofertilizer', name: 'Trichoderma harzianum', dose_per_ha: 2.5, unit: 'kg/acre in FYM', method: 'soil_application', note_hi: 'Gober ki khaad mein milaakar', note_en: 'Mix in FYM' }
+            { type: 'biofertilizer', name: 'Trichoderma harzianum', dose_per_ha: 2.5, unit: 'kg/acre in FYM', method: 'soil_application', note_hi: 'Gober ki khaad mein milaakar', note_en: 'Mix in FYM' },
+            { type: 'fertilizer', name: 'Zinc Sulphate (ZnSO4)', dose_per_ha: 25, unit: 'kg', method: 'soil_application', note_hi: 'Nali mein SSP ke saath daalein', note_en: 'Apply in furrow with SSP' },
+            { type: 'fertilizer', name: 'Ferrous Sulphate (FeSO4)', dose_per_ha: 50, unit: 'kg', method: 'soil_application', note_hi: 'Lohe ki kami wale khet mein zaruri', note_en: 'Essential in iron-deficient soils' }
           ]
         },
         { stage: 'first_nitrogen', day_offset: 30, title_hi: 'Pehli Nitrogen + Gap Filling', title_en: 'First Nitrogen Dose',
@@ -6004,14 +6006,24 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
             { type: 'insecticide', name: 'Chlorantraniliprole 0.4% GR (Ferterra)', dose_per_ha: 20, unit: 'kg', method: 'soil_application', note_hi: 'Tana chhedak ke liye', note_en: 'For stem borer' }
           ]
         },
+        { stage: 'micronutrient_spray', day_offset: 105, title_hi: 'Sukshm Poshan Spray (Grand Growth)', title_en: 'Micronutrient Foliar Spray (Grand Growth)',
+          products: [
+            { type: 'fertilizer', name: 'Micronutrient Mixture (Zn+Fe+Mn+Cu)', dose_per_ha: 3, unit: 'kg in 500L water', method: 'foliar_spray', note_hi: 'Shaam ko spray karein - 500L pani/ha', note_en: 'Spray in evening - 500L water/ha' },
+            { type: 'fertilizer', name: 'Borax (Boron 11%)', dose_per_ha: 5, unit: 'kg in 500L water', method: 'foliar_spray', note_hi: 'Ras ki quality badhata hai', note_en: 'Improves juice quality and sugar content' },
+            { type: 'fertilizer', name: 'MgSO4 (Magnesium Sulphate)', dose_per_ha: 10, unit: 'kg in 500L water', method: 'foliar_spray', note_hi: 'Patti ka harapan badhata hai', note_en: 'Improves chlorophyll and leaf greenness' }
+          ], soil_adjustment: { low_n: 1.0, high_n: 1.0 }
+        },
         { stage: 'fourth_nitrogen', day_offset: 120, title_hi: 'Chauthi Nitrogen + Earthing Up', title_en: 'Fourth Nitrogen + Earthing Up',
           products: [{ type: 'fertilizer', name: 'Urea', dose_per_ha: 72, unit: 'kg', method: 'side_dressing', note_hi: 'Aakhri nitrogen. Acchi mitti chadhaai zaruri', note_en: 'Last nitrogen. Proper earthing up essential' }]
         },
         { stage: 'red_rot_watch', day_offset: 150, title_hi: 'Laal Sadak Rog Nigrani', title_en: 'Red Rot Watch',
           products: [{ type: 'fungicide', name: 'Carbendazim 50% WP', dose_per_ha: 500, unit: 'g in 500L water', method: 'drench', note_hi: 'Lakshan dikhne par jad mein ghol daalein', note_en: 'Drench near base if symptoms seen' }]
         },
-        { stage: 'detrashing', day_offset: 180, title_hi: 'Sukhi Pattiyan Hatana', title_en: 'Detrashing',
-          products: [], note_hi: 'Sukhi pattiyan hatayein - hawa sanchar badhega', note_en: 'Remove dry leaves for better aeration' },
+        { stage: 'detrashing', day_offset: 180, title_hi: 'Sukhi Pattiyan Hatana + Boron Spray', title_en: 'Detrashing + Boron Spray',
+          products: [
+            { type: 'fertilizer', name: 'Borax (Boron 11%)', dose_per_ha: 2.5, unit: 'kg in 300L water', method: 'foliar_spray', note_hi: 'Ganna mota karne ke liye zaruri', note_en: 'Essential for cane thickness and sugar accumulation' },
+            { type: 'fertilizer', name: 'KNO3 (Potassium Nitrate) 13:0:45', dose_per_ha: 5, unit: 'kg in 300L water', method: 'foliar_spray', note_hi: 'Cheeni% badhata hai', note_en: 'Increases sugar percentage' }
+          ], note_hi: 'Sukhi pattiyan hatayein + spray karein', note_en: 'Remove dry leaves + apply foliar spray' },
         { stage: 'ripening', day_offset: 300, title_hi: 'Pakne ka Samay - Sinchai Band', title_en: 'Ripening - Stop Irrigation',
           products: [{ type: 'growth_regulator', name: 'Ethephon 39% SL', dose_per_ha: 750, unit: 'ml in 500L water', method: 'spray', note_hi: 'Katai se 30 din pehle - cheeni badhane ke liye', note_en: 'Spray 30 days before harvest for sugar content' }]
         }
