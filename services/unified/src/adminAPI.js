@@ -6403,7 +6403,7 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
   app.get("/api/v1/crop-calendar/nutrition-schedule/:registrationId", async (req, res) => {
     try {
       const { registrationId } = req.params;
-      const { rows: regRows } = await pool.query("SELECT r.*, f.name, f.phone, f.district_id, f.land_holding_acres, f.soil_type, f.village, f.water_quality FROM farmer_crop_registrations r JOIN farmers f ON f.id = r.farmer_id WHERE r.id = $1", [registrationId]);
+      const { rows: regRows } = await pool.query("SELECT r.*, f.name, f.phone, f.district_id, f.land_holding_acres, f.soil_type, f.village FROM farmer_crop_registrations r JOIN farmers f ON f.id = r.farmer_id WHERE r.id = $1", [registrationId]);
       if (!regRows.length) return res.status(404).json({ error: 'Registration not found' });
       const reg = regRows[0];
       const regData = reg;
