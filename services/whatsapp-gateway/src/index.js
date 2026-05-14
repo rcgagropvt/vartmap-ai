@@ -902,6 +902,55 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
   const lang = farmerData.language || 'hi';
   const lowerMsg = (msgBody || '').toLowerCase().trim();
 
+  // === PRECISION FARMING QUICK TRIGGERS ===
+  const precisionKeywords = ['smart_khaad', 'smart khaad', 'precision_farming', 'precision farming', 'yield_input', 'set_yield', 'water_input', 'pani_quality', 'soil_input', 'mitti_test'];
+  if (precisionKeywords.includes(lowerMsg)) {
+    const regRes = await pool.query("SELECT id, crop FROM farmer_crop_registrations WHERE farmer_id = $1 AND status = 'active' ORDER BY created_at DESC LIMIT 1", [farmerId]);
+    const activeReg = regRes.rows[0] || null;
+
+    if (lowerMsg === 'smart_khaad' || lowerMsg === 'smart khaad' || lowerMsg === 'precision_farming' || lowerMsg === 'precision farming') {
+      if (!activeReg) {
+        await sendWhatsAppMessage(from, lang === 'hi' ? 'Pehle Fasal Calendar mein apni fasal register karein.' : 'Please register a crop in Fasal Calendar first.');
+        return true;
+      }
+      setPendingAction(farmerId, 'waiting_precision_choice');
+      await sendWhatsAppButtons(from,
+        lang === 'hi' ? '\u2728 *Smart Khaad System*\nFasal: ' + activeReg.crop + '\n\nAapki fasal ke liye precise dose calculate karne ke liye ye info chahiye:' : '\u2728 *Precision Farming*\nCrop: ' + activeReg.crop + '\n\nChoose what to input:',
+        [
+          { id: 'yield_input', title: 'Yield Target' },
+          { id: 'water_input', title: 'Pani Quality' },
+          { id: 'soil_input', title: 'Mitti Test' }
+        ]
+      );
+      return true;
+    }
+
+    if (lowerMsg === 'yield_input' || lowerMsg === 'set_yield') {
+      setPendingAction(farmerId, 'yield_target');
+      await sendWhatsAppMessage(from, lang === 'hi'
+        ? '\uD83C\uDFAF *Yield Target*\nKitna yield chahte hain (ton/hectare)?\nExample: Sugarcane 80-120, Wheat 4-6\nBas number type karein:'
+        : '\uD83C\uDFAF Enter target yield (t/ha):');
+      return true;
+    }
+
+    if (lowerMsg === 'water_input' || lowerMsg === 'pani_quality') {
+      setPendingAction(farmerId, 'water_quality');
+      await sendWhatsAppMessage(from, lang === 'hi'
+        ? '\uD83D\uDCA7 *Pani Quality*\nBore-well test se EC value bhejein.\nExample: "EC 3.2" ya "EC 2.5, pH 7.8, RSC 3.0"'
+        : '\uD83D\uDCA7 Enter water EC value. Example: "EC 3.2"');
+      return true;
+    }
+
+    if (lowerMsg === 'soil_input' || lowerMsg === 'mitti_test') {
+      setPendingAction(farmerId, 'soil_test');
+      await sendWhatsAppMessage(from, lang === 'hi'
+        ? '\uD83E\uDDEA *Soil Health Card Values*\nN, P, K values bhejein:\n"N 180, P 22, K 250, pH 7.2"\nya: "180 22 250 7.2"'
+        : '\uD83E\uDDEA Enter N, P, K from your Soil Health Card:');
+      return true;
+    }
+  }
+
+
   // Check if message matches a menu key
   const menuItems = (botConfig.menu_items || []).filter(m => m.is_active !== false);
   let matchedMenu = null;
