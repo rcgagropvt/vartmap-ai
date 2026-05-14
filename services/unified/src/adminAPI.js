@@ -113,46 +113,6 @@ module.exports = function setupAdminAPI(app, pool) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   
-  // ---
-  
-  
-  app.get('/api/v1/test-vision', async (req, res) => {
-    const results = {};
-    
-    // Test 1: Check Groq key
-    results.groq_key = !!process.env.GROQ_API_KEY;
-    
-    // Test 2: Try Groq Vision model
-    try {
-      const Groq = require('groq-sdk');
-      const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-      const result = await groq.chat.completions.create({
-        messages: [{ role: 'user', content: 'Reply with just OK' }],
-        model: 'llama-3.2-90b-vision-preview',
-        max_tokens: 10,
-      });
-      results.vision_model = 'working: ' + (result.choices[0]?.message?.content || '');
-    } catch(e) {
-      results.vision_model = 'ERROR: ' + e.message.substring(0, 300);
-    }
-    
-    // Test 3: Try text model
-    try {
-      const Groq = require('groq-sdk');
-      const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-      const result = await groq.chat.completions.create({
-        messages: [{ role: 'user', content: 'Reply with just OK' }],
-        model: 'llama-3.3-70b-versatile',
-        max_tokens: 10,
-      });
-      results.text_model = 'working: ' + (result.choices[0]?.message?.content || '');
-    } catch(e) {
-      results.text_model = 'ERROR: ' + e.message.substring(0, 300);
-    }
-    
-    res.json(results);
-  });
-
 app.get('/api/v1/dashboard', auth, async (req, res) => {
     try {
       const safeCount = async (query) => {
@@ -4855,7 +4815,7 @@ const XLSX = require('xlsx');
           console.log('Sending image to Groq Vision, base64 length:', imgBase64.length);
           const visionResult = await groqVision.chat.completions.create({
             messages: visionMessages,
-            model: 'llama-3.2-90b-vision-preview',
+            model: 'meta-llama/llama-4-scout-17b-16e-instruct',
             max_tokens: 1500,
             temperature: 0.3,
           });
