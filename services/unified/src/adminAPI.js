@@ -6781,6 +6781,61 @@ app.get("/api/v1/crop-calendar/debug", async (req, res) => {
   // List districts in districts_master
   
 ﻿  // === CROP CALENDAR WHATSAPP REMINDER SYSTEM ===
+
+  // --- Farmer Precision Input Routes (proxy to main crop-calendar endpoints) ---
+  
+  app.post("/api/v1/farmer/crop-calendar/:regId/set-yield-target", communityAuth, async (req, res) => {
+    try {
+      const { regId } = req.params;
+      const axios_yt = require('axios');
+      const baseUrl_yt = 'http://localhost:' + (process.env.PORT || 10000);
+      const ytRes = await axios_yt.post(
+        baseUrl_yt + '/api/v1/crop-calendar/set-yield-target/' + regId,
+        req.body,
+        { headers: { 'Content-Type': 'application/json', 'Authorization': req.headers.authorization || '' } }
+      );
+      res.json(ytRes.data);
+    } catch (e) {
+      console.log('Farmer set-yield-target proxy error:', e.response?.data || e.message);
+      res.status(e.response?.status || 500).json(e.response?.data || { error: e.message });
+    }
+  });
+
+  app.post("/api/v1/farmer/crop-calendar/:regId/water-quality-update", communityAuth, async (req, res) => {
+    try {
+      const { regId } = req.params;
+      const axios_wq = require('axios');
+      const baseUrl_wq = 'http://localhost:' + (process.env.PORT || 10000);
+      const wqRes = await axios_wq.post(
+        baseUrl_wq + '/api/v1/crop-calendar/water-quality-update/' + regId,
+        req.body,
+        { headers: { 'Content-Type': 'application/json', 'Authorization': req.headers.authorization || '' } }
+      );
+      res.json(wqRes.data);
+    } catch (e) {
+      console.log('Farmer water-quality proxy error:', e.response?.data || e.message);
+      res.status(e.response?.status || 500).json(e.response?.data || { error: e.message });
+    }
+  });
+
+  app.post("/api/v1/farmer/crop-calendar/:regId/soil-test-upload", communityAuth, async (req, res) => {
+    try {
+      const { regId } = req.params;
+      const axios_st = require('axios');
+      const baseUrl_st = 'http://localhost:' + (process.env.PORT || 10000);
+      const stRes = await axios_st.post(
+        baseUrl_st + '/api/v1/crop-calendar/soil-test-upload/' + regId,
+        req.body,
+        { headers: { 'Content-Type': 'application/json', 'Authorization': req.headers.authorization || '' } }
+      );
+      res.json(stRes.data);
+    } catch (e) {
+      console.log('Farmer soil-test proxy error:', e.response?.data || e.message);
+      res.status(e.response?.status || 500).json(e.response?.data || { error: e.message });
+    }
+  });
+
+
   app.post("/api/v1/crop-calendar/send-reminders", auth, async (req, res) => {
     try {
       const today = new Date().toISOString().split('T')[0];
