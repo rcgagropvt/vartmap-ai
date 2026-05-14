@@ -115,38 +115,7 @@ module.exports = function setupAdminAPI(app, pool) {
   
   // ---
   
-  // TEMP: Debug Gemini Vision
-  app.get('/api/v1/debug-gemini', async (req, res) => {
-    try {
-      const hasKey = !!process.env.GEMINI_API_KEY;
-      const keyPrefix = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.substring(0, 8) + '...' : 'NOT SET';
-      
-      let geminiStatus = 'not tested';
-      if (hasKey) {
-        try {
-          const { GoogleGenerativeAI } = require('@google/generative-ai');
-          const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-          const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-          const result = await model.generateContent('Reply with just the word OK');
-          const text = result.response.text();
-          geminiStatus = 'working - response: ' + text.substring(0, 50);
-        } catch(e) {
-          geminiStatus = 'ERROR: ' + e.message;
-        }
-      }
-      
-      res.json({ 
-        gemini_key_set: hasKey, 
-        key_prefix: keyPrefix,
-        gemini_status: geminiStatus,
-        groq_key_set: !!process.env.GROQ_API_KEY
-      });
-    } catch(e) {
-      res.json({ error: e.message });
-    }
-  });
-
-app.get('/api/v1/dashboard', auth, async (req, res) => {
+  app.get('/api/v1/dashboard', auth, async (req, res) => {
     try {
       const safeCount = async (query) => {
         try { const r = await pool.query(query); return +(r.rows[0].count || r.rows[0].total || r.rows[0].sum || 0); } catch (e) { return 0; }
@@ -4828,42 +4797,54 @@ const XLSX = require('xlsx');
 
       let diagnosis = null;
 
-      // Try Gemini Vision if image provided
-      console.log('Diagnose request - image:', !!image, 'imageLen:', image?.length || 0, 'GEMINI_KEY:', !!process.env.GEMINI_API_KEY);
-      if (image && process.env.GEMINI_API_KEY) {
+      // Use Groq Vision for image analysis, Groq text for symptoms-only
+      if (image) {
         try {
-          const { GoogleGenerativeAI } = require('@google/generative-ai');
-          const genAI2 = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-          const vModel = genAI2.getGenerativeModel({ model: 'gemini-2.0-flash' });
+          const Groq = require('groq-sdk');
+          const groqVision = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-          const imgData = image.replace(/^data:image\/\w+;base64,/, '');
-          const imageParts = [{ inlineData: { data: imgData, mimeType: 'image/jpeg' } }];
-          const prompt = sysPrompt + (symptoms ? ' Farmer describes: ' + symptoms : ' Analyze this crop/plant image for any disease, pest damage, or nutrient deficiency.');
+          const imgBase64 = image.replace(/^data:image\/\w+;base64,/, '');
+          const visionMessages = [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: sysPrompt + (symptoms ? ' Farmer describes: ' + symptoms : ' Analyze this crop/plant image for any disease, pest damage, or nutrient deficiency.') },
+                { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + imgBase64 } }
+              ]
+            }
+          ];
 
-          const genResult = await vModel.generateContent([prompt, ...imageParts]);
-          const genResponse = await genResult.response;
-          let text = genResponse.text();
-          text = text.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
-          try { diagnosis = JSON.parse(text); } catch(pe) {
-            const jm = text.match(/\{[\s\S]*\}/);
+          console.log('Sending image to Groq Vision, base64 length:', imgBase64.length);
+          const visionResult = await groqVision.chat.completions.create({
+            messages: visionMessages,
+            model: 'llama-3.2-90b-vision-preview',
+            max_tokens: 1500,
+            temperature: 0.3,
+          });
+
+          let vText = visionResult.choices[0]?.message?.content || '';
+          console.log('Groq Vision raw response:', vText.substring(0, 200));
+          vText = vText.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+          try { diagnosis = JSON.parse(vText); } catch(pe) {
+            const jm = vText.match(/\{[\s\S]*\}/);
             if (jm) diagnosis = JSON.parse(jm[0]);
           }
-          if (diagnosis) diagnosis._model = 'gemini-vision';
-        } catch (gemErr) {
-          console.log('Gemini vision error:', gemErr.message, gemErr.stack?.substring(0, 200));
+          if (diagnosis) diagnosis._model = 'groq-vision';
+        } catch (visionErr) {
+          console.log('Groq Vision error:', visionErr.message);
         }
       }
 
-      // Fallback to Groq text-only
+      // Fallback to Groq text-only (no image)
       if (!diagnosis) {
         try {
           const Groq = require('groq-sdk');
-          const groqAI2 = new Groq({ apiKey: process.env.GROQ_API_KEY });
+          const groqText = new Groq({ apiKey: process.env.GROQ_API_KEY });
           let tPrompt = sysPrompt;
           if (symptoms) tPrompt += ' Symptoms: ' + symptoms;
-          if (image && !process.env.GEMINI_API_KEY) tPrompt += ' Note: Image provided but cannot be analyzed visually.';
+          if (image) tPrompt += ' Note: Image was provided but could not be analyzed visually. Diagnose based on symptoms only.';
 
-          const completion = await groqAI2.chat.completions.create({
+          const completion = await groqText.chat.completions.create({
             messages: [{ role: 'user', content: tPrompt }],
             model: 'llama-3.3-70b-versatile',
             max_tokens: 1500
@@ -4877,7 +4858,7 @@ const XLSX = require('xlsx');
           }
           if (diagnosis) diagnosis._model = 'groq-text';
         } catch (groqErr) {
-          console.log('Groq diagnose error:', groqErr.message);
+          console.log('Groq text error:', groqErr.message);
           return res.status(500).json({ error: 'Diagnosis service unavailable' });
         }
       }
