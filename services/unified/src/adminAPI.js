@@ -115,7 +115,45 @@ module.exports = function setupAdminAPI(app, pool) {
   
   // ---
   
-  app.get('/api/v1/dashboard', auth, async (req, res) => {
+  
+  app.get('/api/v1/test-vision', async (req, res) => {
+    const results = {};
+    
+    // Test 1: Check Groq key
+    results.groq_key = !!process.env.GROQ_API_KEY;
+    
+    // Test 2: Try Groq Vision model
+    try {
+      const Groq = require('groq-sdk');
+      const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+      const result = await groq.chat.completions.create({
+        messages: [{ role: 'user', content: 'Reply with just OK' }],
+        model: 'llama-3.2-90b-vision-preview',
+        max_tokens: 10,
+      });
+      results.vision_model = 'working: ' + (result.choices[0]?.message?.content || '');
+    } catch(e) {
+      results.vision_model = 'ERROR: ' + e.message.substring(0, 300);
+    }
+    
+    // Test 3: Try text model
+    try {
+      const Groq = require('groq-sdk');
+      const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+      const result = await groq.chat.completions.create({
+        messages: [{ role: 'user', content: 'Reply with just OK' }],
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 10,
+      });
+      results.text_model = 'working: ' + (result.choices[0]?.message?.content || '');
+    } catch(e) {
+      results.text_model = 'ERROR: ' + e.message.substring(0, 300);
+    }
+    
+    res.json(results);
+  });
+
+app.get('/api/v1/dashboard', auth, async (req, res) => {
     try {
       const safeCount = async (query) => {
         try { const r = await pool.query(query); return +(r.rows[0].count || r.rows[0].total || r.rows[0].sum || 0); } catch (e) { return 0; }
