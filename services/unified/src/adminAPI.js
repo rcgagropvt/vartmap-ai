@@ -4797,6 +4797,7 @@ const XLSX = require('xlsx');
       let diagnosis = null;
 
       // Try Gemini Vision if image provided
+      console.log('Diagnose request - image:', !!image, 'imageLen:', image?.length || 0, 'GEMINI_KEY:', !!process.env.GEMINI_API_KEY);
       if (image && process.env.GEMINI_API_KEY) {
         try {
           const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -4817,7 +4818,7 @@ const XLSX = require('xlsx');
           }
           if (diagnosis) diagnosis._model = 'gemini-vision';
         } catch (gemErr) {
-          console.log('Gemini vision error:', gemErr.message);
+          console.log('Gemini vision error:', gemErr.message, gemErr.stack?.substring(0, 200));
         }
       }
 
