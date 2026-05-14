@@ -114,7 +114,39 @@ module.exports = function setupAdminAPI(app, pool) {
   });
   
   // ---
-  app.get('/api/v1/dashboard', auth, async (req, res) => {
+  
+  // TEMP: Debug Gemini Vision
+  app.get('/api/v1/debug-gemini', async (req, res) => {
+    try {
+      const hasKey = !!process.env.GEMINI_API_KEY;
+      const keyPrefix = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.substring(0, 8) + '...' : 'NOT SET';
+      
+      let geminiStatus = 'not tested';
+      if (hasKey) {
+        try {
+          const { GoogleGenerativeAI } = require('@google/generative-ai');
+          const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+          const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+          const result = await model.generateContent('Reply with just the word OK');
+          const text = result.response.text();
+          geminiStatus = 'working - response: ' + text.substring(0, 50);
+        } catch(e) {
+          geminiStatus = 'ERROR: ' + e.message;
+        }
+      }
+      
+      res.json({ 
+        gemini_key_set: hasKey, 
+        key_prefix: keyPrefix,
+        gemini_status: geminiStatus,
+        groq_key_set: !!process.env.GROQ_API_KEY
+      });
+    } catch(e) {
+      res.json({ error: e.message });
+    }
+  });
+
+app.get('/api/v1/dashboard', auth, async (req, res) => {
     try {
       const safeCount = async (query) => {
         try { const r = await pool.query(query); return +(r.rows[0].count || r.rows[0].total || r.rows[0].sum || 0); } catch (e) { return 0; }
