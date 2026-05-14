@@ -902,55 +902,6 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
   const lang = farmerData.language || 'hi';
   const lowerMsg = (msgBody || '').toLowerCase().trim();
 
-  // === PRECISION FARMING QUICK TRIGGERS ===
-  const precisionKeywords = ['smart_khaad', 'smart khaad', 'precision_farming', 'precision farming', 'yield_input', 'set_yield', 'water_input', 'pani_quality', 'soil_input', 'mitti_test'];
-  if (precisionKeywords.includes(lowerMsg)) {
-    const regRes = await pool.query("SELECT id, crop FROM farmer_crop_registrations WHERE farmer_id = $1 AND status = 'active' ORDER BY created_at DESC LIMIT 1", [farmerId]);
-    const activeReg = regRes.rows[0] || null;
-
-    if (lowerMsg === 'smart_khaad' || lowerMsg === 'smart khaad' || lowerMsg === 'precision_farming' || lowerMsg === 'precision farming') {
-      if (!activeReg) {
-        await sendWhatsAppMessage(from, lang === 'hi' ? 'Pehle Fasal Calendar mein apni fasal register karein.' : 'Please register a crop in Fasal Calendar first.');
-        return true;
-      }
-      setPendingAction(farmerId, 'waiting_precision_choice');
-      await sendWhatsAppButtons(from,
-        lang === 'hi' ? '\u2728 *Smart Khaad System*\nFasal: ' + activeReg.crop + '\n\nAapki fasal ke liye precise dose calculate karne ke liye ye info chahiye:' : '\u2728 *Precision Farming*\nCrop: ' + activeReg.crop + '\n\nChoose what to input:',
-        [
-          { id: 'yield_input', title: 'Yield Target' },
-          { id: 'water_input', title: 'Pani Quality' },
-          { id: 'soil_input', title: 'Mitti Test' }
-        ]
-      );
-      return true;
-    }
-
-    if (lowerMsg === 'yield_input' || lowerMsg === 'set_yield') {
-      setPendingAction(farmerId, 'yield_target');
-      await sendWhatsAppMessage(from, lang === 'hi'
-        ? '\uD83C\uDFAF *Yield Target*\nKitna yield chahte hain (ton/hectare)?\nExample: Sugarcane 80-120, Wheat 4-6\nBas number type karein:'
-        : '\uD83C\uDFAF Enter target yield (t/ha):');
-      return true;
-    }
-
-    if (lowerMsg === 'water_input' || lowerMsg === 'pani_quality') {
-      setPendingAction(farmerId, 'water_quality');
-      await sendWhatsAppMessage(from, lang === 'hi'
-        ? '\uD83D\uDCA7 *Pani Quality*\nBore-well test se EC value bhejein.\nExample: "EC 3.2" ya "EC 2.5, pH 7.8, RSC 3.0"'
-        : '\uD83D\uDCA7 Enter water EC value. Example: "EC 3.2"');
-      return true;
-    }
-
-    if (lowerMsg === 'soil_input' || lowerMsg === 'mitti_test') {
-      setPendingAction(farmerId, 'soil_test');
-      await sendWhatsAppMessage(from, lang === 'hi'
-        ? '\uD83E\uDDEA *Soil Health Card Values*\nN, P, K values bhejein:\n"N 180, P 22, K 250, pH 7.2"\nya: "180 22 250 7.2"'
-        : '\uD83E\uDDEA Enter N, P, K from your Soil Health Card:');
-      return true;
-    }
-  }
-
-
   // Check if message matches a menu key
   const menuItems = (botConfig.menu_items || []).filter(m => m.is_active !== false);
   let matchedMenu = null;
@@ -1164,6 +1115,78 @@ async function handleFlow(farmerId, farmerData, from, msgBody, sessionId, botCon
       : '🤖 *AI Chat Mode ON*\n\nYou can now chat directly with AI. Ask your question!\n\n⏱️ Session expires in 10 minutes.\n📋 Type "menu" to go back.');
     return true;
   }
+
+  // === FASAL CALENDAR with SMART KHAAD ===
+  if (menuKey === 'fasal_calendar' || menuKey === 'crop_calendar') {
+    // Fetch active registrations
+    try {
+      const regRes = await pool.query(
+        "SELECT r.id, r.crop, r.sow_date, r.land_area, r.target_yield FROM farmer_crop_registrations r WHERE r.farmer_id = $1 AND r.status = 'active' ORDER BY r.created_at DESC LIMIT 5",
+        [farmerId]
+      );
+      const regs = regRes.rows;
+
+      if (!regs.length) {
+        await sendWhatsAppMessage(from, lang === 'hi'
+          ? '\uD83C\uDF31 *Fasal Calendar*\n\nAbhi koi fasal register nahi hai.\n\nFasal register karne ke liye crop name type karein:\nExample: "sugarcane" ya "wheat"'
+          : '\uD83C\uDF31 *Crop Calendar*\n\nNo active crops registered.\nType a crop name to register.');
+        return true;
+      }
+
+      // Show active registrations
+      let msg = lang === 'hi'
+        ? '\uD83C\uDF31 *Fasal Calendar*\n\n'
+        : '\uD83C\uDF31 *Crop Calendar*\n\n';
+
+      for (const reg of regs) {
+        const sowDate = new Date(reg.sow_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        const daysSince = Math.floor((Date.now() - new Date(reg.sow_date).getTime()) / (1000*60*60*24));
+        msg += '\uD83C\uDF3E *' + reg.crop.charAt(0).toUpperCase() + reg.crop.slice(1) + '*\n';
+        msg += '   Buwai: ' + sowDate + ' (' + daysSince + ' din)\n';
+        if (reg.land_area) msg += '   Zameen: ' + reg.land_area + ' acres\n';
+        if (reg.target_yield) msg += '   Target: ' + reg.target_yield + ' t/ha\n';
+        msg += '\n';
+      }
+
+      // Fetch next action for the most recent registration
+      const latestReg = regs[0];
+      try {
+        const schedRes = await pool.query(
+          "SELECT stage_name, message_hi, day_offset FROM crop_calendar_templates WHERE LOWER(crop) = $1 AND day_offset >= $2 ORDER BY day_offset ASC LIMIT 1",
+          [latestReg.crop.toLowerCase(), Math.floor((Date.now() - new Date(latestReg.sow_date).getTime()) / (1000*60*60*24))]
+        );
+        if (schedRes.rows.length) {
+          const next = schedRes.rows[0];
+          const nextDate = new Date(new Date(latestReg.sow_date).getTime() + next.day_offset * 24*60*60*1000);
+          msg += '\u23ED *Agla Kaam:* ' + (next.message_hi || next.stage_name) + '\n';
+          msg += '   Date: ' + nextDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) + '\n\n';
+        }
+      } catch(e) {}
+
+      msg += lang === 'hi'
+        ? '_Smart Khaad se precise dose paayein \u2B07\uFE0F_'
+        : '_Get precise doses with Smart Khaad \u2B07\uFE0F_';
+
+      await sendWhatsAppMessage(from, msg);
+
+      // Show action buttons
+      await sendWhatsAppButtons(from,
+        lang === 'hi' ? 'Kya karna chahte hain?' : 'What would you like to do?',
+        [
+          { id: 'smart_khaad', title: '\u2728 Smart Khaad' },
+          { id: 'schedule_refresh', title: '\uD83D\uDCC5 Poora Schedule' },
+          { id: 'new_crop_reg', title: '\uD83C\uDF31 Nayi Fasal' }
+        ]
+      );
+      return true;
+    } catch(e) {
+      console.log('Fasal calendar error:', e.message);
+      await sendWhatsAppMessage(from, 'Fasal Calendar load karne mein error. Try again.');
+      return true;
+    }
+  }
+
+
 
   // TALK TO EXPERT
   if (menuKey === 'talk_to_expert') {
