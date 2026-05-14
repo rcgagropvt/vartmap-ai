@@ -4788,41 +4788,83 @@ const XLSX = require('xlsx');
       const { symptoms, image } = req.body;
       if (!symptoms && !image) return res.status(400).json({ error: 'Provide symptoms or image' });
 
-      const Groq = require('groq-sdk');
-      const groqAI = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
       const farmerId = req.farmer.id;
       const farmerData = await pool.query('SELECT crops, village FROM farmers WHERE id = $1', [farmerId]);
       const farmer = farmerData.rows[0] || {};
 
-      let prompt = `You are an expert agricultural scientist and plant pathologist (Fasal Doctor). Diagnose the crop disease based on the information provided. Return your response as JSON with these fields: disease (name of disease), description (brief explanation), treatment (specific remedies and chemicals with dosage), prevention (how to prevent in future). Use simple language. Mix Hindi terms where common.
+      const sysPrompt = 'You are an expert agricultural scientist and plant pathologist (Fasal Doctor) specializing in Indian crops. Diagnose the crop disease based on the information provided. Return your response ONLY as valid JSON (no markdown, no code blocks) with these fields: { "disease": "name", "confidence": "high/medium/low", "severity": "high/medium/low", "description": "brief explanation", "treatment": ["remedy 1 with dosage", "remedy 2"], "prevention": ["tip 1", "tip 2"], "products": ["product 1 with dosage", "product 2"] }. Use simple language. Mix Hindi terms where common for Indian farmers. Farmer crops: ' + (farmer.crops || []).join(', ') + '. Location: ' + (farmer.village || 'UP, India') + '.';
 
-Farmer's crops: ${(farmer.crops || []).join(', ')}
-Location: ${farmer.village || 'India'}
+      let diagnosis = null;
 
-`;
-      if (symptoms) {
-        prompt += `Symptoms described: ${symptoms}`;
+      // Try Gemini Vision if image provided
+      if (image && process.env.GEMINI_API_KEY) {
+        try {
+          const { GoogleGenerativeAI } = require('@google/generative-ai');
+          const genAI2 = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+          const vModel = genAI2.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+          const imgData = image.replace(/^data:image\/\w+;base64,/, '');
+          const imageParts = [{ inlineData: { data: imgData, mimeType: 'image/jpeg' } }];
+          const prompt = sysPrompt + (symptoms ? ' Farmer describes: ' + symptoms : ' Analyze this crop/plant image for any disease, pest damage, or nutrient deficiency.');
+
+          const genResult = await vModel.generateContent([prompt, ...imageParts]);
+          const genResponse = await genResult.response;
+          let text = genResponse.text();
+          text = text.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+          try { diagnosis = JSON.parse(text); } catch(pe) {
+            const jm = text.match(/\{[\s\S]*\}/);
+            if (jm) diagnosis = JSON.parse(jm[0]);
+          }
+          if (diagnosis) diagnosis._model = 'gemini-vision';
+        } catch (gemErr) {
+          console.log('Gemini vision error:', gemErr.message);
+        }
       }
-      if (image) {
-        prompt += `The farmer has uploaded an image of the affected crop. Based on common diseases, provide diagnosis. Symptoms from image analysis needed.`;
+
+      // Fallback to Groq text-only
+      if (!diagnosis) {
+        try {
+          const Groq = require('groq-sdk');
+          const groqAI2 = new Groq({ apiKey: process.env.GROQ_API_KEY });
+          let tPrompt = sysPrompt;
+          if (symptoms) tPrompt += ' Symptoms: ' + symptoms;
+          if (image && !process.env.GEMINI_API_KEY) tPrompt += ' Note: Image provided but cannot be analyzed visually.';
+
+          const completion = await groqAI2.chat.completions.create({
+            messages: [{ role: 'user', content: tPrompt }],
+            model: 'llama-3.3-70b-versatile',
+            max_tokens: 1500
+          });
+          let reply = completion.choices[0]?.message?.content || '';
+          reply = reply.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+          try { diagnosis = JSON.parse(reply); } catch(pe2) {
+            const jm2 = reply.match(/\{[\s\S]*\}/);
+            if (jm2) diagnosis = JSON.parse(jm2[0]);
+            else diagnosis = { disease: 'Analysis incomplete', description: reply, treatment: [], prevention: [], products: [], severity: 'unknown', confidence: 'low' };
+          }
+          if (diagnosis) diagnosis._model = 'groq-text';
+        } catch (groqErr) {
+          console.log('Groq diagnose error:', groqErr.message);
+          return res.status(500).json({ error: 'Diagnosis service unavailable' });
+        }
       }
 
-      const completion = await groqAI.chat.completions.create({ messages: [{ role: 'user', content: prompt }], model: 'llama-3.3-70b-versatile', max_tokens: 1500 });
-      let reply = completion.choices[0].message.content;
-
-      // Try to parse as JSON
+      // Log diagnosis
       try {
-        reply = reply.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        const parsed = JSON.parse(reply);
-        res.json(parsed);
-      } catch (parseErr) {
-        res.json({ disease: 'Analysis Complete', description: reply, treatment: 'Please consult a local agronomist for specific treatment.', prevention: 'Maintain crop hygiene and proper irrigation.' });
-      }
-    } catch (e) { res.status(500).json({ error: e.message }); }
+        await pool.query(
+          "INSERT INTO diagnosis_logs (farmer_id, symptoms, has_image, result, model_used, created_at) VALUES ($1, $2, $3, $4, $5, NOW())",
+          [farmerId, symptoms || '', !!image, JSON.stringify(diagnosis), diagnosis._model || 'unknown']
+        );
+      } catch(logErr) { /* ignore */ }
+
+      res.json({ diagnosis });
+    } catch (e) {
+      console.log('Diagnose error:', e.message);
+      res.status(500).json({ error: 'Diagnosis failed: ' + e.message });
+    }
   });
 
-  // ====== MANDI PRICES ======
+  
   app.post('/api/v1/farmer/mandi-prices', farmerAuth, async (req, res) => {
     try {
       const { crop, state, district } = req.body;
