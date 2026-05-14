@@ -2071,8 +2071,7 @@ app.post('/webhook', async (req, res) => {
               await sendWhatsAppButtons(from,
                 lang === 'hi' ? 'Aage kya karna chahenge?' : 'What would you like to do next?',
                 [
-                  { id: 'mera_schedule', title: 'Khaad Schedule' },
-                  { id: 'mera_calendar', title: 'Mera Calendar' },
+                  { id: 'smart_khaad', title: 'Smart Khaad' }, { id: 'mera_schedule', title: 'Khaad Schedule' }, { id: 'mera_calendar', title: 'Mera Calendar' },
                   { id: 'fasal_register', title: 'Aur Fasal Add' }
                 ]
               );
