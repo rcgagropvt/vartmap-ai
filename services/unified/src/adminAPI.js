@@ -4709,13 +4709,58 @@ const XLSX = require('xlsx');
   // --- Mandi Prices ---
   app.get('/api/v1/farmer/mandi-prices', farmerAuth, async (req, res) => {
     try {
-      const { district } = req.query;
-      let query = `SELECT * FROM mandi_prices WHERE date >= NOW() - INTERVAL '3 days'`;
+      const { district, commodity, state, crop } = req.query;
+      let query = `SELECT * FROM mandi_prices WHERE price_date >= CURRENT_DATE - INTERVAL '7 days'`;
       const params = [];
-      if (district) { query += ` AND district = $1`; params.push(district); }
-      query += ` ORDER BY date DESC LIMIT 20`;
+      if (commodity || crop) {
+        params.push('%' + (commodity || crop) + '%');
+        query += ` AND commodity ILIKE $${params.length}`;
+      }
+      if (state) {
+        params.push('%' + state + '%');
+        query += ` AND state ILIKE $${params.length}`;
+      }
+      if (district) {
+        params.push('%' + district + '%');
+        query += ` AND (district ILIKE $${params.length} OR market_name ILIKE $${params.length})`;
+      }
+      query += ` ORDER BY price_date DESC, commodity LIMIT 50`;
       const { rows } = await pool.query(query, params);
-      res.json({ prices: rows });
+
+      if (rows.length > 0) {
+        return res.json({ prices: rows, source: 'agmarknet.gov.in' });
+      }
+
+      // Fallback: fetch from data.gov.in if DB has no results
+      const axios = require('axios');
+      const commodityName = (commodity || crop || 'Wheat').trim();
+      const stateName = (state || 'Uttar Pradesh').trim();
+      try {
+        const apiUrl = `https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=${process.env.DATA_GOV_API_KEY || '579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b'}&format=json&limit=20&filters[commodity]=${encodeURIComponent(commodityName)}&filters[state]=${encodeURIComponent(stateName)}`;
+        const response = await axios.get(apiUrl, { timeout: 8000 });
+        if (response.data?.records?.length > 0) {
+          const prices = response.data.records.map(r => ({
+            commodity: r.commodity, market_name: r.market || r.district, district: r.district,
+            state: r.state, min_price: r.min_price, max_price: r.max_price,
+            modal_price: r.modal_price, price_date: r.arrival_date || new Date().toISOString().split('T')[0],
+            source: 'data.gov.in'
+          }));
+          return res.json({ prices, source: 'data.gov.in' });
+        }
+      } catch (apiErr) { console.log('Data.gov fallback error:', apiErr.message); }
+
+      // Final fallback: Groq AI estimate
+      try {
+        const Groq = require('groq-sdk');
+        const groqAI = new Groq({ apiKey: process.env.GROQ_API_KEY });
+        const prompt = `Provide current estimated mandi prices for ${commodityName} in ${stateName}${district ? ', ' + district : ''} in India. Return ONLY a JSON array with fields: commodity, market_name, min_price (number), max_price (number), modal_price (number), price_date (YYYY-MM-DD), state, district. Include 3-5 nearby mandis. Use realistic current prices in INR per quintal.`;
+        const completion = await groqAI.chat.completions.create({ messages: [{ role: 'user', content: prompt }], model: 'llama-3.3-70b-versatile', max_tokens: 1500 });
+        let reply = completion.choices[0].message.content.replace(/\`\`\`json\n?/g, '').replace(/\`\`\`\n?/g, '').trim();
+        const parsed = JSON.parse(reply);
+        return res.json({ prices: Array.isArray(parsed) ? parsed : parsed.prices || [], source: 'ai-estimate' });
+      } catch (aiErr) { console.log('Groq fallback error:', aiErr.message); }
+
+      res.json({ prices: [], source: 'none' });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
