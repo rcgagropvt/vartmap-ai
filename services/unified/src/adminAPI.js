@@ -4464,7 +4464,8 @@ const XLSX = require('xlsx');
       // Send OTP via WhatsApp (using existing gateway)
       try {
         const axios = require('axios');
-        await axios.post('http://localhost:10000/api/v1/send-message', {
+        const gatewayUrl = process.env.GATEWAY_URL || 'https://vartmap-whatsapp-gateway.onrender.com';
+        await axios.post(gatewayUrl + '/api/v1/send-message', {
           phone: cleanPhone,
           message: `Your VartMap login OTP is: ${otp}\nValid for 5 minutes.\n\nआपका OTP है: ${otp}`
         });
