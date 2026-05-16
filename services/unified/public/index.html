@@ -6225,11 +6225,16 @@ async function createProduct() {
 }
 
 // ------
-async function loadMandi() {
+async async function loadMandi(filterState, filterCommodity) {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
   try {
-    const d = await api('/api/v1/mandi-prices');
+    let mandiUrl = '/api/v1/mandi-prices';
+    const params = [];
+    if (filterState) params.push('state=' + encodeURIComponent(filterState));
+    if (filterCommodity) params.push('commodity=' + encodeURIComponent(filterCommodity));
+    if (params.length) mandiUrl += '?' + params.join('&');
+    const d = await api(mandiUrl);
     el.innerHTML = `
     <div class="stats-grid mb-24">
       <div class="stat-card"><div class="stat-value">${d.count}</div><div class="stat-label">Total Price Records</div></div>
@@ -6252,7 +6257,7 @@ async function loadMandi() {
           <option>Chilli</option><option>Turmeric</option><option>Sugar</option><option>Gram</option><option>Arhar</option><option>Moong</option><option>Masoor</option>
         </select></div>
         <div class="form-group" style="margin:0"><label>Records</label><select id="mandiLimit"><option value="50">50</option><option value="100" selected>100</option><option value="200">200</option><option value="500">500</option></select></div>
-        <button class="btn btn-primary" onclick="fetchMandiByFilter()"><i class="fas fa-cloud-download-alt"></i> Fetch from Govt API</button>
+        <button class="btn btn-outline" onclick="loadMandi(document.getElementById('mandiState').value, document.getElementById('mandiComm').value)" style="margin-right:8px"><i class="fas fa-filter"></i> Filter Table</button><button class="btn btn-primary" onclick="fetchMandiByFilter()"><i class="fas fa-cloud-download-alt"></i> Fetch from Govt API</button>
       </div>
       <div id="fetchResult" style="padding:0 16px 16px;display:none"></div>
     </div>
@@ -6268,7 +6273,7 @@ async function loadMandi() {
   } catch (e) { el.innerHTML = '<div class="empty"><p>Error loading mandi prices</p></div>'; }
 }
 
-async function fetchMandiLive(state, commodity, limit) {
+async async function fetchMandiLive(state, commodity, limit) {
   const resultEl = document.getElementById('fetchResult');
   if (resultEl) { resultEl.style.display = 'block'; resultEl.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Fetching live prices from data.gov.in...</p>'; }
   try {
@@ -6283,7 +6288,7 @@ async function fetchMandiLive(state, commodity, limit) {
         ${r.sample && r.sample.length ? '<br>Sample: ' + r.sample.map(s => s.commodity + ' Rs.' + s.modal_price + ' (' + s.market + ')').join(', ') : ''}
       </div>`;
     }
-    setTimeout(() => loadMandi(), 2000);
+    setTimeout(() => { const s = document.getElementById('mandiState'); const c = document.getElementById('mandiComm'); loadMandi(s ? s.value : '', c ? c.value : ''); }, 2000);
   } catch (e) {
     if (resultEl) resultEl.innerHTML = '<div style="padding:12px;background:#FFEBEE;border-radius:8px"><strong>Error:</strong> ' + e.message + '</div>';
   }
