@@ -6225,7 +6225,7 @@ async function createProduct() {
 }
 
 // ------
-async async function loadMandi(filterState, filterCommodity) {
+async function loadMandi(filterState, filterCommodity) {
   const el = document.getElementById('pageContent');
   el.innerHTML = '<div class="empty"><i class="fas fa-spinner fa-spin"></i><p>Loading...</p></div>';
   try {
@@ -6273,7 +6273,7 @@ async async function loadMandi(filterState, filterCommodity) {
   } catch (e) { el.innerHTML = '<div class="empty"><p>Error loading mandi prices</p></div>'; }
 }
 
-async async function fetchMandiLive(state, commodity, limit) {
+async function fetchMandiLive(state, commodity, limit) {
   const resultEl = document.getElementById('fetchResult');
   if (resultEl) { resultEl.style.display = 'block'; resultEl.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Fetching live prices from data.gov.in...</p>'; }
   try {
