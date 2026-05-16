@@ -3331,49 +3331,113 @@ const XLSX = require('xlsx');
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
-  // Auto-sync on server start (runs once, then every 4 hours)
+  // Auto-sync on server start - comprehensive fetch from data.gov.in + Agmarknet
   (async () => {
     try {
-      const latest = await pool.query('SELECT MAX(price_date) as d FROM mandi_prices');
-      const lastDate = latest.rows[0]?.d;
+      const axios = require('axios');
+      const DG_KEY = process.env.DATA_GOV_API_KEY || '579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b';
+      const DG_BASE = 'https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=' + DG_KEY + '&format=json';
+      
+      // Priority states (UP first, then neighbors)
+      const PRIORITY_STATES = ['Uttar Pradesh', 'Uttarakhand', 'Madhya Pradesh', 'Bihar', 'Rajasthan', 'Haryana', 'Punjab', 'Maharashtra', 'Gujarat', 'Karnataka', 'Tamil Nadu', 'Andhra Pradesh', 'Telangana', 'West Bengal', 'Odisha'];
+      const PRIORITY_COMMODITIES = ['Wheat', 'Rice', 'Paddy(Dhan)(Common)', 'Onion', 'Potato', 'Tomato', 'Sugarcane', 'Maize', 'Soyabean', 'Mustard', 'Gram Dal(Chana Dal)', 'Arhar Dal(Tur Dal)', 'Urad Dal', 'Moong Dal', 'Banana', 'Apple', 'Cotton', 'Groundnut', 'Turmeric', 'Green Chilli', 'Garlic', 'Ginger(Green)', 'Brinjal', 'Cauliflower', 'Cabbage', 'Lady Finger', 'Capsicum', 'Peas(Green)', 'Carrot', 'Cucumber'];
+
+      let totalInserted = 0;
       const today = new Date().toISOString().split('T')[0];
-      if (!lastDate || lastDate.toISOString().split('T')[0] < today) {
-        console.log('[Mandi] Auto-syncing prices from Agmarknet...');
-        const n = await syncMandiPrices(today);
-        console.log('[Mandi] Synced ' + n + ' price records for ' + today);
-        // Also try data.gov.in for more coverage
-        try {
-          const axios = require('axios');
-          const dgUrl = 'https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=' + (process.env.DATA_GOV_API_KEY || '579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b') + '&format=json&limit=500';
-          const dgResp = await axios.get(dgUrl, { timeout: 15000 });
-          let dgInserted = 0;
-          if (dgResp.data?.records?.length > 0) {
-            for (const rec of dgResp.data.records) {
-              try {
-                await pool.query(
-                  `INSERT INTO mandi_prices (commodity, variety, market_name, district, state, min_price, max_price, modal_price, unit, price_date, source)
-                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-                   ON CONFLICT ON CONSTRAINT uq_mandi_price DO UPDATE SET min_price=EXCLUDED.min_price, max_price=EXCLUDED.max_price, modal_price=EXCLUDED.modal_price, source=EXCLUDED.source`,
-                  [rec.commodity, rec.variety || '', rec.market || rec.district || '', rec.district || '', rec.state || '', rec.min_price || 0, rec.max_price || 0, rec.modal_price || 0, 'Quintal', rec.arrival_date || today, 'data.gov.in']
-                );
-                dgInserted++;
-              } catch (e) { /* skip duplicates */ }
-            }
-            console.log('[Mandi] data.gov.in added ' + dgInserted + ' records');
-          }
-        } catch (dgErr) { console.log('[Mandi] data.gov.in sync error:', dgErr.message); }
+
+      // Check if we already have enough data for today
+      const existing = await pool.query("SELECT COUNT(*) as c FROM mandi_prices WHERE price_date >= CURRENT_DATE");
+      const existingCount = parseInt(existing.rows[0]?.c || 0);
+      
+      if (existingCount > 1000) {
+        console.log('[Mandi] Already have ' + existingCount + ' records for today, skipping bulk sync');
       } else {
-        console.log('[Mandi] Already have data for ' + today + ', skipping sync');
+        console.log('[Mandi] Starting comprehensive sync from data.gov.in...');
+        
+        // Fetch for priority states + commodities
+        // UP and neighbors get all commodities; other states get top 10
+        for (let si = 0; si < PRIORITY_STATES.length; si++) {
+          const state = PRIORITY_STATES[si];
+          const commsToFetch = si < 5 ? PRIORITY_COMMODITIES : PRIORITY_COMMODITIES.slice(0, 10);
+          
+          for (const commodity of commsToFetch) {
+            try {
+              const url = DG_BASE + '&limit=100&filters[state]=' + encodeURIComponent(state) + '&filters[commodity]=' + encodeURIComponent(commodity);
+              const resp = await axios.get(url, { timeout: 10000 });
+              if (resp.data?.records?.length > 0) {
+                for (const rec of resp.data.records) {
+                  try {
+                    await pool.query(
+                      `INSERT INTO mandi_prices (commodity, variety, market_name, district, state, min_price, max_price, modal_price, unit, arrival_qty, price_date, source)
+                       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+                       ON CONFLICT ON CONSTRAINT uq_mandi_price DO UPDATE SET min_price=EXCLUDED.min_price, max_price=EXCLUDED.max_price, modal_price=EXCLUDED.modal_price, arrival_qty=EXCLUDED.arrival_qty, source=EXCLUDED.source`,
+                      [rec.commodity || commodity, rec.variety || '', rec.market || '', rec.district || '', rec.state || state, parseFloat(rec.min_price) || 0, parseFloat(rec.max_price) || 0, parseFloat(rec.modal_price) || 0, 'Quintal', parseFloat(rec.arrival) || 0, rec.arrival_date || today, 'data.gov.in']
+                    );
+                    totalInserted++;
+                  } catch (e) { /* skip duplicates */ }
+                }
+              }
+              // Small delay to avoid rate limiting
+              await new Promise(r => setTimeout(r, 200));
+            } catch (e) { /* skip failed fetches */ }
+          }
+          console.log('[Mandi] ' + state + ' done (' + totalInserted + ' total so far)');
+        }
+
+        // Also try Agmarknet for additional coverage
+        try {
+          const agN = await syncMandiPrices(today);
+          totalInserted += agN;
+          console.log('[Mandi] Agmarknet added ' + agN + ' records');
+        } catch (e) { console.log('[Mandi] Agmarknet error:', e.message); }
+
+        console.log('[Mandi] Comprehensive sync done: ' + totalInserted + ' total records inserted/updated');
       }
+
+      // Clean old data (keep last 30 days)
+      await pool.query(`DELETE FROM mandi_prices WHERE price_date < CURRENT_DATE - INTERVAL '30 days'`);
     } catch (e) { console.error('[Mandi] Auto-sync error:', e.message); }
   })();
 
-  // Re-sync every 4 hours
+  // Re-sync every 4 hours with fresh data
   setInterval(async () => {
     try {
+      const axios = require('axios');
+      const DG_KEY = process.env.DATA_GOV_API_KEY || '579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b';
+      const DG_BASE = 'https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=' + DG_KEY + '&format=json';
       const today = new Date().toISOString().split('T')[0];
       console.log('[Mandi] Scheduled sync for ' + today);
-      const n = await syncMandiPrices(today);
+
+      // Quick sync: UP + top commodities
+      const QUICK_STATES = ['Uttar Pradesh', 'Uttarakhand', 'Madhya Pradesh', 'Bihar', 'Rajasthan'];
+      const QUICK_COMMS = ['Wheat', 'Rice', 'Onion', 'Potato', 'Tomato', 'Sugarcane', 'Maize', 'Soyabean', 'Mustard', 'Banana'];
+      let n = 0;
+
+      for (const state of QUICK_STATES) {
+        for (const commodity of QUICK_COMMS) {
+          try {
+            const url = DG_BASE + '&limit=50&filters[state]=' + encodeURIComponent(state) + '&filters[commodity]=' + encodeURIComponent(commodity);
+            const resp = await axios.get(url, { timeout: 10000 });
+            if (resp.data?.records?.length > 0) {
+              for (const rec of resp.data.records) {
+                try {
+                  await pool.query(
+                    `INSERT INTO mandi_prices (commodity, variety, market_name, district, state, min_price, max_price, modal_price, unit, arrival_qty, price_date, source)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+                     ON CONFLICT ON CONSTRAINT uq_mandi_price DO UPDATE SET min_price=EXCLUDED.min_price, max_price=EXCLUDED.max_price, modal_price=EXCLUDED.modal_price, arrival_qty=EXCLUDED.arrival_qty, source=EXCLUDED.source`,
+                    [rec.commodity || commodity, rec.variety || '', rec.market || '', rec.district || '', rec.state || state, parseFloat(rec.min_price) || 0, parseFloat(rec.max_price) || 0, parseFloat(rec.modal_price) || 0, 'Quintal', parseFloat(rec.arrival) || 0, rec.arrival_date || today, 'data.gov.in']
+                  );
+                  n++;
+                } catch (e) { /* skip */ }
+              }
+            }
+            await new Promise(r => setTimeout(r, 200));
+          } catch (e) { /* skip */ }
+        }
+      }
+
+      // Also run Agmarknet
+      try { n += await syncMandiPrices(today); } catch(e) {}
       console.log('[Mandi] Scheduled sync: ' + n + ' records');
     } catch (e) { console.error('[Mandi] Scheduled sync error:', e.message); }
   }, 4 * 60 * 60 * 1000);
