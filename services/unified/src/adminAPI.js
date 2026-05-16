@@ -7862,25 +7862,33 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
   app.delete('/api/v1/admin/delete-farmer/:phone', async (req, res) => {
     try {
       const phone = req.params.phone.replace(/[^0-9]/g, '');
-      // Find farmer first
       const f = await pool.query("SELECT id FROM farmers WHERE phone LIKE '%' || $1 || '%'", [phone]);
       if (!f.rows.length) return res.json({ deleted: 0, message: 'Farmer not found' });
       const farmerId = f.rows[0].id;
-      // Delete all related records
-      await pool.query('DELETE FROM usage_tracking WHERE farmer_id = $1', [farmerId]);
-      await pool.query('DELETE FROM farmer_otps WHERE phone LIKE $1', ['%' + phone + '%']);
-      try { await pool.query('DELETE FROM farmer_crops WHERE farmer_id = $1', [farmerId]); } catch(e) {}
-      try { await pool.query('DELETE FROM farmer_rewards WHERE farmer_id = $1', [farmerId]); } catch(e) {}
-      try { await pool.query('DELETE FROM crop_calendar_logs WHERE farmer_id = $1', [farmerId]); } catch(e) {}
-      try { await pool.query('DELETE FROM notifications WHERE farmer_id = $1', [farmerId]); } catch(e) {}
-      try { await pool.query('DELETE FROM rewards WHERE farmer_id = $1', [farmerId]); } catch(e) {}
-      try { await pool.query('DELETE FROM conversations WHERE farmer_id = $1', [farmerId]); } catch(e) {}
-      try { await pool.query('DELETE FROM messages WHERE farmer_id = $1', [farmerId]); } catch(e) {}
-      try { await pool.query('DELETE FROM diagnoses WHERE farmer_id = $1', [farmerId]); } catch(e) {}
-      try { await pool.query('DELETE FROM weather_alerts WHERE farmer_id = $1', [farmerId]); } catch(e) {}
-      // Finally delete farmer
+      
+      // Find ALL tables with farmer_id foreign key and delete from them
+      const fkQuery = await pool.query(`
+        SELECT tc.table_name 
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name
+        WHERE tc.constraint_type = 'FOREIGN KEY' 
+        AND ccu.table_name = 'farmers' 
+        AND ccu.column_name = 'id'
+      `);
+      
+      const tables = fkQuery.rows.map(r => r.table_name);
+      console.log('Clearing farmer from tables:', tables);
+      
+      for (const table of tables) {
+        try { await pool.query('DELETE FROM ' + table + ' WHERE farmer_id = $1', [farmerId]); } catch(e) { console.log('Skip:', table, e.message); }
+      }
+      
+      // Also clear OTPs by phone
+      await pool.query("DELETE FROM farmer_otps WHERE phone LIKE '%' || $1 || '%'", [phone]);
+      
+      // Now delete farmer
       const r2 = await pool.query('DELETE FROM farmers WHERE id = $1 RETURNING *', [farmerId]);
-      res.json({ deleted: r2.rowCount, farmer: r2.rows[0] || null });
+      res.json({ deleted: r2.rowCount, tables_cleared: tables, farmer: r2.rows[0] || null });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
