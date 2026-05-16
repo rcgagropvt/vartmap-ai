@@ -7873,6 +7873,11 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
       try { await pool.query('DELETE FROM farmer_rewards WHERE farmer_id = $1', [farmerId]); } catch(e) {}
       try { await pool.query('DELETE FROM crop_calendar_logs WHERE farmer_id = $1', [farmerId]); } catch(e) {}
       try { await pool.query('DELETE FROM notifications WHERE farmer_id = $1', [farmerId]); } catch(e) {}
+      try { await pool.query('DELETE FROM rewards WHERE farmer_id = $1', [farmerId]); } catch(e) {}
+      try { await pool.query('DELETE FROM conversations WHERE farmer_id = $1', [farmerId]); } catch(e) {}
+      try { await pool.query('DELETE FROM messages WHERE farmer_id = $1', [farmerId]); } catch(e) {}
+      try { await pool.query('DELETE FROM diagnoses WHERE farmer_id = $1', [farmerId]); } catch(e) {}
+      try { await pool.query('DELETE FROM weather_alerts WHERE farmer_id = $1', [farmerId]); } catch(e) {}
       // Finally delete farmer
       const r2 = await pool.query('DELETE FROM farmers WHERE id = $1 RETURNING *', [farmerId]);
       res.json({ deleted: r2.rowCount, farmer: r2.rows[0] || null });
