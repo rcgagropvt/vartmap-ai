@@ -4464,14 +4464,11 @@ const XLSX = require('xlsx');
       // Send OTP via WhatsApp (using existing gateway)
       try {
         const axios = require('axios');
-        const gatewayUrl = process.env.GATEWAY_URL || 'https://vartmap-whatsapp-gateway.onrender.com';
-        // Format phone: Meta API expects 91XXXXXXXXXX (no +)
-        const metaPhone = cleanPhone.replace(/[^0-9]/g, '');
+        // Send OTP via the unified service's own send-message route
         const otpMsg = 'Your VartMap login OTP is: ' + otp + '\nValid for 5 minutes.\n\nआपका OTP है: ' + otp;
-        await axios.post(gatewayUrl + '/send', {
-          to: metaPhone,
-          type: 'text',
-          body: { text: otpMsg }
+        await axios.post('http://localhost:' + (process.env.PORT || 10000) + '/api/v1/send-message', {
+          phone: cleanPhone,
+          message: otpMsg
         }, { timeout: 15000 });
       } catch (whatsappErr) {
         console.log('OTP WhatsApp send failed, OTP stored:', otp);
