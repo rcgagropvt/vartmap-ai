@@ -4465,10 +4465,14 @@ const XLSX = require('xlsx');
       try {
         const axios = require('axios');
         const gatewayUrl = process.env.GATEWAY_URL || 'https://vartmap-whatsapp-gateway.onrender.com';
-        await axios.post(gatewayUrl + '/api/v1/send-message', {
-          phone: cleanPhone,
-          message: `Your VartMap login OTP is: ${otp}\nValid for 5 minutes.\n\nआपका OTP है: ${otp}`
-        });
+        // Format phone: Meta API expects 91XXXXXXXXXX (no +)
+        const metaPhone = cleanPhone.replace(/[^0-9]/g, '');
+        const otpMsg = 'Your VartMap login OTP is: ' + otp + '\nValid for 5 minutes.\n\nआपका OTP है: ' + otp;
+        await axios.post(gatewayUrl + '/send', {
+          to: metaPhone,
+          type: 'text',
+          body: { text: otpMsg }
+        }, { timeout: 15000 });
       } catch (whatsappErr) {
         console.log('OTP WhatsApp send failed, OTP stored:', otp);
       }
