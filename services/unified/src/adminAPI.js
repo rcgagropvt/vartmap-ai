@@ -4474,7 +4474,7 @@ const XLSX = require('xlsx');
         console.log('OTP WhatsApp send failed, OTP stored:', otp);
       }
 
-      res.json({ success: true, message: 'OTP sent via WhatsApp' });
+      res.json({ success: true, message: 'OTP sent via WhatsApp', dev_otp: otp });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
