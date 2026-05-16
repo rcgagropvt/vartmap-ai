@@ -7862,9 +7862,20 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
   app.delete('/api/v1/admin/delete-farmer/:phone', async (req, res) => {
     try {
       const phone = req.params.phone.replace(/[^0-9]/g, '');
-      const r1 = await pool.query("DELETE FROM farmer_otps WHERE phone LIKE '%' || $1 || '%'", [phone]);
-      const r2 = await pool.query("DELETE FROM farmers WHERE phone LIKE '%' || $1 || '%' RETURNING *", [phone]);
-      res.json({ deleted: r2.rowCount, otps_cleared: r1.rowCount, farmer: r2.rows[0] || null });
+      // Find farmer first
+      const f = await pool.query("SELECT id FROM farmers WHERE phone LIKE '%' || $1 || '%'", [phone]);
+      if (!f.rows.length) return res.json({ deleted: 0, message: 'Farmer not found' });
+      const farmerId = f.rows[0].id;
+      // Delete all related records
+      await pool.query('DELETE FROM usage_tracking WHERE farmer_id = $1', [farmerId]);
+      await pool.query('DELETE FROM farmer_otps WHERE phone LIKE $1', ['%' + phone + '%']);
+      try { await pool.query('DELETE FROM farmer_crops WHERE farmer_id = $1', [farmerId]); } catch(e) {}
+      try { await pool.query('DELETE FROM farmer_rewards WHERE farmer_id = $1', [farmerId]); } catch(e) {}
+      try { await pool.query('DELETE FROM crop_calendar_logs WHERE farmer_id = $1', [farmerId]); } catch(e) {}
+      try { await pool.query('DELETE FROM notifications WHERE farmer_id = $1', [farmerId]); } catch(e) {}
+      // Finally delete farmer
+      const r2 = await pool.query('DELETE FROM farmers WHERE id = $1 RETURNING *', [farmerId]);
+      res.json({ deleted: r2.rowCount, farmer: r2.rows[0] || null });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
