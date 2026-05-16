@@ -3261,7 +3261,7 @@ const XLSX = require('xlsx');
           await pool.query(
             `INSERT INTO mandi_prices (commodity, variety, market_name, district, state, min_price, max_price, modal_price, unit, arrival_qty, price_date, source)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-             ON CONFLICT ON CONSTRAINT uq_mandi_price DO UPDATE SET min_price=EXCLUDED.min_price, max_price=EXCLUDED.max_price, modal_price=EXCLUDED.modal_price, arrival_qty=EXCLUDED.arrival_qty, source=EXCLUDED.source`,
+             ON CONFLICT ON CONSTRAINT uq_mandi_price DO UPDATE SET min_price=EXCLUDED.min_price, max_price=EXCLUDED.max_price, modal_price=EXCLUDED.modal_price, arrival_qty=EXCLUDED.arrival_qty, district=EXCLUDED.district, source=EXCLUDED.source`,
             [r.commodity, r.variety, r.market_name, r.district, r.state, r.min_price, r.max_price, r.modal_price, r.unit, r.arrival_qty, r.price_date, r.source]
           );
           totalInserted++;
@@ -3303,8 +3303,8 @@ const XLSX = require('xlsx');
                 await pool.query(
                   `INSERT INTO mandi_prices (commodity, variety, market_name, district, state, min_price, max_price, modal_price, unit, price_date, source)
                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-                   ON CONFLICT ON CONSTRAINT uq_mandi_price DO UPDATE SET min_price=EXCLUDED.min_price, max_price=EXCLUDED.max_price, modal_price=EXCLUDED.modal_price, source=EXCLUDED.source`,
-                  [rec.commodity, rec.variety || '', rec.market || rec.district || '', rec.district || '', rec.state || '', rec.min_price || 0, rec.max_price || 0, rec.modal_price || 0, 'Quintal', rec.arrival_date || date, 'data.gov.in']
+                   ON CONFLICT ON CONSTRAINT uq_mandi_price DO UPDATE SET min_price=EXCLUDED.min_price, max_price=EXCLUDED.max_price, modal_price=EXCLUDED.modal_price, district=EXCLUDED.district, source=EXCLUDED.source`,
+                  [rec.commodity, rec.variety || '', rec.market || rec.district || '', rec.district || '', rec.state || '', rec.min_price || 0, rec.max_price || 0, rec.modal_price || 0, 'Quintal', (rec.arrival_date ? rec.arrival_date.split('/').reverse().join('-') : date), 'data.gov.in']
                 );
                 inserted++;
               } catch (e) { /* skip */ }
@@ -3370,8 +3370,8 @@ const XLSX = require('xlsx');
                     await pool.query(
                       `INSERT INTO mandi_prices (commodity, variety, market_name, district, state, min_price, max_price, modal_price, unit, arrival_qty, price_date, source)
                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-                       ON CONFLICT ON CONSTRAINT uq_mandi_price DO UPDATE SET min_price=EXCLUDED.min_price, max_price=EXCLUDED.max_price, modal_price=EXCLUDED.modal_price, arrival_qty=EXCLUDED.arrival_qty, source=EXCLUDED.source`,
-                      [rec.commodity || commodity, rec.variety || '', rec.market || '', rec.district || '', rec.state || state, parseFloat(rec.min_price) || 0, parseFloat(rec.max_price) || 0, parseFloat(rec.modal_price) || 0, 'Quintal', parseFloat(rec.arrival) || 0, rec.arrival_date || today, 'data.gov.in']
+                       ON CONFLICT ON CONSTRAINT uq_mandi_price DO UPDATE SET min_price=EXCLUDED.min_price, max_price=EXCLUDED.max_price, modal_price=EXCLUDED.modal_price, arrival_qty=EXCLUDED.arrival_qty, district=EXCLUDED.district, source=EXCLUDED.source`,
+                      [rec.commodity || commodity, rec.variety || '', rec.market || '', rec.district || '', rec.state || state, parseFloat(rec.min_price) || 0, parseFloat(rec.max_price) || 0, parseFloat(rec.modal_price) || 0, 'Quintal', parseFloat(rec.arrival) || 0, (rec.arrival_date ? rec.arrival_date.split('/').reverse().join('-') : today), 'data.gov.in']
                     );
                     totalInserted++;
                   } catch (e) { /* skip duplicates */ }
@@ -3424,8 +3424,8 @@ const XLSX = require('xlsx');
                   await pool.query(
                     `INSERT INTO mandi_prices (commodity, variety, market_name, district, state, min_price, max_price, modal_price, unit, arrival_qty, price_date, source)
                      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-                     ON CONFLICT ON CONSTRAINT uq_mandi_price DO UPDATE SET min_price=EXCLUDED.min_price, max_price=EXCLUDED.max_price, modal_price=EXCLUDED.modal_price, arrival_qty=EXCLUDED.arrival_qty, source=EXCLUDED.source`,
-                    [rec.commodity || commodity, rec.variety || '', rec.market || '', rec.district || '', rec.state || state, parseFloat(rec.min_price) || 0, parseFloat(rec.max_price) || 0, parseFloat(rec.modal_price) || 0, 'Quintal', parseFloat(rec.arrival) || 0, rec.arrival_date || today, 'data.gov.in']
+                     ON CONFLICT ON CONSTRAINT uq_mandi_price DO UPDATE SET min_price=EXCLUDED.min_price, max_price=EXCLUDED.max_price, modal_price=EXCLUDED.modal_price, arrival_qty=EXCLUDED.arrival_qty, district=EXCLUDED.district, source=EXCLUDED.source`,
+                    [rec.commodity || commodity, rec.variety || '', rec.market || '', rec.district || '', rec.state || state, parseFloat(rec.min_price) || 0, parseFloat(rec.max_price) || 0, parseFloat(rec.modal_price) || 0, 'Quintal', parseFloat(rec.arrival) || 0, (rec.arrival_date ? rec.arrival_date.split('/').reverse().join('-') : today), 'data.gov.in']
                   );
                   n++;
                 } catch (e) { /* skip */ }
