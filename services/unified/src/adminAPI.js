@@ -3349,7 +3349,7 @@ const XLSX = require('xlsx');
       const existing = await pool.query("SELECT COUNT(*) as c FROM mandi_prices WHERE price_date >= CURRENT_DATE");
       const existingCount = parseInt(existing.rows[0]?.c || 0);
       
-      if (existingCount > 1000) {
+      if (existingCount > 5000) {
         console.log('[Mandi] Already have ' + existingCount + ' records for today, skipping bulk sync');
       } else {
         console.log('[Mandi] Starting comprehensive sync from data.gov.in...');
