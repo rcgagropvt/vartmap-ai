@@ -5277,10 +5277,27 @@ const XLSX = require('xlsx');
       const farmer = farmerData.rows[0] || {};
       const district = (farmer.location && farmer.location.district) || farmer.village || '';
 
-      const soilData = await pool.query(
-        'SELECT * FROM soil_nutrient_data WHERE UPPER(district_name) = UPPER($1) ORDER BY sample_year DESC LIMIT 10',
-        [district]
-      );
+      // Allow block selection via query param
+      const blockFilter = req.query.block || '';
+      let soilData;
+      if (blockFilter) {
+        soilData = await pool.query(
+          'SELECT * FROM soil_nutrient_data WHERE UPPER(district_name) = UPPER($1) AND UPPER(block_name) = UPPER($2) ORDER BY sample_year DESC LIMIT 10',
+          [district, blockFilter]
+        );
+        // Fallback to district if block not found
+        if (soilData.rows.length === 0) {
+          soilData = await pool.query(
+            'SELECT * FROM soil_nutrient_data WHERE UPPER(district_name) = UPPER($1) ORDER BY sample_year DESC LIMIT 10',
+            [district]
+          );
+        }
+      } else {
+        soilData = await pool.query(
+          'SELECT * FROM soil_nutrient_data WHERE UPPER(district_name) = UPPER($1) ORDER BY sample_year DESC LIMIT 10',
+          [district]
+        );
+      }
 
       if (soilData.rows.length === 0) {
         return res.json({ message: 'No soil data available for your district', district });
