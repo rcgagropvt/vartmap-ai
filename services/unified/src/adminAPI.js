@@ -4562,6 +4562,7 @@ const XLSX = require('xlsx');
         const locObj = {};
         if (district) locObj.district = district;
         if (state) locObj.state = state;
+        if (req.body.block) locObj.block = req.body.block;
         updates.push("location = COALESCE(location, '{}'::jsonb) || $" + idx + '::jsonb');
         vals.push(JSON.stringify(locObj)); idx++;
       }
@@ -5278,7 +5279,8 @@ const XLSX = require('xlsx');
       const district = (farmer.location && farmer.location.district) || farmer.village || '';
 
       // Allow block selection via query param
-      const blockFilter = req.query.block || '';
+      const farmerBlock = (farmer.location && farmer.location.block) || '';
+      const blockFilter = req.query.block || farmerBlock;
       let soilData;
       if (blockFilter) {
         soilData = await pool.query(
