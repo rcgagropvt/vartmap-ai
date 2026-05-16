@@ -25,19 +25,20 @@ function uploadToCloudinary(buffer, options = {}) {
     );
     stream.end(buffer);
   });
-}
-const XLSX = require('xlsx');
-
 
   // TEMP: Delete farmer by phone (for testing)
   app.delete('/api/v1/admin/delete-farmer/:phone', async (req, res) => {
     try {
       const phone = req.params.phone.replace(/[^0-9]/g, '');
-      const r1 = await pool.query('DELETE FROM farmer_otps WHERE phone LIKE $1', ['%' + phone]);
-      const r2 = await pool.query('DELETE FROM farmers WHERE phone LIKE $1 RETURNING *', ['%' + phone]);
+      const r1 = await pool.query('DELETE FROM farmer_otps WHERE phone LIKE $$1$$', ['%' + phone]);
+      const r2 = await pool.query('DELETE FROM farmers WHERE phone LIKE $$1$$ RETURNING *', ['%' + phone]);
       res.json({ deleted: r2.rowCount, otps_cleared: r1.rowCount, farmer: r2.rows[0] || null });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
+
+}
+const XLSX = require('xlsx');
+
 
 module.exports = function setupAdminAPI(app, pool) {
 
