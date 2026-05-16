@@ -2629,7 +2629,7 @@ const XLSX = require('xlsx');
       if (market) { p.push('%' + market + '%'); q += ` AND market_name ILIKE $${p.length}`; }
       if (state) { p.push('%' + state + '%'); q += ` AND state ILIKE $${p.length}`; }
       if (date) { p.push(date); q += ` AND price_date=$${p.length}`; }
-      q += ' ORDER BY price_date DESC, commodity LIMIT 200';
+      q += ' ORDER BY price_date DESC, commodity LIMIT 500';
       const r = await pool.query(q, p);
       res.json({ prices: r.rows, count: r.rows.length });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -3277,39 +3277,106 @@ const XLSX = require('xlsx');
   app.get('/api/v1/fetch-mandi-prices', auth, async (req, res) => {
     try {
       const date = req.query.date || new Date().toISOString().split('T')[0];
-      const inserted = await syncMandiPrices(date);
+      const state = req.query.state || '';
+      const commodity = req.query.commodity || '';
+      const limit = parseInt(req.query.limit) || 100;
+
+      // First try Agmarknet sync
+      let inserted = 0;
+      try {
+        inserted = await syncMandiPrices(date);
+      } catch (syncErr) {
+        console.log('[Mandi] Agmarknet sync error:', syncErr.message);
+      }
+
+      // If Agmarknet returned nothing, try data.gov.in
+      if (inserted === 0) {
+        try {
+          const axios = require('axios');
+          let dgUrl = 'https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=' + (process.env.DATA_GOV_API_KEY || '579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b') + '&format=json&limit=' + limit;
+          if (state) dgUrl += '&filters[state]=' + encodeURIComponent(state);
+          if (commodity) dgUrl += '&filters[commodity]=' + encodeURIComponent(commodity);
+          const dgResp = await axios.get(dgUrl, { timeout: 15000 });
+          if (dgResp.data?.records?.length > 0) {
+            for (const rec of dgResp.data.records) {
+              try {
+                await pool.query(
+                  `INSERT INTO mandi_prices (commodity, variety, market_name, district, state, min_price, max_price, modal_price, unit, price_date, source)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                   ON CONFLICT ON CONSTRAINT uq_mandi_price DO UPDATE SET min_price=EXCLUDED.min_price, max_price=EXCLUDED.max_price, modal_price=EXCLUDED.modal_price, source=EXCLUDED.source`,
+                  [rec.commodity, rec.variety || '', rec.market || rec.district || '', rec.district || '', rec.state || '', rec.min_price || 0, rec.max_price || 0, rec.modal_price || 0, 'Quintal', rec.arrival_date || date, 'data.gov.in']
+                );
+                inserted++;
+              } catch (e) { /* skip */ }
+            }
+          }
+        } catch (dgErr) {
+          console.log('[Mandi] data.gov.in fallback error:', dgErr.message);
+        }
+      }
+
       const latest = await pool.query('SELECT COUNT(*) as total, MAX(price_date) as latest FROM mandi_prices');
-      res.json({ success: true, inserted, total: latest.rows[0].total, latest_date: latest.rows[0].latest, source: 'agmarknet.gov.in' });
+      const sample = await pool.query('SELECT commodity, modal_price, market_name as market FROM mandi_prices ORDER BY created_at DESC LIMIT 5');
+      
+      res.json({
+        success: true,
+        message: inserted > 0 ? 'Successfully fetched ' + inserted + ' price records' : 'No new records available for today',
+        fetched: inserted,
+        inserted: inserted,
+        total: parseInt(latest.rows[0].total),
+        latest_date: latest.rows[0].latest,
+        sample: sample.rows,
+        source: inserted > 0 ? 'agmarknet.gov.in + data.gov.in' : 'database'
+      });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
-  // Auto-sync on server start (runs once, then every 6 hours)
+  // Auto-sync on server start (runs once, then every 4 hours)
   (async () => {
     try {
       const latest = await pool.query('SELECT MAX(price_date) as d FROM mandi_prices');
-      const lastDate = latest.rows[0].d;
+      const lastDate = latest.rows[0]?.d;
       const today = new Date().toISOString().split('T')[0];
       if (!lastDate || lastDate.toISOString().split('T')[0] < today) {
         console.log('[Mandi] Auto-syncing prices from Agmarknet...');
         const n = await syncMandiPrices(today);
-        console.log(`[Mandi] Synced ${n} price records for ${today}`);
+        console.log('[Mandi] Synced ' + n + ' price records for ' + today);
+        // Also try data.gov.in for more coverage
+        try {
+          const axios = require('axios');
+          const dgUrl = 'https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=' + (process.env.DATA_GOV_API_KEY || '579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b') + '&format=json&limit=500';
+          const dgResp = await axios.get(dgUrl, { timeout: 15000 });
+          let dgInserted = 0;
+          if (dgResp.data?.records?.length > 0) {
+            for (const rec of dgResp.data.records) {
+              try {
+                await pool.query(
+                  `INSERT INTO mandi_prices (commodity, variety, market_name, district, state, min_price, max_price, modal_price, unit, price_date, source)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                   ON CONFLICT ON CONSTRAINT uq_mandi_price DO UPDATE SET min_price=EXCLUDED.min_price, max_price=EXCLUDED.max_price, modal_price=EXCLUDED.modal_price, source=EXCLUDED.source`,
+                  [rec.commodity, rec.variety || '', rec.market || rec.district || '', rec.district || '', rec.state || '', rec.min_price || 0, rec.max_price || 0, rec.modal_price || 0, 'Quintal', rec.arrival_date || today, 'data.gov.in']
+                );
+                dgInserted++;
+              } catch (e) { /* skip duplicates */ }
+            }
+            console.log('[Mandi] data.gov.in added ' + dgInserted + ' records');
+          }
+        } catch (dgErr) { console.log('[Mandi] data.gov.in sync error:', dgErr.message); }
+      } else {
+        console.log('[Mandi] Already have data for ' + today + ', skipping sync');
       }
     } catch (e) { console.error('[Mandi] Auto-sync error:', e.message); }
   })();
+
+  // Re-sync every 4 hours
   setInterval(async () => {
     try {
       const today = new Date().toISOString().split('T')[0];
+      console.log('[Mandi] Scheduled sync for ' + today);
       const n = await syncMandiPrices(today);
-      if (n > 0) console.log(`[Mandi] Periodic sync: ${n} records for ${today}`);
-    } catch (e) { console.error('[Mandi] Periodic sync error:', e.message); }
-  }, 6 * 60 * 60 * 1000); // every 6 hours
-  
-  app.get('/api/v1/load-schemes', auth, async (req, res) => {
-    try {
-      const r = await axios.get(INTEL_URL + '/api/v1/load-schemes', { timeout: 30000 });
-      res.json(r.data);
-    } catch (e) { res.status(500).json({ error: e.message }); }
-  });
+      console.log('[Mandi] Scheduled sync: ' + n + ' records');
+    } catch (e) { console.error('[Mandi] Scheduled sync error:', e.message); }
+  }, 4 * 60 * 60 * 1000);
   
   app.get('/api/v1/load-soil-data', auth, async (req, res) => {
     try {
