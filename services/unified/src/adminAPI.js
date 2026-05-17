@@ -5289,19 +5289,19 @@ const XLSX = require('xlsx');
       let soilData;
       if (blockFilter) {
         soilData = await pool.query(
-          'SELECT * FROM soil_nutrient_data WHERE UPPER(district_name) = UPPER(REGEXP_REPLACE($1, $ (Division|District|Dist)$, $$, $i$)) AND UPPER(block_name) = UPPER($2) ORDER BY sample_year DESC LIMIT 10',
+          'SELECT * FROM soil_nutrient_data WHERE UPPER(district_name) = UPPER($1) AND UPPER(block_name) = UPPER($2) ORDER BY sample_year DESC LIMIT 10',
           [district, blockFilter]
         );
         // Fallback to district if block not found
         if (soilData.rows.length === 0) {
           soilData = await pool.query(
-            'SELECT * FROM soil_nutrient_data WHERE UPPER(district_name) = UPPER(REGEXP_REPLACE($1, $ (Division|District|Dist)$, $$, $i$)) ORDER BY sample_year DESC LIMIT 10',
+            'SELECT * FROM soil_nutrient_data WHERE UPPER(district_name) = UPPER($1) ORDER BY sample_year DESC LIMIT 10',
             [district]
           );
         }
       } else {
         soilData = await pool.query(
-          'SELECT * FROM soil_nutrient_data WHERE UPPER(district_name) = UPPER(REGEXP_REPLACE($1, $ (Division|District|Dist)$, $$, $i$)) ORDER BY sample_year DESC LIMIT 10',
+          'SELECT * FROM soil_nutrient_data WHERE UPPER(district_name) = UPPER($1) ORDER BY sample_year DESC LIMIT 10',
           [district]
         );
       }
