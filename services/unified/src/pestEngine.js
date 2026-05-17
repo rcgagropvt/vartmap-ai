@@ -15,7 +15,7 @@ const PEST_RULES = {
     crop: 'Rice',
     type: 'pest',
     category: 'Lepidoptera',
-    season: ['kharif'],
+    season: ['kharif', 'zaid'],
     criteria: {
       tmax: [30, 34],
       tmin: [22, 25],
@@ -69,7 +69,7 @@ const PEST_RULES = {
     crop: 'Rice',
     type: 'pest',
     category: 'Hemiptera',
-    season: ['kharif'],
+    season: ['kharif', 'zaid'],
     criteria: {
       tmax: [30, 34],
       tmin: [22, 26],
@@ -96,7 +96,7 @@ const PEST_RULES = {
     crop: 'Rice',
     type: 'disease',
     category: 'Fungal (Magnaporthe oryzae)',
-    season: ['kharif', 'rabi'],
+    season: ['kharif', 'rabi', 'zaid'],
     criteria: {
       tmax: [25, 30],
       tmin: [20, 26],
@@ -151,7 +151,7 @@ const PEST_RULES = {
     crop: 'Wheat',
     type: 'pest',
     category: 'Hemiptera',
-    season: ['rabi'],
+    season: ['rabi', 'zaid'],
     criteria: {
       tmax: [20, 28],
       tmin: [8, 15],
@@ -288,7 +288,7 @@ const PEST_RULES = {
     crop: 'Sugarcane',
     type: 'pest',
     category: 'Lepidoptera (Chilo infuscatellus)',
-    season: ['kharif'],
+    season: ['kharif', 'zaid'],
     criteria: {
       tmax: [30, 38],
       tmin: [22, 28],
@@ -342,7 +342,7 @@ const PEST_RULES = {
     crop: 'Cotton',
     type: 'pest',
     category: 'Lepidoptera (Helicoverpa armigera)',
-    season: ['kharif'],
+    season: ['kharif', 'zaid'],
     criteria: {
       tmax: [28, 35],
       tmin: [18, 25],
@@ -369,7 +369,7 @@ const PEST_RULES = {
     crop: 'Cotton',
     type: 'pest',
     category: 'Hemiptera (Amrasca biguttula)',
-    season: ['kharif'],
+    season: ['kharif', 'zaid'],
     criteria: {
       tmax: [25, 33],
       tmin: [20, 26],
@@ -428,7 +428,7 @@ const PEST_RULES = {
     altCrops: ['Sarso', 'Rapeseed'],
     type: 'pest',
     category: 'Hemiptera (Lipaphis erysimi)',
-    season: ['rabi'],
+    season: ['rabi', 'zaid'],
     criteria: {
       tmax: [18, 25],
       tmin: [4, 12],
@@ -458,7 +458,7 @@ const PEST_RULES = {
     altCrops: ['Tamatar'],
     type: 'disease',
     category: 'Fungal (Alternaria solani)',
-    season: ['kharif', 'rabi'],
+    season: ['kharif', 'rabi', 'zaid'],
     criteria: {
       tmax: [25, 32],
       tmin: [15, 22],
@@ -485,7 +485,7 @@ const PEST_RULES = {
     altCrops: ['Tamatar'],
     type: 'pest',
     category: 'Lepidoptera (Helicoverpa armigera)',
-    season: ['kharif', 'rabi'],
+    season: ['kharif', 'rabi', 'zaid'],
     criteria: {
       tmax: [25, 33],
       tmin: [15, 24],
@@ -514,7 +514,7 @@ const PEST_RULES = {
     altCrops: ['Pyaz'],
     type: 'pest',
     category: 'Thysanoptera (Thrips tabaci)',
-    season: ['rabi', 'kharif'],
+    season: ['rabi', 'kharif', 'zaid'],
     criteria: {
       tmax: [28, 38],
       tmin: [15, 25],
@@ -544,7 +544,7 @@ const PEST_RULES = {
     altCrops: ['Makka'],
     type: 'pest',
     category: 'Lepidoptera (Spodoptera frugiperda)',
-    season: ['kharif', 'rabi'],
+    season: ['kharif', 'rabi', 'zaid'],
     criteria: {
       tmax: [26, 35],
       tmin: [18, 26],
@@ -572,7 +572,7 @@ const PEST_RULES = {
     crop: 'Soybean',
     type: 'pest',
     category: 'Coleoptera (Obereopsis brevis)',
-    season: ['kharif'],
+    season: ['kharif', 'zaid'],
     criteria: {
       tmax: [28, 33],
       tmin: [20, 25],
