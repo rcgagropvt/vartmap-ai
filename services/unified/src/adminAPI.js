@@ -8048,6 +8048,18 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
       
       // Init if not exists
       await initRewards(pool, farmerId, farmerName);
+
+      // Auto-award profile_complete if profile is filled
+      const farmer = req.farmer;
+      const hasName = farmer.name && farmer.name.trim().length > 0;
+      const hasLocation = farmer.location && (farmer.location.district || farmer.location.state);
+      const hasCrops = farmer.crops && farmer.crops.length > 0;
+      if (hasName && hasLocation && hasCrops) {
+        await awardPoints(pool, farmerId, 'profile_complete', 'Profile completed');
+      }
+      
+      // Auto-award soil_health_check if they've viewed it before
+      // Auto-award pest_alert_viewed if they've viewed it before
       
       // Update streak
       await updateStreak(pool, farmerId);
