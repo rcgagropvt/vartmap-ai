@@ -277,7 +277,7 @@ async function getBotConfig() {
       use_whatsapp_flow: (configMap.onboarding_settings && configMap.onboarding_settings.use_whatsapp_flow) || false,
       whatsapp_flow_id: (configMap.onboarding_settings && configMap.onboarding_settings.flow_id) || '2021948632035353',
       onboarding_fields: configMap.onboarding_fields || ['name', 'crops'],
-      menu_hi: (configMap.menu_message && configMap.menu_message.hi) || configMap.menu_message_hi || 'Aap neeche diye gaye options mein se choose kar sakte hain:',
+      menu_hi: (configMap.menu_message && configMap.menu_message.hi) || configMap.menu_message_hi || 'आप नीचे दिए गए विकल्पों में से चुन सकते हैं:',
       menu_en: (configMap.menu_message && configMap.menu_message.en) || configMap.menu_message_en || 'You can choose from the options below:',
       menu_items: menuResp.status === 'fulfilled' ? (menuResp.value.data.items || []) : [],
       flows: flowsResp.status === 'fulfilled' ? (flowsResp.value.data.flows || []) : [],
@@ -906,7 +906,7 @@ async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, 
     await pool.query('UPDATE farmers SET ' + updates.join(',') + ' WHERE id=$' + idx, vals);
     // Now ask for location (Flow doesn't support LocationPicker)
     const locMsg = (fd.language || lang) === 'hi'
-      ? 'Dhanyavaad ' + (fd.farmer_name || '') + '! Ab kripya apni khet ki location share karein (ya "skip" type karein):'
+      ? 'धन्यवाद ' + (fd.farmer_name || '') + '! Ab kripya apni khet ki location share karein (ya "skip" type karein):'
       : 'Thank you ' + (fd.farmer_name || '') + '! Now please share your farm location (or type "skip"):';
     await sendLocationRequest(from, locMsg);
     await pool.query(
@@ -918,17 +918,33 @@ async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, 
 
   switch (stage) {
     case 'new': {
+      // Ask language choice first
       const welcome = (farmerData.language || 'hi') === 'hi' ? botConfig.welcome_hi : botConfig.welcome_en;
       await sendWhatsAppMessage(from, welcome);
-      const askName = (farmerData.language || 'hi') === 'hi'
-        ? 'Sabse pehle, aapka shubh naam kya hai?'
-        : 'First, what is your name?';
-      await sendWhatsAppMessage(from, askName);
-      await pool.query("UPDATE farmers SET onboarding_stage = 'awaiting_name', updated_at = NOW() WHERE id = $1", [farmerId]);
+      await sendWhatsAppButtons(from, 'Please choose your language / कृपया अपनी भाषा चुनें:', [
+        { id: 'lang_hi', title: 'हिंदी (Hindi)' },
+        { id: 'lang_en', title: 'English' }
+      ]);
+      await pool.query("UPDATE farmers SET onboarding_stage = 'awaiting_language', updated_at = NOW() WHERE id = $1", [farmerId]);
       await pool.query(
         "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
-        [sessionId, farmerId, welcome + '\n' + askName]
+        [sessionId, farmerId, 'Language selection sent']
       );
+      return true;
+    }
+
+    case 'awaiting_language': {
+      let selectedLang = 'hi';
+      if (msgBody === 'lang_en' || (msgBody || '').toLowerCase().includes('english') || (msgBody || '').toLowerCase() === 'eng' || (msgBody || '').toLowerCase() === 'en') {
+        selectedLang = 'en';
+      }
+      await pool.query("UPDATE farmers SET language = $1, onboarding_stage = 'awaiting_name', updated_at = NOW() WHERE id = $2", [selectedLang, farmerId]);
+      
+      if (selectedLang === 'hi') {
+        await sendWhatsAppMessage(from, 'हिंदी चुनी गई! सबसे पहले, आपका शुभ नाम क्या है?');
+      } else {
+        await sendWhatsAppMessage(from, 'English selected! First, what is your name?');
+      }
       return true;
     }
 

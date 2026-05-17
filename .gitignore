@@ -1,15 +1,5 @@
-Set-Content -Path ".gitignore" -Value @"
 node_modules/
 .env
 *.log
 .DS_Store
 __pycache__/
-"@
-
-# Remove node_modules from git tracking
-git rm -r --cached services/whatsapp-gateway/node_modules
-
-# Commit and push
-git add .
-git commit -m "remove node_modules, add gitignore, complete spin wheel UI"
-git push
