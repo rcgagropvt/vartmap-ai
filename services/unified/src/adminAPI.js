@@ -29,40 +29,6 @@ function uploadToCloudinary(buffer, options = {}) {
 }
 const XLSX = require('xlsx');
 
-
-
-  // ===== PEST & DISEASE ALERTS (Weather-Based) =====
-  const { getPestAlerts } = require('./pestEngine');
-  
-  app.get('/api/v1/farmer/pest-alerts', farmerAuth, async (req, res) => {
-    try {
-      const farmer = req.farmer;
-      const lat = farmer.location && farmer.location.latitude ? parseFloat(farmer.location.latitude) : 26.8;
-      const lon = farmer.location && farmer.location.longitude ? parseFloat(farmer.location.longitude) : 82.1;
-      const crops = farmer.crops || [];
-      
-      const result = await getPestAlerts(lat, lon, crops);
-      res.json(result);
-    } catch (err) {
-      console.error('Pest alerts error:', err);
-      res.status(500).json({ error: 'Failed to generate pest alerts' });
-    }
-  });
-  
-  app.get('/api/v1/public/pest-alerts', async (req, res) => {
-    try {
-      const lat = parseFloat(req.query.lat) || 26.8;
-      const lon = parseFloat(req.query.lon) || 82.1;
-      const crops = req.query.crops ? req.query.crops.split(',') : [];
-      
-      const result = await getPestAlerts(lat, lon, crops);
-      res.json(result);
-    } catch (err) {
-      console.error('Public pest alerts error:', err);
-      res.status(500).json({ error: 'Failed to generate pest alerts' });
-    }
-  });
-
 module.exports = function setupAdminAPI(app, pool) {
 
 
@@ -7940,5 +7906,36 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
   });
 
 
+
+
+  // ===== PEST & DISEASE ALERTS (Weather-Based ICAR-NCIPM) =====
+  const { getPestAlerts } = require('./pestEngine');
+  
+  app.get('/api/v1/farmer/pest-alerts', farmerAuth, async (req, res) => {
+    try {
+      const farmer = req.farmer;
+      const lat = farmer.location && farmer.location.latitude ? parseFloat(farmer.location.latitude) : 26.8;
+      const lon = farmer.location && farmer.location.longitude ? parseFloat(farmer.location.longitude) : 82.1;
+      const crops = farmer.crops || [];
+      const result = await getPestAlerts(lat, lon, crops);
+      res.json(result);
+    } catch (err) {
+      console.error('Pest alerts error:', err.message);
+      res.status(500).json({ error: 'Failed to generate pest alerts', alerts: [] });
+    }
+  });
+  
+  app.get('/api/v1/public/pest-alerts', async (req, res) => {
+    try {
+      const lat = parseFloat(req.query.lat) || 26.8;
+      const lon = parseFloat(req.query.lon) || 82.1;
+      const crops = req.query.crops ? req.query.crops.split(',') : [];
+      const result = await getPestAlerts(lat, lon, crops);
+      res.json(result);
+    } catch (err) {
+      console.error('Public pest alerts error:', err.message);
+      res.status(500).json({ error: 'Failed to generate pest alerts', alerts: [] });
+    }
+  });
 
 };
