@@ -31,6 +31,13 @@ const pool = new Pool({
 pool.on('error', (err) => console.error('Pool error:', err.message));
 pool.query('SELECT NOW()').then(() => { console.log('Database connected');
 
+    // Run rewards migration
+    try {
+      const rewardsMigration = require('fs').readFileSync(require('path').join(__dirname, 'rewards_migration.sql'), 'utf8');
+      await pool.query(rewardsMigration);
+      console.log('Rewards tables verified');
+    } catch (e) { console.log('Rewards migration note:', e.message); }
+
 // --- Add Finance menu item if not exists ---
 pool.query("SELECT id FROM bot_menu_items WHERE menu_key='hisaab'").then(r => {
   if (r.rows.length === 0) {

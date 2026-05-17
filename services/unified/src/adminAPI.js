@@ -7938,4 +7938,251 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
     }
   });
 
+
+  // ===== REWARDS & GAMIFICATION =====
+  const { LEVELS, POINT_RULES, getLevel, getNextLevel, generateReferralCode } = require('./rewardsEngine');
+
+  // Initialize rewards for a farmer (called on registration or first access)
+  async function initRewards(pool, farmerId, farmerName) {
+    const existing = await pool.query('SELECT id FROM farmer_points WHERE farmer_id = $1', [farmerId]);
+    if (existing.rows.length > 0) return existing.rows[0];
+    
+    const code = generateReferralCode(farmerName);
+    const result = await pool.query(
+      'INSERT INTO farmer_points (farmer_id, total_points, referral_code) VALUES ($1, 100, $2) RETURNING *',
+      [farmerId, code]
+    );
+    // Log registration bonus
+    await pool.query(
+      'INSERT INTO point_transactions (farmer_id, type, points, description) VALUES ($1, $2, $3, $4)',
+      [farmerId, 'registration', 100, 'Welcome bonus for registration']
+    );
+    return result.rows[0];
+  }
+
+  // Award points
+  async function awardPoints(pool, farmerId, type, extraDesc) {
+    const rule = POINT_RULES[type];
+    if (!rule) return null;
+
+    // Check one-time rules
+    if (rule.once) {
+      const exists = await pool.query(
+        'SELECT id FROM point_transactions WHERE farmer_id = $1 AND type = $2', [farmerId, type]
+      );
+      if (exists.rows.length > 0) return null;
+    }
+
+    // Check daily rules
+    if (rule.daily) {
+      const today = await pool.query(
+        "SELECT id FROM point_transactions WHERE farmer_id = $1 AND type = $2 AND created_at::date = CURRENT_DATE",
+        [farmerId, type]
+      );
+      if (today.rows.length > 0) return null;
+    }
+
+    // Check daily_max rules
+    if (rule.daily_max) {
+      const todayCount = await pool.query(
+        "SELECT COUNT(*) as cnt FROM point_transactions WHERE farmer_id = $1 AND type = $2 AND created_at::date = CURRENT_DATE",
+        [farmerId, type]
+      );
+      if (parseInt(todayCount.rows[0].cnt) >= rule.daily_max) return null;
+    }
+
+    // Award
+    await pool.query(
+      'INSERT INTO point_transactions (farmer_id, type, points, description) VALUES ($1, $2, $3, $4)',
+      [farmerId, type, rule.points, extraDesc || rule.description]
+    );
+    
+    const updated = await pool.query(
+      'UPDATE farmer_points SET total_points = total_points + $1, updated_at = NOW() WHERE farmer_id = $2 RETURNING total_points',
+      [rule.points, farmerId]
+    );
+    
+    if (updated.rows.length > 0) {
+      const newLevel = getLevel(updated.rows[0].total_points);
+      await pool.query('UPDATE farmer_points SET current_level = $1, level_name = $2 WHERE farmer_id = $3',
+        [newLevel.level, newLevel.name, farmerId]);
+    }
+    
+    return { points: rule.points, type };
+  }
+
+  // Update streak
+  async function updateStreak(pool, farmerId) {
+    const fp = await pool.query('SELECT * FROM farmer_points WHERE farmer_id = $1', [farmerId]);
+    if (fp.rows.length === 0) return;
+    
+    const record = fp.rows[0];
+    const today = new Date().toISOString().split('T')[0];
+    const lastActive = record.last_active_date ? new Date(record.last_active_date).toISOString().split('T')[0] : null;
+    
+    if (lastActive === today) return; // Already counted today
+    
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    let newStreak = lastActive === yesterday ? record.streak_days + 1 : 1;
+    let longestStreak = Math.max(record.longest_streak || 0, newStreak);
+    
+    await pool.query(
+      'UPDATE farmer_points SET streak_days = $1, longest_streak = $2, last_active_date = $3 WHERE farmer_id = $4',
+      [newStreak, longestStreak, today, farmerId]
+    );
+    
+    // Award streak bonuses
+    if (newStreak === 7) await awardPoints(pool, farmerId, 'streak_7');
+    if (newStreak === 14) await awardPoints(pool, farmerId, 'streak_14');
+    if (newStreak === 30) await awardPoints(pool, farmerId, 'streak_30');
+    
+    // Daily login points
+    await awardPoints(pool, farmerId, 'daily_login');
+  }
+
+  // GET /api/v1/farmer/rewards - Get farmer's reward status
+  app.get('/api/v1/farmer/rewards', farmerAuth, async (req, res) => {
+    try {
+      const farmerId = req.farmer.id;
+      const farmerName = req.farmer.name || '';
+      
+      // Init if not exists
+      await initRewards(pool, farmerId, farmerName);
+      
+      // Update streak
+      await updateStreak(pool, farmerId);
+      
+      // Get current status
+      const fp = await pool.query('SELECT * FROM farmer_points WHERE farmer_id = $1', [farmerId]);
+      const record = fp.rows[0];
+      
+      const currentLevel = getLevel(record.total_points);
+      const nextLevel = getNextLevel(record.total_points);
+      
+      // Recent transactions
+      const recent = await pool.query(
+        'SELECT type, points, description, created_at FROM point_transactions WHERE farmer_id = $1 ORDER BY created_at DESC LIMIT 20',
+        [farmerId]
+      );
+      
+      res.json({
+        points: record.total_points,
+        level: currentLevel,
+        nextLevel,
+        progressToNext: nextLevel ? Math.round(((record.total_points - currentLevel.minPoints) / (nextLevel.minPoints - currentLevel.minPoints)) * 100) : 100,
+        streak: record.streak_days,
+        longestStreak: record.longest_streak,
+        referralCode: record.referral_code,
+        totalReferrals: record.total_referrals,
+        recentActivity: recent.rows,
+        levels: LEVELS
+      });
+    } catch (err) {
+      console.error('Rewards error:', err.message);
+      res.status(500).json({ error: 'Failed to load rewards' });
+    }
+  });
+
+  // GET /api/v1/farmer/leaderboard - Top farmers
+  app.get('/api/v1/farmer/leaderboard', farmerAuth, async (req, res) => {
+    try {
+      const farmerId = req.farmer.id;
+      
+      // Top 10
+      const top = await pool.query(
+        "SELECT fp.farmer_id, fp.total_points, fp.current_level, fp.level_name, fp.streak_days, f.name, f.phone FROM farmer_points fp JOIN farmers f ON f.id = fp.farmer_id ORDER BY fp.total_points DESC LIMIT 10"
+      );
+      
+      // Farmer's own rank
+      const rank = await pool.query(
+        'SELECT COUNT(*) + 1 as rank FROM farmer_points WHERE total_points > (SELECT total_points FROM farmer_points WHERE farmer_id = $1)',
+        [farmerId]
+      );
+      
+      const myData = await pool.query('SELECT total_points, current_level, level_name, streak_days FROM farmer_points WHERE farmer_id = $1', [farmerId]);
+      
+      res.json({
+        leaderboard: top.rows.map((r, i) => ({
+          rank: i + 1,
+          name: r.name || ('Farmer ' + r.phone?.slice(-4)),
+          points: r.total_points,
+          level: r.current_level,
+          levelName: r.level_name,
+          streak: r.streak_days,
+          isMe: r.farmer_id === farmerId
+        })),
+        myRank: parseInt(rank.rows[0]?.rank || 0),
+        myPoints: myData.rows[0]?.total_points || 0,
+        myLevel: myData.rows[0]?.current_level || 1,
+        totalFarmers: (await pool.query('SELECT COUNT(*) FROM farmer_points')).rows[0].count
+      });
+    } catch (err) {
+      console.error('Leaderboard error:', err.message);
+      res.status(500).json({ error: 'Failed to load leaderboard' });
+    }
+  });
+
+  // POST /api/v1/farmer/rewards/claim - Claim points for an action
+  app.post('/api/v1/farmer/rewards/claim', farmerAuth, async (req, res) => {
+    try {
+      const farmerId = req.farmer.id;
+      const { type } = req.body;
+      
+      if (!type || !POINT_RULES[type]) {
+        return res.status(400).json({ error: 'Invalid reward type' });
+      }
+      
+      const result = await awardPoints(pool, farmerId, type);
+      if (!result) {
+        return res.json({ awarded: false, message: 'Already claimed or limit reached' });
+      }
+      
+      const fp = await pool.query('SELECT total_points FROM farmer_points WHERE farmer_id = $1', [farmerId]);
+      res.json({ awarded: true, points: result.points, totalPoints: fp.rows[0]?.total_points || 0 });
+    } catch (err) {
+      console.error('Claim error:', err.message);
+      res.status(500).json({ error: 'Failed to claim reward' });
+    }
+  });
+
+  // POST /api/v1/farmer/referral/verify - When a referred user registers
+  app.post('/api/v1/farmer/referral/verify', async (req, res) => {
+    try {
+      const { referralCode, newFarmerId } = req.body;
+      if (!referralCode || !newFarmerId) return res.status(400).json({ error: 'Missing data' });
+      
+      // Find referrer
+      const referrer = await pool.query('SELECT farmer_id FROM farmer_points WHERE referral_code = $1', [referralCode]);
+      if (referrer.rows.length === 0) return res.status(404).json({ error: 'Invalid referral code' });
+      
+      const referrerId = referrer.rows[0].farmer_id;
+      
+      // Check not self-referral
+      if (referrerId === newFarmerId) return res.status(400).json({ error: 'Cannot refer yourself' });
+      
+      // Check not already referred
+      const existing = await pool.query('SELECT id FROM referrals WHERE referred_id = $1', [newFarmerId]);
+      if (existing.rows.length > 0) return res.json({ message: 'Already referred' });
+      
+      // Create referral record
+      await pool.query(
+        "INSERT INTO referrals (referrer_id, referred_id, status, completed_at) VALUES ($1, $2, 'completed', NOW())",
+        [referrerId, newFarmerId]
+      );
+      
+      // Award points to referrer
+      await awardPoints(pool, referrerId, 'referral', 'Friend registered via your code');
+      await pool.query('UPDATE farmer_points SET total_referrals = total_referrals + 1 WHERE farmer_id = $1', [referrerId]);
+      
+      // Award bonus to new farmer
+      await initRewards(pool, newFarmerId, '');
+      await awardPoints(pool, newFarmerId, 'referral_bonus', 'Bonus for joining via referral');
+      
+      res.json({ success: true, message: 'Referral verified, points awarded' });
+    } catch (err) {
+      console.error('Referral verify error:', err.message);
+      res.status(500).json({ error: 'Failed to verify referral' });
+    }
+  });
+
 };
