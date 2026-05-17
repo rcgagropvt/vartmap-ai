@@ -5275,7 +5275,10 @@ const XLSX = require('xlsx');
 
 
   // ====== SOIL HEALTH ======
-  app.get('/api/v1/farmer/soil-health', farmerAuth, async (req, res) => {
+  app.get
+      
+
+('/api/v1/farmer/soil-health', farmerAuth, async (req, res) => {
     try {
       const farmerId = req.farmer.id;
       const farmerData = await pool.query('SELECT village, location, pin_code, crops FROM farmers WHERE id = $1', [farmerId]);
@@ -5307,7 +5310,7 @@ const XLSX = require('xlsx');
       }
 
       if (soilData.rows.length === 0) {
-        return res.json({ message: 'No soil data available for your district', district });
+        return res.json({ message: 'No soil data available for your district', district  });
       }
 
       const row = soilData.rows[0];
@@ -5352,6 +5355,15 @@ const XLSX = require('xlsx');
         } catch(e) { console.log('Crop recs AI error:', e.message); }
       }
 
+      
+      
+
+      // Get all blocks in this district for selector
+      const allBlocksResult = await pool.query(
+        'SELECT DISTINCT block_name, total_samples, sample_year FROM soil_nutrient_data WHERE UPPER(district_name) = UPPER($1) AND block_name IS NOT NULL ORDER BY block_name',
+        [district]
+      );
+
       res.json({
         district: row.district_name,
         block: row.block_name,
@@ -5366,8 +5378,9 @@ const XLSX = require('xlsx');
         ec: ecData,
         recommendations,
         crop_recommendations: cropRecommendations,
-        all_blocks: soilData.rows.map(r => ({ block: r.block_name, samples: r.total_samples, year: r.sample_year })),
-      });
+        all_blocks: allBlocksResult.rows.map(r => ({ block: r.block_name, samples: r.total_samples, year: r.sample_year })),
+        current_block: blockFilter || district,
+});
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
