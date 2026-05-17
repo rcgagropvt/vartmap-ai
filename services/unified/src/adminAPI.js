@@ -5280,7 +5280,8 @@ const XLSX = require('xlsx');
       const farmerId = req.farmer.id;
       const farmerData = await pool.query('SELECT village, location, pin_code, crops FROM farmers WHERE id = $1', [farmerId]);
       const farmer = farmerData.rows[0] || {};
-      const district = (farmer.location && farmer.location.district) || farmer.village || '';
+      const rawDistrict = (farmer.location && farmer.location.district) || farmer.village || '';
+      const district = rawDistrict.replace(/\s*(Division|District|Dist)\.?$/i, '').trim();
 
       // Allow block selection via query param
       const farmerBlock = (farmer.location && farmer.location.block) || '';
