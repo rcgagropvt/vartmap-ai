@@ -690,7 +690,7 @@ async function sendMenuMessage(to, botConfig, language) {
       title: (language === 'hi' ? (m.title_hi || m.title_en) : (m.title_en || m.title_hi)).substring(0, 20)
     }));
     const bodyText = language === 'hi'
-      ? 'Aap neeche diye gaye options mein se choose kar sakte hain:'
+      ? 'आप नीचे दिए गए विकल्पों में से चुन सकते हैं:'
       : 'You can choose from the options below:';
     await sendWhatsAppButtons(to, bodyText, buttons);
   } else {
@@ -713,34 +713,47 @@ async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, 
   const lang = farmerData.language || 'hi';
 
   if (stage === 'new') {
-    // First message ever - send welcome and ask name
-    const welcome = lang === 'hi' ? botConfig.welcome_hi : botConfig.welcome_en;
+    // First message - ask language choice
+    const welcome = botConfig.welcome_hi || 'Namaste! VartMap Krishi Sahayak mein aapka swagat hai.';
     await sendWhatsAppMessage(from, welcome);
+    
+    await sendWhatsAppButtons(from, 'Please choose your language / कृपया अपनी भाषा चुनें:', [
+      { id: 'lang_hi', title: 'हिंदी (Hindi)' },
+      { id: 'lang_en', title: 'English' }
+    ]);
+    await pool.query("UPDATE farmers SET onboarding_stage = 'awaiting_language', updated_at = NOW() WHERE id = $1", [farmerId]);
+    
+    await pool.query(
+      "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
+      [sessionId, farmerId, welcome + '\nLanguage selection sent']
+    );
+    return true;
+  }
 
-    if (botConfig.onboarding_enabled && botConfig.onboarding_fields.includes('name')) {
-      const askName = lang === 'hi'
-        ? 'Sabse pehle, aapka naam bataiye?'
-        : 'First, what is your name?';
-      await sendWhatsAppMessage(from, askName);
-      await pool.query("UPDATE farmers SET onboarding_stage = 'awaiting_name', updated_at = NOW() WHERE id = $1", [farmerId]);
-
-      await pool.query(
-        "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
-        [sessionId, farmerId, welcome + '\n' + askName]
-      );
-      return true; // handled
-    } else {
-      // No onboarding, go straight to menu
-      await pool.query("UPDATE farmers SET onboarding_stage = 'complete', profile_complete = true, updated_at = NOW() WHERE id = $1", [farmerId]);
-      await sendMenuMessage(from, botConfig, lang);
-      return true;
+  if (stage === 'awaiting_language') {
+    let selectedLang = 'hi';
+    if (msgBody === 'lang_en' || msgBody.toLowerCase().includes('english') || msgBody.toLowerCase().includes('eng')) {
+      selectedLang = 'en';
     }
+    await pool.query("UPDATE farmers SET language = $1, onboarding_stage = 'awaiting_name', updated_at = NOW() WHERE id = $2", [selectedLang, farmerId]);
+    
+    if (selectedLang === 'hi') {
+      await sendWhatsAppMessage(from, 'हिंदी चुनी गई! सबसे पहले, आपका नाम बताइये?');
+    } else {
+      await sendWhatsAppMessage(from, 'English selected! First, what is your name?');
+    }
+    
+    await pool.query(
+      "INSERT INTO wa_messages (id, session_id, farmer_id, direction, sender_type, message_type, content, wa_status, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'system', 'text', $3, 'sent', NOW())",
+      [sessionId, farmerId, selectedLang === 'hi' ? 'Language: Hindi' : 'Language: English']
+    );
+    return true;
   }
 
   if (stage === 'awaiting_name') {
     const name = msgBody.trim();
     if (name.length < 2 || name.length > 60) {
-      const retry = lang === 'hi' ? 'Kripya apna sahi naam batayein:' : 'Please tell me your correct name:';
+      const retry = lang === 'hi' ? 'कृपया अपना सही नाम बताएं:' : 'Please tell me your correct name:';
       await sendWhatsAppMessage(from, retry);
       return true;
     }
@@ -749,7 +762,7 @@ async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, 
 
     if (botConfig.onboarding_fields.includes('crops')) {
       const askCrops = lang === 'hi'
-        ? 'Dhanyavaad ' + name + '! Aap kaun si phasalein ugaate hain? (jaise: gehun, dhan, ganna)'
+        ? 'धन्यवाद ' + name + '! आप कौन सी फसलें उगाते हैं? (जैसे: गेहूँ, धान, गन्ना)'
         : 'Thank you ' + name + '! What crops do you grow? (e.g., wheat, rice, sugarcane)';
       await sendWhatsAppMessage(from, askCrops);
       await pool.query(
@@ -759,7 +772,7 @@ async function handleOnboarding(farmerId, farmerData, from, msgBody, sessionId, 
     } else {
       await pool.query("UPDATE farmers SET profile_complete = true WHERE id = $1", [farmerId]);
       const done = lang === 'hi'
-        ? 'Dhanyavaad ' + name + '! Aap ab mujhse kuch bhi pooch sakte hain.'
+        ? 'धन्यवाद ' + name + '! अब आप मुझसे कुछ भी पूछ सकते हैं।'
         : 'Thank you ' + name + '! You can now ask me anything.';
       await sendWhatsAppMessage(from, done);
       await sendMenuMessage(from, botConfig, lang);
