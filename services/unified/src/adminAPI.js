@@ -2520,7 +2520,7 @@ const XLSX = require('xlsx');
   // ---
   app.get('/api/v1/rewards', auth, async (req, res) => {
     try {
-      const r = await pool.query('SELECT r.*, f.name as farmer_name, f.phone FROM rewards r LEFT JOIN farmers f ON r.farmer_id=$1f.id ORDER BY r.created_at DESC LIMIT 100');
+      const r = await pool.query('SELECT r.*, f.name as farmer_name, f.phone FROM rewards r LEFT JOIN farmers f ON r.farmer_id=f.id ORDER BY r.created_at DESC LIMIT 100');
       const stats = await pool.query("SELECT COUNT(*) as total, COALESCE(SUM(points),0) as total_points, COUNT(CASE WHEN status='earned' THEN 1 END) as pending FROM rewards");
       res.json({ rewards: r.rows, stats: stats.rows[0] });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -2546,7 +2546,7 @@ const XLSX = require('xlsx');
   // ---
   app.get('/api/v1/referrals', auth, async (req, res) => {
     try {
-      const codes = await pool.query('SELECT rc.*, f.name as farmer_name, f.phone FROM referral_codes rc LEFT JOIN farmers f ON rc.farmer_id=$1f.id ORDER BY rc.created_at DESC');
+      const codes = await pool.query('SELECT rc.*, f.name as farmer_name, f.phone FROM referral_codes rc LEFT JOIN farmers f ON rc.farmer_id=f.id ORDER BY rc.created_at DESC');
       const refs = await pool.query('SELECT r.*, f1.name as referrer_name, f2.name as referee_name FROM referrals r LEFT JOIN farmers f1 ON r.referrer_id=f1.id LEFT JOIN farmers f2 ON r.referee_id=f2.id ORDER BY r.created_at DESC LIMIT 100');
       res.json({ codes: codes.rows, referrals: refs.rows });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -7942,10 +7942,86 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
   // Temporary: Force create farmer_farms table
   app.get('/api/v1/public/setup-farms', async (req, res) => {
     try {
-      await pool.query("DROP TABLE IF EXISTS farmer_farms");
-      await pool.query("CREATE TABLE farmer_farms (id SERIAL PRIMARY KEY, farmer_id TEXT NOT NULL, name VARCHAR(100) DEFAULT 'My Farm', coordinates JSONB NOT NULL, agro_polygon_id VARCHAR(100), crop VARCHAR(50), area_acres DECIMAL(10,2), created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())");
+      const results = [];
+      
+      // farmer_farms
+      await pool.query("CREATE TABLE IF NOT EXISTS farmer_farms (id SERIAL PRIMARY KEY, farmer_id TEXT NOT NULL, name VARCHAR(100) DEFAULT 'My Farm', coordinates JSONB NOT NULL, agro_polygon_id VARCHAR(100), crop VARCHAR(50), area_acres DECIMAL(10,2), created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())");
       await pool.query("CREATE INDEX IF NOT EXISTS idx_farmer_farms_farmer ON farmer_farms(farmer_id)");
-      res.json({ success: true, message: 'farmer_farms table recreated with TEXT farmer_id' });
+      results.push('farmer_farms');
+
+      // rewards
+      await pool.query("CREATE TABLE IF NOT EXISTS rewards (id SERIAL PRIMARY KEY, farmer_id TEXT, type VARCHAR(50) DEFAULT 'bonus', points INTEGER DEFAULT 0, description TEXT, status VARCHAR(20) DEFAULT 'earned', created_at TIMESTAMP DEFAULT NOW())");
+      results.push('rewards');
+
+      // referral_codes
+      await pool.query("CREATE TABLE IF NOT EXISTS referral_codes (id SERIAL PRIMARY KEY, farmer_id TEXT, code VARCHAR(50) UNIQUE, uses INTEGER DEFAULT 0, max_uses INTEGER DEFAULT 10, reward_points INTEGER DEFAULT 50, created_at TIMESTAMP DEFAULT NOW())");
+      results.push('referral_codes');
+
+      // referrals
+      await pool.query("CREATE TABLE IF NOT EXISTS referrals (id SERIAL PRIMARY KEY, referrer_id TEXT, referee_id TEXT, code VARCHAR(50), status VARCHAR(20) DEFAULT 'completed', points_awarded INTEGER DEFAULT 50, created_at TIMESTAMP DEFAULT NOW())");
+      results.push('referrals');
+
+      // loyalty_transactions
+      await pool.query("CREATE TABLE IF NOT EXISTS loyalty_transactions (id SERIAL PRIMARY KEY, farmer_id TEXT, type VARCHAR(20), points INTEGER, balance_after INTEGER, source VARCHAR(50), source_id TEXT, description TEXT, created_at TIMESTAMP DEFAULT NOW())");
+      results.push('loyalty_transactions');
+
+      // loyalty_tiers
+      await pool.query("CREATE TABLE IF NOT EXISTS loyalty_tiers (id SERIAL PRIMARY KEY, name VARCHAR(50), min_points INTEGER, max_points INTEGER, multiplier DECIMAL(3,2) DEFAULT 1.0, benefits TEXT, color VARCHAR(20), icon VARCHAR(50), active BOOLEAN DEFAULT true, sort_order INTEGER DEFAULT 0)");
+      results.push('loyalty_tiers');
+
+      // spin_wheels
+      await pool.query("CREATE TABLE IF NOT EXISTS spin_wheels (id SERIAL PRIMARY KEY, name VARCHAR(100), description TEXT, type VARCHAR(30) DEFAULT 'spin_wheel', status VARCHAR(20) DEFAULT 'active', start_date TIMESTAMP, end_date TIMESTAMP, max_spins_per_farmer INTEGER DEFAULT 1, total_budget DECIMAL(10,2) DEFAULT 0, spent_budget DECIMAL(10,2) DEFAULT 0, created_by TEXT, created_at TIMESTAMP DEFAULT NOW())");
+      results.push('spin_wheels');
+
+      // spin_wheel_segments
+      await pool.query("CREATE TABLE IF NOT EXISTS spin_wheel_segments (id SERIAL PRIMARY KEY, wheel_id INTEGER REFERENCES spin_wheels(id), label VARCHAR(100), prize_type VARCHAR(30), prize_value DECIMAL(10,2), prize_description TEXT, color VARCHAR(20), probability DECIMAL(5,4), max_winners INTEGER, current_winners INTEGER DEFAULT 0, active BOOLEAN DEFAULT true, sort_order INTEGER DEFAULT 0)");
+      results.push('spin_wheel_segments');
+
+      // spin_results
+      await pool.query("CREATE TABLE IF NOT EXISTS spin_results (id SERIAL PRIMARY KEY, wheel_id INTEGER, farmer_id TEXT, segment_id INTEGER, prize_type VARCHAR(30), prize_value DECIMAL(10,2), prize_label VARCHAR(100), status VARCHAR(20) DEFAULT 'pending', coupon_code VARCHAR(50), created_at TIMESTAMP DEFAULT NOW())");
+      results.push('spin_results');
+
+      // coupon_campaigns
+      await pool.query("CREATE TABLE IF NOT EXISTS coupon_campaigns (id SERIAL PRIMARY KEY, name VARCHAR(100), code_prefix VARCHAR(20), discount_type VARCHAR(20), discount_value DECIMAL(10,2), max_uses INTEGER DEFAULT 100, used_count INTEGER DEFAULT 0, min_purchase DECIMAL(10,2), start_date TIMESTAMP, end_date TIMESTAMP, status VARCHAR(20) DEFAULT 'active', created_at TIMESTAMP DEFAULT NOW())");
+      results.push('coupon_campaigns');
+
+      // coupon_codes
+      await pool.query("CREATE TABLE IF NOT EXISTS coupon_codes (id SERIAL PRIMARY KEY, campaign_id INTEGER, code VARCHAR(50) UNIQUE, status VARCHAR(20) DEFAULT 'available', farmer_id TEXT, used_at TIMESTAMP, used_by TEXT, order_id TEXT, assigned_dealer_id TEXT, distributed_via VARCHAR(30), distributed_at TIMESTAMP, qr_data_url TEXT, redeemed_lat DECIMAL(10,6), redeemed_lon DECIMAL(10,6), redeemed_location TEXT, metadata JSONB, created_at TIMESTAMP DEFAULT NOW())");
+      results.push('coupon_codes');
+
+      // coupon_dealer_batches
+      await pool.query("CREATE TABLE IF NOT EXISTS coupon_dealer_batches (id SERIAL PRIMARY KEY, campaign_id INTEGER, dealer_id TEXT, dealer_name VARCHAR(100), dealer_phone VARCHAR(20), codes_count INTEGER, notes TEXT, assigned_at TIMESTAMP DEFAULT NOW())");
+      results.push('coupon_dealer_batches');
+
+      // coupon_distributions
+      await pool.query("CREATE TABLE IF NOT EXISTS coupon_distributions (id SERIAL PRIMARY KEY, campaign_id INTEGER, channel VARCHAR(30), total_recipients INTEGER, sent_count INTEGER DEFAULT 0, failed_count INTEGER DEFAULT 0, status VARCHAR(20) DEFAULT 'pending', completed_at TIMESTAMP, created_at TIMESTAMP DEFAULT NOW())");
+      results.push('coupon_distributions');
+
+      // farmer_loyalty
+      await pool.query("CREATE TABLE IF NOT EXISTS farmer_loyalty (id SERIAL PRIMARY KEY, farmer_id TEXT UNIQUE, total_points INTEGER DEFAULT 0, available_points INTEGER DEFAULT 0, lifetime_points INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())");
+      results.push('farmer_loyalty');
+
+      // redemption_catalog
+      await pool.query("CREATE TABLE IF NOT EXISTS redemption_catalog (id SERIAL PRIMARY KEY, name VARCHAR(100), description TEXT, points_required INTEGER, category VARCHAR(50), image_url TEXT, stock INTEGER DEFAULT 0, active BOOLEAN DEFAULT true, created_at TIMESTAMP DEFAULT NOW())");
+      results.push('redemption_catalog');
+
+      // redemption_requests
+      await pool.query("CREATE TABLE IF NOT EXISTS redemption_requests (id SERIAL PRIMARY KEY, farmer_id TEXT, catalog_item_id INTEGER, points_spent INTEGER, status VARCHAR(20) DEFAULT 'pending', admin_notes TEXT, created_at TIMESTAMP DEFAULT NOW(), processed_at TIMESTAMP)");
+      results.push('redemption_requests');
+
+      // Add loyalty columns to farmers if missing
+      await pool.query("ALTER TABLE farmers ADD COLUMN IF NOT EXISTS loyalty_points INTEGER DEFAULT 0");
+      await pool.query("ALTER TABLE farmers ADD COLUMN IF NOT EXISTS lifetime_points INTEGER DEFAULT 0");
+      await pool.query("ALTER TABLE farmers ADD COLUMN IF NOT EXISTS loyalty_tier_id INTEGER");
+      await pool.query("ALTER TABLE farmers ADD COLUMN IF NOT EXISTS tier_updated_at TIMESTAMP");
+      await pool.query("ALTER TABLE farmers ADD COLUMN IF NOT EXISTS loyalty_tier VARCHAR(20) DEFAULT 'Bronze'");
+      results.push('farmers_columns');
+
+      // app_settings
+      await pool.query("CREATE TABLE IF NOT EXISTS app_settings (id SERIAL PRIMARY KEY, key VARCHAR(100) UNIQUE, value TEXT, created_at TIMESTAMP DEFAULT NOW())");
+      results.push('app_settings');
+
+      res.json({ success: true, tables_created: results });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
