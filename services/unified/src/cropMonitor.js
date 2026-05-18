@@ -1,5 +1,4 @@
 // Crop Monitoring Engine - Satellite NDVI + Field Mapping
-const fetch = require('node-fetch');
 
 const AGRO_API_KEY = process.env.AGRO_API_KEY || '';
 const AGRO_BASE = 'https://api.agromonitoring.com/agro/1.0';
