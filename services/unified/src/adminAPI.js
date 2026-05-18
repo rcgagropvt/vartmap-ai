@@ -8197,4 +8197,22 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
     }
   });
 
+
+  // ===== PROFILE PICTURE =====
+  app.put('/api/v1/farmer/profile-picture', farmerAuth, async (req, res) => {
+    try {
+      const { picture_url } = req.body;
+      if (!picture_url) return res.status(400).json({ error: 'No picture URL provided' });
+      
+      await pool.query(
+        "UPDATE farmers SET profile_picture = $1 WHERE id = $2",
+        [picture_url, req.farmer.id]
+      );
+      res.json({ success: true, picture_url });
+    } catch (err) {
+      console.error('Profile picture error:', err.message);
+      res.status(500).json({ error: 'Failed to update profile picture' });
+    }
+  });
+
 };
