@@ -7936,6 +7936,17 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
     } catch (err) {
       console.error('Public pest alerts error:', err.message);
       res.status(500).json({ error: 'Failed to generate pest alerts', alerts: [] });
+
+  // Temporary: Force create farmer_farms table
+  app.get('/api/v1/public/setup-farms', async (req, res) => {
+    try {
+      await pool.query("CREATE TABLE IF NOT EXISTS farmer_farms (id SERIAL PRIMARY KEY, farmer_id INTEGER NOT NULL, name VARCHAR(100) DEFAULT 'My Farm', coordinates JSONB NOT NULL, agro_polygon_id VARCHAR(100), crop VARCHAR(50), area_acres DECIMAL(10,2), created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())");
+      await pool.query("CREATE INDEX IF NOT EXISTS idx_farmer_farms_farmer ON farmer_farms(farmer_id)");
+      res.json({ success: true, message: 'farmer_farms table created' });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
     }
   });
 
