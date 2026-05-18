@@ -8044,18 +8044,23 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
   app.get('/api/v1/farmer/rewards', farmerAuth, async (req, res) => {
     try {
       const farmerId = req.farmer.id;
-      const farmerName = req.farmer.name || '';
+      const farmerRow = await pool.query('SELECT name FROM farmers WHERE id = $1', [farmerId]);
+      const farmerName = (farmerRow.rows[0] && farmerRow.rows[0].name) || '';
       
       // Init if not exists
       await initRewards(pool, farmerId, farmerName);
 
       // Auto-award profile_complete if profile is filled
-      const farmer = req.farmer;
-      const hasName = farmer.name && farmer.name.trim().length > 0;
-      const hasLocation = farmer.location && (farmer.location.district || farmer.location.state);
-      const hasCrops = farmer.crops && farmer.crops.length > 0;
-      if (hasName && hasLocation && hasCrops) {
-        await awardPoints(pool, farmerId, 'profile_complete', 'Profile completed');
+      const farmerProfile = await pool.query('SELECT name, location, crops FROM farmers WHERE id = $1', [farmerId]);
+      if (farmerProfile.rows.length > 0) {
+        const fp = farmerProfile.rows[0];
+        const hasName = fp.name && fp.name.trim().length > 0;
+        const loc = typeof fp.location === 'string' ? JSON.parse(fp.location || '{}') : (fp.location || {});
+        const hasLocation = loc.district || loc.state;
+        const hasCrops = fp.crops && fp.crops.length > 0;
+        if (hasName && hasLocation && hasCrops) {
+          await awardPoints(pool, farmerId, 'profile_complete', 'Profile completed');
+        }
       }
       
       // Auto-award soil_health_check if they've viewed it before
