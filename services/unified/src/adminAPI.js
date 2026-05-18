@@ -2539,6 +2539,17 @@ const XLSX = require('xlsx');
         await pool.query('UPDATE farmers SET loyalty_points = COALESCE(loyalty_points,0) + $1, lifetime_points = COALESCE(lifetime_points,0) + $1 WHERE id = $2', [points, farmer_id]);
         await pool.query("INSERT INTO loyalty_transactions (farmer_id, type, points, balance_after, source, description) VALUES ($1, 'earn', $2, (SELECT COALESCE(loyalty_points,0) FROM farmers WHERE id=$1), 'reward', $3)", [farmer_id, points, description || 'Admin reward: ' + (type || 'bonus')]);
       }
+      // === SYNC to mobile gamification system ===
+      try {
+        const existingFP = await pool.query('SELECT id FROM farmer_points WHERE farmer_id = $1', [farmer_id]);
+        if (existingFP.rows.length > 0) {
+          await pool.query('UPDATE farmer_points SET total_points = total_points + $1, updated_at = NOW() WHERE farmer_id = $2', [points, farmer_id]);
+        } else {
+          await pool.query('INSERT INTO farmer_points (farmer_id, total_points) VALUES ($1, $2)', [farmer_id, points]);
+        }
+        await pool.query('INSERT INTO point_transactions (farmer_id, type, points, description) VALUES ($1, $2, $3, $4)', [farmer_id, type || 'admin_bonus', points, description || 'Admin reward']);
+      } catch (syncErr) { console.log('Mobile sync note:', syncErr.message); }
+
       res.json({ reward: r.rows[0], loyalty_updated: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
@@ -8019,6 +8030,17 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
 
       // app_settings
       await pool.query("CREATE TABLE IF NOT EXISTS app_settings (id SERIAL PRIMARY KEY, key VARCHAR(100) UNIQUE, value TEXT, created_at TIMESTAMP DEFAULT NOW())");
+      
+      // farmer_points (mobile gamification)
+      await pool.query("CREATE TABLE IF NOT EXISTS farmer_points (id SERIAL PRIMARY KEY, farmer_id TEXT UNIQUE NOT NULL, total_points INTEGER DEFAULT 0, current_level INTEGER DEFAULT 1, level_name VARCHAR(50) DEFAULT 'Beej', streak_days INTEGER DEFAULT 0, longest_streak INTEGER DEFAULT 0, last_active_date DATE, referral_code VARCHAR(50), total_referrals INTEGER DEFAULT 0, updated_at TIMESTAMP DEFAULT NOW(), created_at TIMESTAMP DEFAULT NOW())");
+      results.push('farmer_points');
+
+      // point_transactions (mobile gamification history)
+      await pool.query("CREATE TABLE IF NOT EXISTS point_transactions (id SERIAL PRIMARY KEY, farmer_id TEXT NOT NULL, type VARCHAR(50), points INTEGER, description TEXT, created_at TIMESTAMP DEFAULT NOW())");
+      await pool.query("CREATE INDEX IF NOT EXISTS idx_pt_farmer ON point_transactions(farmer_id)");
+      await pool.query("CREATE INDEX IF NOT EXISTS idx_pt_farmer_type_date ON point_transactions(farmer_id, type, created_at)");
+      results.push('point_transactions');
+
       results.push('app_settings');
 
       res.json({ success: true, tables_created: results });
@@ -8046,6 +8068,17 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
       'INSERT INTO point_transactions (farmer_id, type, points, description) VALUES ($1, $2, $3, $4)',
       [farmerId, 'registration', 100, 'Welcome bonus for registration']
     );
+    // === SYNC registration bonus to unified loyalty ===
+    try {
+      await pool.query('UPDATE farmers SET loyalty_points = COALESCE(loyalty_points,0) + 100, lifetime_points = COALESCE(lifetime_points,0) + 100 WHERE id = $1', [farmerId]);
+      await pool.query("INSERT INTO loyalty_transactions (farmer_id, type, points, balance_after, source, description) VALUES ($1, 'earn', 100, (SELECT COALESCE(loyalty_points,0) FROM farmers WHERE id=$1), 'registration', 'Welcome bonus')", [farmerId]);
+      const existingLoyalty = await pool.query('SELECT id FROM farmer_loyalty WHERE farmer_id = $1', [farmerId]);
+      if (existingLoyalty.rows.length === 0) {
+        await pool.query('INSERT INTO farmer_loyalty (farmer_id, total_points, available_points, lifetime_points) VALUES ($1, 100, 100, 100)', [farmerId]);
+      } else {
+        await pool.query('UPDATE farmer_loyalty SET total_points = total_points + 100, available_points = available_points + 100, lifetime_points = lifetime_points + 100 WHERE farmer_id = $1', [farmerId]);
+      }
+    } catch (syncErr) { console.log('Init loyalty sync note:', syncErr.message); }
     return result.rows[0];
   }
 
@@ -8097,6 +8130,18 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
         [newLevel.level, newLevel.name, farmerId]);
     }
     
+    // === SYNC to unified loyalty system ===
+    try {
+      await pool.query('UPDATE farmers SET loyalty_points = COALESCE(loyalty_points,0) + $1, lifetime_points = COALESCE(lifetime_points,0) + $1 WHERE id = $2', [rule.points, farmerId]);
+      await pool.query("INSERT INTO loyalty_transactions (farmer_id, type, points, balance_after, source, description) VALUES ($1, 'earn', $2, (SELECT COALESCE(loyalty_points,0) FROM farmers WHERE id=$1), $3, $4)", [farmerId, rule.points, type, extraDesc || rule.description]);
+      const existingLoyalty = await pool.query('SELECT id FROM farmer_loyalty WHERE farmer_id = $1', [farmerId]);
+      if (existingLoyalty.rows.length > 0) {
+        await pool.query('UPDATE farmer_loyalty SET total_points = total_points + $1, available_points = available_points + $1, lifetime_points = lifetime_points + $1, updated_at = NOW() WHERE farmer_id = $2', [rule.points, farmerId]);
+      } else {
+        await pool.query('INSERT INTO farmer_loyalty (farmer_id, total_points, available_points, lifetime_points) VALUES ($1, $2, $2, $2)', [farmerId, rule.points]);
+      }
+    } catch (syncErr) { console.log('Loyalty sync note:', syncErr.message); }
+
     return { points: rule.points, type };
   }
 
