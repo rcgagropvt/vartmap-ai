@@ -35,6 +35,10 @@ pool.query('SELECT NOW()').then(() => { console.log('Database connected');
     const rewardsMigrationSQL = require('fs').readFileSync(require('path').join(__dirname, 'rewards_migration.sql'), 'utf8');
     pool.query(rewardsMigrationSQL).then(() => console.log('Rewards tables verified')).catch(e => console.log('Rewards migration note:', e.message));
 
+  // Farm monitoring tables
+  const farmMigrationSQL = "CREATE TABLE IF NOT EXISTS farmer_farms (id SERIAL PRIMARY KEY, farmer_id INTEGER NOT NULL, name VARCHAR(100) DEFAULT 'My Farm', coordinates JSONB NOT NULL, agro_polygon_id VARCHAR(100), crop VARCHAR(50), area_acres DECIMAL(10,2), created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW()); CREATE INDEX IF NOT EXISTS idx_farmer_farms_farmer ON farmer_farms(farmer_id);";
+  pool.query(farmMigrationSQL).then(() => console.log('Farm tables ready')).catch(e => console.log('Farm migration note:', e.message));
+
 // --- Add Finance menu item if not exists ---
 pool.query("SELECT id FROM bot_menu_items WHERE menu_key='hisaab'").then(r => {
   if (r.rows.length === 0) {

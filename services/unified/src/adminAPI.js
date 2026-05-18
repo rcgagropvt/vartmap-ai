@@ -28,6 +28,7 @@ function uploadToCloudinary(buffer, options = {}) {
 
 }
 const XLSX = require('xlsx');
+const { createPolygon, deletePolygon, getNDVIStats, getNDVIHistory, getSoilData, getPolygonWeather, getCropHealthScore, getIrrigationAdvisory } = require('./cropMonitor');
 
 module.exports = function setupAdminAPI(app, pool) {
 
@@ -8217,6 +8218,153 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
     } catch (err) {
       console.error('Profile picture error:', err.message);
       res.status(500).json({ error: 'Failed to update profile picture' });
+    }
+  });
+
+
+  // ===== CROP MONITORING ENDPOINTS =====
+  
+  // Create farm polygon
+  app.post('/api/v1/farmer/farm', farmerAuth, async (req, res) => {
+    try {
+      const farmerId = req.farmer.id;
+      const { name, coordinates, crop, area_acres } = req.body;
+      
+      if (!coordinates || coordinates.length < 3) {
+        return res.status(400).json({ error: 'At least 3 points needed to create a field boundary' });
+      }
+      
+      // Close the polygon (first point = last point)
+      const coords = [...coordinates];
+      if (coords[0][0] !== coords[coords.length-1][0] || coords[0][1] !== coords[coords.length-1][1]) {
+        coords.push(coords[0]);
+      }
+      
+      // Create on Agromonitoring
+      let agroPolygonId = null;
+      try {
+        const agroResult = await createPolygon(name || 'Farm-' + farmerId, coords);
+        agroPolygonId = agroResult.id;
+      } catch (e) {
+        console.log('Agro polygon create failed:', e.message);
+      }
+      
+      // Save to database
+      const result = await pool.query(
+        'INSERT INTO farmer_farms (farmer_id, name, coordinates, agro_polygon_id, crop, area_acres, created_at) VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING *',
+        [farmerId, name || 'My Farm', JSON.stringify(coords), agroPolygonId, crop || null, area_acres || null]
+      );
+      
+      res.json({ success: true, farm: result.rows[0] });
+    } catch (e) {
+      console.error('Create farm error:', e);
+      res.status(500).json({ error: 'Failed to create farm' });
+    }
+  });
+  
+  // Get farmer's farms
+  app.get('/api/v1/farmer/farms', farmerAuth, async (req, res) => {
+    try {
+      const farmerId = req.farmer.id;
+      const result = await pool.query('SELECT * FROM farmer_farms WHERE farmer_id = $1 ORDER BY created_at DESC', [farmerId]);
+      res.json({ farms: result.rows });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to fetch farms' });
+    }
+  });
+  
+  // Get crop monitoring data for a farm
+  app.get('/api/v1/farmer/farm/:farmId/monitor', farmerAuth, async (req, res) => {
+    try {
+      const farmerId = req.farmer.id;
+      const { farmId } = req.params;
+      
+      const farm = await pool.query('SELECT * FROM farmer_farms WHERE id = $1 AND farmer_id = $2', [farmId, farmerId]);
+      if (farm.rows.length === 0) return res.status(404).json({ error: 'Farm not found' });
+      
+      const farmData = farm.rows[0];
+      const polyId = farmData.agro_polygon_id;
+      
+      if (!polyId) {
+        return res.json({
+          farm: farmData,
+          ndvi: null,
+          soil: null,
+          weather: null,
+          health: null,
+          irrigation: null,
+          message: 'Satellite data not yet available. It may take 1-2 days for initial satellite pass.'
+        });
+      }
+      
+      // Fetch all data in parallel
+      const [ndviData, soilData, weatherData] = await Promise.allSettled([
+        getNDVIStats(polyId),
+        getSoilData(polyId),
+        getPolygonWeather(polyId)
+      ]);
+      
+      const ndvi = ndviData.status === 'fulfilled' ? ndviData.value : null;
+      const soil = soilData.status === 'fulfilled' ? soilData.value : null;
+      const weather = weatherData.status === 'fulfilled' ? weatherData.value : null;
+      
+      const ndviMean = ndvi && ndvi.ndvi ? (ndvi.ndvi.mean || ndvi.ndvi.median || null) : null;
+      const health = getCropHealthScore(ndviMean);
+      const irrigation = getIrrigationAdvisory(soil, weather, ndviMean);
+      
+      res.json({
+        farm: farmData,
+        ndvi: ndvi,
+        soil: soil,
+        weather: weather,
+        health: health,
+        irrigation: irrigation,
+        ndviValue: ndviMean
+      });
+    } catch (e) {
+      console.error('Monitor error:', e);
+      res.status(500).json({ error: 'Failed to fetch monitoring data' });
+    }
+  });
+  
+  // Get NDVI history/trend
+  app.get('/api/v1/farmer/farm/:farmId/ndvi-history', farmerAuth, async (req, res) => {
+    try {
+      const farmerId = req.farmer.id;
+      const { farmId } = req.params;
+      const days = parseInt(req.query.days) || 90;
+      
+      const farm = await pool.query('SELECT * FROM farmer_farms WHERE id = $1 AND farmer_id = $2', [farmId, farmerId]);
+      if (farm.rows.length === 0) return res.status(404).json({ error: 'Farm not found' });
+      
+      const polyId = farm.rows[0].agro_polygon_id;
+      if (!polyId) return res.json({ history: [], message: 'Satellite data pending' });
+      
+      const history = await getNDVIHistory(polyId, days);
+      res.json({ history: history });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to fetch NDVI history' });
+    }
+  });
+  
+  // Delete farm
+  app.delete('/api/v1/farmer/farm/:farmId', farmerAuth, async (req, res) => {
+    try {
+      const farmerId = req.farmer.id;
+      const { farmId } = req.params;
+      
+      const farm = await pool.query('SELECT * FROM farmer_farms WHERE id = $1 AND farmer_id = $2', [farmId, farmerId]);
+      if (farm.rows.length === 0) return res.status(404).json({ error: 'Farm not found' });
+      
+      // Delete from Agro
+      if (farm.rows[0].agro_polygon_id) {
+        try { await deletePolygon(farm.rows[0].agro_polygon_id); } catch(e) {}
+      }
+      
+      await pool.query('DELETE FROM farmer_farms WHERE id = $1', [farmId]);
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to delete farm' });
     }
   });
 
