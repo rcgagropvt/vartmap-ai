@@ -7937,6 +7937,8 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
       console.error('Public pest alerts error:', err.message);
       res.status(500).json({ error: 'Failed to generate pest alerts', alerts: [] });
 
+    }
+  });
   // Temporary: Force create farmer_farms table
   app.get('/api/v1/public/setup-farms', async (req, res) => {
     try {
@@ -7945,8 +7947,6 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
       res.json({ success: true, message: 'farmer_farms table created' });
     } catch (e) {
       res.status(500).json({ error: e.message });
-    }
-  });
     }
   });
 
