@@ -4559,7 +4559,7 @@ const XLSX = require('xlsx');
       if (village) { updates.push('village = $' + idx); vals.push(village); idx++; }
       if (crops) { updates.push('crops = $' + idx); vals.push(Array.isArray(crops) ? '{' + crops.join(',') + '}' : crops); idx++; }
       if (language) { updates.push('language = $' + idx); vals.push(language); idx++; }
-      if (land_acres) { updates.push('land_holding_acres = $' + idx); vals.push(land_acres); idx++; }
+      if (land_acres !== undefined && land_acres !== null) { updates.push('land_holding_acres = $' + idx); vals.push(land_acres); idx++; }
       if (pin_code) { updates.push('pin_code = $' + idx); vals.push(pin_code); idx++; }
       if (district || state) {
         const locObj = {};
