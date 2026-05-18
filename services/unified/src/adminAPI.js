@@ -5427,7 +5427,7 @@ app.get('/api/v1/farmer/community/posts', communityAuth, async (req, res) => {
       if (filter === 'questions') { q += ' AND p.content LIKE $' + idx; vals.push('%?%'); idx++; }
       q += ' ORDER BY p.created_at DESC LIMIT 50';
       const { rows } = await pool.query(q, vals);
-      const posts = rows.map(p => ({ ...p, media_url: p.image_url, media_type: p.image_url ? (p.image_url.match(/\.(mp4|mov|avi|webm)/i) ? 'video' : 'image') : null, tags: p.crop ? [p.crop] : [] }));
+      const posts = rows.map(p => ({ ...p, media_url: p.image_url, media_type: p.image_url ? ((p.image_url.match(/\.(mp4|mov|avi|webm)/i) || p.image_url.includes('/video/upload/')) ? 'video' : 'image') : null, tags: p.crop ? [p.crop] : [] }));
       res.json({ posts });
     } catch (e) {
       if (e.message && e.message.includes('does not exist')) {
@@ -5457,7 +5457,7 @@ app.get('/api/v1/farmer/community/posts', communityAuth, async (req, res) => {
       }
       const { rows } = await pool.query(
         `INSERT INTO community_posts (farmer_id, username, content, image_url, category, crop, created_at) VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING *`,
-        [farmerId, username || (req.isAdmin ? 'VartMap Official' : 'Farmer'), content, req.file ? (await uploadToCloudinary(req.file.buffer, { folder: 'vartmap/community' })).secure_url : image_url || null, category || 'general', crop || null]
+        [farmerId, username || (req.isAdmin ? 'VartMap Official' : 'Farmer'), content, req.file ? (await uploadToCloudinary(req.file.buffer, { folder: 'vartmap/community', resource_type: req.file.mimetype && req.file.mimetype.startsWith('video') ? 'video' : 'image' })).secure_url : image_url || null, category || 'general', crop || null]
       );
 
 
@@ -5483,7 +5483,7 @@ app.get('/api/v1/farmer/community/posts', communityAuth, async (req, res) => {
     try {
       const { rows } = await pool.query('SELECT p.*, p.username, (SELECT COUNT(*) FROM community_likes WHERE post_id = p.id) as likes, (SELECT COUNT(*) FROM community_comments WHERE post_id = p.id) as comments_count, EXISTS(SELECT 1 FROM community_likes WHERE post_id = p.id AND farmer_id = $1) as liked_by_me FROM community_posts p WHERE p.id = $2', [req.farmer.id, req.params.id]);
       if (!rows[0]) return res.status(404).json({ error: 'Post not found' });
-      const post = { ...rows[0], media_url: rows[0].image_url, media_type: rows[0].image_url ? (rows[0].image_url.match(/\.(mp4|mov|avi|webm)/i) ? 'video' : 'image') : null, tags: rows[0].crop ? [rows[0].crop] : [] };
+      const post = { ...rows[0], media_url: rows[0].image_url, media_type: rows[0].image_url ? ((rows[0].image_url.match(/\.(mp4|mov|avi|webm)/i) || rows[0].image_url.includes('/video/upload/')) ? 'video' : 'image') : null, tags: rows[0].crop ? [rows[0].crop] : [] };
       res.json({ post });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
