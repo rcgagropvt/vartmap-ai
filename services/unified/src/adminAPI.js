@@ -4600,7 +4600,7 @@ const XLSX = require('xlsx');
 
       // Get loyalty points
       const { rows: loyaltyRows } = await pool.query(
-        `SELECT COALESCE(SUM(points), 0) as total_points FROM loyalty_points WHERE farmer_id = $1`,
+        `SELECT COALESCE(loyalty_points, 0) as total_points FROM farmers WHERE id = $1`,
         [farmerId]
       );
 
@@ -4836,7 +4836,7 @@ const XLSX = require('xlsx');
       // Award points if prize is points
       if (prize.type === 'points' && prize.value) {
         await pool.query(
-          `INSERT INTO loyalty_points (farmer_id, points, reason, created_at) VALUES ($1, $2, 'Spin wheel prize', NOW())`,
+          `INSERT INTO loyalty_transactions (farmer_id, type, points, balance_after, source, description) VALUES ($1, 'earn', $2, (SELECT COALESCE(loyalty_points,0) FROM farmers WHERE id=$1), 'spin_wheel', 'Spin wheel prize')`,
           [farmerId, prize.value]
         );
       }
