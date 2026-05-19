@@ -1431,6 +1431,24 @@ app.get('/api/v1/dashboard', auth, async (req, res) => {
         await pool.query('UPDATE farmers SET loyalty_tier_id = $1, tier_updated_at = NOW() WHERE id = $2', [tier.rows[0].id, farmer_id]);
       }
   
+      // === SYNC to mobile gamification (farmer_points + point_transactions) ===
+      try {
+        const existingFP = await pool.query('SELECT id FROM farmer_points WHERE farmer_id = $1', [farmer_id]);
+        if (type === 'earn') {
+          if (existingFP.rows.length > 0) {
+            await pool.query('UPDATE farmer_points SET total_points = total_points + $1, updated_at = NOW() WHERE farmer_id = $2', [Math.abs(points), farmer_id]);
+          } else {
+            await pool.query('INSERT INTO farmer_points (farmer_id, total_points) VALUES ($1, $2)', [farmer_id, Math.abs(points)]);
+          }
+          await pool.query('INSERT INTO point_transactions (farmer_id, type, points, description) VALUES ($1, $2, $3, $4)', [farmer_id, source || 'admin_loyalty', Math.abs(points), description || 'Loyalty points from admin']);
+        } else if (type === 'redeem') {
+          if (existingFP.rows.length > 0) {
+            await pool.query('UPDATE farmer_points SET total_points = GREATEST(0, total_points - $1), updated_at = NOW() WHERE farmer_id = $2', [Math.abs(points), farmer_id]);
+          }
+          await pool.query('INSERT INTO point_transactions (farmer_id, type, points, description) VALUES ($1, $2, $3, $4)', [farmer_id, 'redemption', -Math.abs(points), description || 'Points redeemed']);
+        }
+      } catch (syncErr) { console.log('Mobile sync from loyalty:', syncErr.message); }
+
       res.json({ transaction: txn.rows[0], new_balance: newBalance, tier: tier.rows[0] || null });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
