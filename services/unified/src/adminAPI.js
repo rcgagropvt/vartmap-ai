@@ -8006,6 +8006,7 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
     // Seed unified tier levels (mobile + web)
     const tierCount = await pool.query('SELECT COUNT(*) FROM loyalty_tiers');
     if (parseInt(tierCount.rows[0].count) === 0 || parseInt(tierCount.rows[0].count) === 4) {
+      await pool.query('UPDATE farmers SET loyalty_tier_id = NULL');
       await pool.query('DELETE FROM loyalty_tiers');
       await pool.query(`INSERT INTO loyalty_tiers (name, min_points, max_points, icon, color, sort_order, active) VALUES
         ('Beej', 0, 200, '🌱', '#86EFAC', 1, true),
