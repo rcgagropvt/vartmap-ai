@@ -1337,7 +1337,7 @@ app.get('/api/v1/dashboard', auth, async (req, res) => {
       const [totalMembers, activeMembers, totalPointsIssued, totalPointsRedeemed, pendingRedemptions, tierDistribution] = await Promise.all([
         pool.query('SELECT COUNT(*) FROM farmers WHERE loyalty_points > 0'),
         pool.query("SELECT COUNT(*) FROM farmers WHERE loyalty_points > 0 AND updated_at > NOW() - INTERVAL '30 days'"),
-        pool.query("SELECT COALESCE(SUM(points),0) as total FROM loyalty_transactions WHERE type='earn'"),
+        pool.query("SELECT COALESCE((SELECT SUM(points) FROM loyalty_transactions WHERE type='earn'),0) + COALESCE((SELECT SUM(points) FROM point_transactions WHERE points > 0),0) as total"),
         pool.query("SELECT COALESCE(SUM(points),0) as total FROM loyalty_transactions WHERE type='redeem'"),
         pool.query("SELECT COUNT(*) FROM redemption_requests WHERE status='pending'"),
         pool.query(`SELECT lt.name, lt.color, lt.icon, COUNT(f.id) as count 
@@ -2538,8 +2538,17 @@ const XLSX = require('xlsx');
   // ---
   app.get('/api/v1/rewards', auth, async (req, res) => {
     try {
-      const r = await pool.query('SELECT r.*, f.name as farmer_name, f.phone FROM rewards r LEFT JOIN farmers f ON r.farmer_id=f.id ORDER BY r.created_at DESC LIMIT 100');
-      const stats = await pool.query("SELECT COUNT(*) as total, COALESCE(SUM(points),0) as total_points, COUNT(CASE WHEN status='earned' THEN 1 END) as pending FROM rewards");
+      const r = await pool.query('SELECT id, farmer_id, type, points, description, status, created_at, farmer_name, phone FROM (
+          SELECT r.id, r.farmer_id, r.type, r.points, r.description, r.status, r.created_at, f.name as farmer_name, f.phone
+          FROM rewards r LEFT JOIN farmers f ON r.farmer_id=f.id
+          UNION ALL
+          SELECT pt.id, pt.farmer_id, pt.type, pt.points, pt.description, 'earned' as status, pt.created_at, f.name as farmer_name, f.phone
+          FROM point_transactions pt LEFT JOIN farmers f ON pt.farmer_id=f.id
+        ) combined ORDER BY created_at DESC LIMIT 100');
+      const stats = await pool.query("SELECT 
+          (SELECT COUNT(*) FROM rewards) + (SELECT COUNT(*) FROM point_transactions) as total,
+          COALESCE((SELECT SUM(points) FROM rewards),0) + COALESCE((SELECT SUM(points) FROM point_transactions),0) as total_points,
+          (SELECT COUNT(*) FROM rewards WHERE status='earned') as pending");
       res.json({ rewards: r.rows, stats: stats.rows[0] });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
@@ -8060,6 +8069,11 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
       results.push('point_transactions');
 
       results.push('app_settings');
+
+      // One-time sync: copy farmer_points totals to farmers.loyalty_points
+      await pool.query(`UPDATE farmers f SET loyalty_points = fp.total_points, lifetime_points = fp.total_points FROM farmer_points fp WHERE fp.farmer_id = f.id AND (f.loyalty_points IS NULL OR f.loyalty_points < fp.total_points)`);
+      results.push('points_synced');
+
 
       res.json({ success: true, tables_created: results });
     } catch (e) {
