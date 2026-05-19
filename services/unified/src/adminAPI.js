@@ -4649,7 +4649,7 @@ const XLSX = require('xlsx');
       res.json({
         farmer,
         points: parseInt(loyaltyRows[0]?.total_points || 0),
-        tier: farmer.loyalty_tier || 'Bronze',
+        tier: farmer.loyalty_tier || 'Beej',
         unreadMessages: parseInt(msgRows[0]?.unread || 0),
         activeOrders: orderCount,
         greeting: `Welcome ${farmer.name || 'Farmer'}! Have a great day.`,
@@ -4807,7 +4807,7 @@ const XLSX = require('xlsx');
 
       res.json({
         points: parseInt(points[0]?.total || 0),
-        tier: farmerRows[0]?.loyalty_tier || 'Bronze',
+        tier: farmerRows[0]?.loyalty_tier || 'Beej',
         history: history
       });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -8003,6 +8003,29 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
       // loyalty_tiers
       await pool.query("CREATE TABLE IF NOT EXISTS loyalty_tiers (id SERIAL PRIMARY KEY, name VARCHAR(50), min_points INTEGER, max_points INTEGER, multiplier DECIMAL(3,2) DEFAULT 1.0, benefits TEXT, color VARCHAR(20), icon VARCHAR(50), active BOOLEAN DEFAULT true, sort_order INTEGER DEFAULT 0)");
       results.push('loyalty_tiers');
+    // Seed unified tier levels (mobile + web)
+    const tierCount = await pool.query('SELECT COUNT(*) FROM loyalty_tiers');
+    if (parseInt(tierCount.rows[0].count) === 0 || parseInt(tierCount.rows[0].count) === 4) {
+      await pool.query('DELETE FROM loyalty_tiers');
+      await pool.query(`INSERT INTO loyalty_tiers (name, min_points, max_points, icon, color, sort_order, active) VALUES
+        ('Beej', 0, 200, '🌱', '#86EFAC', 1, true),
+        ('Ankur', 201, 500, '🌿', '#4ADE80', 2, true),
+        ('Paudha', 501, 1000, '🪴', '#22C55E', 3, true),
+        ('Vruksh', 1001, 2500, '🌳', '#16A34A', 4, true),
+        ('Kisan Star', 2501, 5000, '⭐', '#F59E0B', 5, true),
+        ('Kisan Legend', 5001, 999999, '👑', '#EAB308', 6, true)`);
+      console.log('Seeded 6 unified loyalty tiers');
+    // Reassign all farmers to correct tier based on points
+    await pool.query(`
+      UPDATE farmers f SET loyalty_tier_id = (
+        SELECT lt.id FROM loyalty_tiers lt 
+        WHERE lt.min_points <= COALESCE(f.loyalty_points, 0) 
+        AND (lt.max_points IS NULL OR lt.max_points >= COALESCE(f.loyalty_points, 0))
+        ORDER BY lt.min_points DESC LIMIT 1
+      )
+    `);
+    console.log('Reassigned all farmers to correct tiers');
+    }
 
       // spin_wheels
       await pool.query("CREATE TABLE IF NOT EXISTS spin_wheels (id SERIAL PRIMARY KEY, name VARCHAR(100), description TEXT, type VARCHAR(30) DEFAULT 'spin_wheel', status VARCHAR(20) DEFAULT 'active', start_date TIMESTAMP, end_date TIMESTAMP, max_spins_per_farmer INTEGER DEFAULT 1, total_budget DECIMAL(10,2) DEFAULT 0, spent_budget DECIMAL(10,2) DEFAULT 0, created_by TEXT, created_at TIMESTAMP DEFAULT NOW())");
@@ -8049,7 +8072,7 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
       await pool.query("ALTER TABLE farmers ADD COLUMN IF NOT EXISTS lifetime_points INTEGER DEFAULT 0");
       await pool.query("ALTER TABLE farmers ADD COLUMN IF NOT EXISTS loyalty_tier_id INTEGER");
       await pool.query("ALTER TABLE farmers ADD COLUMN IF NOT EXISTS tier_updated_at TIMESTAMP");
-      await pool.query("ALTER TABLE farmers ADD COLUMN IF NOT EXISTS loyalty_tier VARCHAR(20) DEFAULT 'Bronze'");
+      await pool.query("ALTER TABLE farmers ADD COLUMN IF NOT EXISTS loyalty_tier VARCHAR(20) DEFAULT 'Beej'");
       results.push('farmers_columns');
 
       // app_settings
