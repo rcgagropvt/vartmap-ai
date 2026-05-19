@@ -2538,17 +2538,14 @@ const XLSX = require('xlsx');
   // ---
   app.get('/api/v1/rewards', auth, async (req, res) => {
     try {
-      const r = await pool.query('SELECT id, farmer_id, type, points, description, status, created_at, farmer_name, phone FROM (
+      const r = await pool.query(`SELECT id, farmer_id, type, points, description, status, created_at, farmer_name, phone FROM (
           SELECT r.id, r.farmer_id, r.type, r.points, r.description, r.status, r.created_at, f.name as farmer_name, f.phone
           FROM rewards r LEFT JOIN farmers f ON r.farmer_id=f.id
           UNION ALL
           SELECT pt.id, pt.farmer_id, pt.type, pt.points, pt.description, 'earned' as status, pt.created_at, f.name as farmer_name, f.phone
           FROM point_transactions pt LEFT JOIN farmers f ON pt.farmer_id=f.id
-        ) combined ORDER BY created_at DESC LIMIT 100');
-      const stats = await pool.query("SELECT 
-          (SELECT COUNT(*) FROM rewards) + (SELECT COUNT(*) FROM point_transactions) as total,
-          COALESCE((SELECT SUM(points) FROM rewards),0) + COALESCE((SELECT SUM(points) FROM point_transactions),0) as total_points,
-          (SELECT COUNT(*) FROM rewards WHERE status='earned') as pending");
+        ) combined ORDER BY created_at DESC LIMIT 100`);
+      const stats = await pool.query(`SELECT (SELECT COUNT(*) FROM rewards) + (SELECT COUNT(*) FROM point_transactions) as total, COALESCE((SELECT SUM(points) FROM rewards),0) + COALESCE((SELECT SUM(points) FROM point_transactions),0) as total_points, (SELECT COUNT(*) FROM rewards WHERE status='earned') as pending`);
       res.json({ rewards: r.rows, stats: stats.rows[0] });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
