@@ -4772,11 +4772,11 @@ const XLSX = require('xlsx');
     try {
       const farmerId = req.farmer.id;
       const { rows: points } = await pool.query(
-        `SELECT COALESCE(SUM(points), 0) as total FROM loyalty_points WHERE farmer_id = $1`,
+        `SELECT COALESCE(loyalty_points, 0) as total FROM farmers WHERE id = $1`,
         [farmerId]
       );
       const { rows: history } = await pool.query(
-        `SELECT * FROM loyalty_points WHERE farmer_id = $1 ORDER BY created_at DESC LIMIT 20`,
+        `SELECT type, points, balance_after, source, description, created_at FROM loyalty_transactions WHERE farmer_id = $1 ORDER BY created_at DESC LIMIT 20`,
         [farmerId]
       );
       const { rows: farmerRows } = await pool.query(`SELECT loyalty_tier FROM farmers WHERE id = $1`, [farmerId]);
@@ -4792,7 +4792,7 @@ const XLSX = require('xlsx');
   app.get('/api/v1/farmer/coupons', farmerAuth, async (req, res) => {
     try {
       const { rows } = await pool.query(
-        `SELECT * FROM coupons WHERE (farmer_id = $1 OR farmer_id IS NULL) AND expires_at > NOW() AND used = false ORDER BY created_at DESC`,
+        `SELECT cc.code, cp.name as campaign_name, cp.discount_type, cp.discount_value, cp.end_date as expires_at, cc.status FROM coupon_codes cc JOIN coupon_campaigns cp ON cc.campaign_id = cp.id WHERE cc.status = 'available' AND cp.status = 'active' AND (cp.end_date IS NULL OR cp.end_date > NOW()) ORDER BY cc.created_at DESC LIMIT 20`,
         [req.farmer.id]
       );
       res.json({ coupons: rows });
