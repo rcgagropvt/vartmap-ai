@@ -1562,7 +1562,7 @@ app.get('/api/v1/dashboard', auth, async (req, res) => {
         `SELECT f.id, f.name, f.phone, f.village, f.loyalty_points, f.lifetime_points,
                 lt.name as tier_name, lt.icon as tier_icon, lt.color as tier_color
          FROM farmers f LEFT JOIN loyalty_tiers lt ON lt.id = f.loyalty_tier_id
-         WHERE f.lifetime_points > 0 ORDER BY f.lifetime_points DESC LIMIT $1`,
+         WHERE f.lifetime_points > 0 AND f.name IS NOT NULL AND f.name != '' ORDER BY f.lifetime_points DESC LIMIT $1`,
         [limit]
       );
       res.json(result.rows);
