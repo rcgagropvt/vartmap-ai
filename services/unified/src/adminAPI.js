@@ -8005,7 +8005,7 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
       results.push('loyalty_tiers');
     // Seed unified tier levels (mobile + web)
     const tierCount = await pool.query('SELECT COUNT(*) FROM loyalty_tiers');
-    if (parseInt(tierCount.rows[0].count) === 0 || parseInt(tierCount.rows[0].count) === 4) {
+    if (parseInt(tierCount.rows[0].count) <= 6) {
       await pool.query('UPDATE farmers SET loyalty_tier_id = NULL');
       await pool.query('DELETE FROM loyalty_tiers');
       await pool.query(`INSERT INTO loyalty_tiers (name, min_points, max_points, icon, color, sort_order, active) VALUES
@@ -8026,6 +8026,9 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
       )
     `);
     console.log('Reassigned all farmers to correct tiers');
+    // Also update the text loyalty_tier column
+    await pool.query(`UPDATE farmers f SET loyalty_tier = lt.name FROM loyalty_tiers lt WHERE lt.id = f.loyalty_tier_id`);
+    console.log('Updated farmers.loyalty_tier text column');
     }
 
       // spin_wheels
