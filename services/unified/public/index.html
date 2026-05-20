@@ -1298,7 +1298,7 @@ async function bulkStatus(status) {
   try { await api('/api/v1/chats/bulk/status', {method:'POST', body:JSON.stringify({session_ids:_selectedChats, status:status})}); _selectedChats=[]; loadChats(); } catch(e){alert(e.message);}
 }
 function bulkExport() {
-  var token = localStorage.getItem('token') || sessionStorage.getItem('token');
+  var token = localStorage.getItem('vartmap_token') || sessionStorage.getItem('token');
   var params = '?token=' + token;
   if (_chatFilters.status) params += '&status=' + _chatFilters.status;
   window.open('/api/v1/chats/export/csv' + params, '_blank');
@@ -2082,7 +2082,7 @@ async function loadChatAnalytics() {
 }
 
 function exportChatsCSV() {
-  var token = localStorage.getItem('token') || sessionStorage.getItem('token');
+  var token = localStorage.getItem('vartmap_token') || sessionStorage.getItem('token');
   window.open('/api/v1/chats/export/csv?token=' + token, '_blank');
 }
 
@@ -3764,7 +3764,7 @@ async function showLoyaltyTab(tab) {
   } else if (tab === 'pointRules') {
     // Fetch point rules
     try {
-      const rulesRes = await fetch('/api/v1/loyalty/point-rules', { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') } });
+      const rulesRes = await fetch('/api/v1/loyalty/point-rules', { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('vartmap_token') } });
       const rules = await rulesRes.json();
       container.innerHTML = `
         <div style="background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
@@ -6738,7 +6738,7 @@ async function saveRule() {
   };
   if (!body.type || !body.points) return alert('Type and points are required');
   try {
-    const r = await fetch('/api/v1/loyalty/point-rules', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('token') }, body: JSON.stringify(body) });
+    const r = await fetch('/api/v1/loyalty/point-rules', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('vartmap_token') }, body: JSON.stringify(body) });
     if (!r.ok) { const e = await r.json(); throw new Error(e.error); }
     closeModal();
     showLoyaltyTab('pointRules');
@@ -6747,7 +6747,7 @@ async function saveRule() {
 
 async function editRule(id) {
   try {
-    const res = await fetch('/api/v1/loyalty/point-rules', { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') } });
+    const res = await fetch('/api/v1/loyalty/point-rules', { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('vartmap_token') } });
     const rules = await res.json();
     const rule = rules.find(r => r.id === id);
     if (!rule) return alert('Rule not found');
@@ -6775,7 +6775,7 @@ async function updateRule(id) {
     active: document.getElementById('ruleActive').value === 'true'
   };
   try {
-    const r = await fetch('/api/v1/loyalty/point-rules/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('token') }, body: JSON.stringify(body) });
+    const r = await fetch('/api/v1/loyalty/point-rules/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('vartmap_token') }, body: JSON.stringify(body) });
     if (!r.ok) { const e = await r.json(); throw new Error(e.error); }
     closeModal();
     showLoyaltyTab('pointRules');
@@ -6785,7 +6785,7 @@ async function updateRule(id) {
 async function deleteRule(id) {
   if (!confirm('Delete this rule? Farmers will no longer earn points for this action.')) return;
   try {
-    await fetch('/api/v1/loyalty/point-rules/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') } });
+    await fetch('/api/v1/loyalty/point-rules/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + localStorage.getItem('vartmap_token') } });
     showLoyaltyTab('pointRules');
   } catch(e) { alert('Error: ' + e.message); }
 }
