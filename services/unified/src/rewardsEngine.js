@@ -4,12 +4,12 @@
 // ============================================
 
 const LEVELS = [
-  { level: 1, name: 'Beej', nameHi: 'बीज', minPoints: 0, icon: '🌱', color: '#86EFAC' },
-  { level: 2, name: 'Ankur', nameHi: 'अंकुर', minPoints: 201, icon: '🌿', color: '#4ADE80' },
-  { level: 3, name: 'Paudha', nameHi: 'पौधा', minPoints: 501, icon: '🪴', color: '#22C55E' },
-  { level: 4, name: 'Vruksh', nameHi: 'वृक्ष', minPoints: 1001, icon: '🌳', color: '#16A34A' },
-  { level: 5, name: 'Kisan Star', nameHi: 'किसान स्टार', minPoints: 2501, icon: '⭐', color: '#F59E0B' },
-  { level: 6, name: 'Kisan Legend', nameHi: 'किसान लीजेंड', minPoints: 5001, icon: '👑', color: '#EAB308' },
+  { level: 1, name: 'Vart Bronze', nameHi: 'वार्ट ब्रॉन्ज़', minPoints: 0, icon: '🥉', color: '#CD7F32' },
+  { level: 2, name: 'Vart Silver', nameHi: 'वार्ट सिल्वर', minPoints: 301, icon: '🥈', color: '#C0C0C0' },
+  { level: 3, name: 'Vart Gold', nameHi: 'वार्ट गोल्ड', minPoints: 1001, icon: '🥇', color: '#FFD700' },
+  { level: 4, name: 'Vart Platinum', nameHi: 'वार्ट प्लैटिनम', minPoints: 3001, icon: '💎', color: '#E5E4E2' },
+  { level: 5, name: 'Vart Diamond', nameHi: 'वार्ट डायमंड', minPoints: 8001, icon: '💍', color: '#B9F2FF' },
+  { level: 6, name: 'Vart Legend', nameHi: 'वार्ट लीजेंड', minPoints: 20001, icon: '👑', color: '#EAB308' },
 ];
 
 const POINT_RULES = {

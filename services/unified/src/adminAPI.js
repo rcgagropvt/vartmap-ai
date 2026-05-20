@@ -4649,7 +4649,7 @@ const XLSX = require('xlsx');
       res.json({
         farmer,
         points: parseInt(loyaltyRows[0]?.total_points || 0),
-        tier: farmer.loyalty_tier || 'Beej',
+        tier: farmer.loyalty_tier || 'Vart Bronze',
         unreadMessages: parseInt(msgRows[0]?.unread || 0),
         activeOrders: orderCount,
         greeting: `Welcome ${farmer.name || 'Farmer'}! Have a great day.`,
@@ -4807,7 +4807,7 @@ const XLSX = require('xlsx');
 
       res.json({
         points: parseInt(points[0]?.total || 0),
-        tier: farmerRows[0]?.loyalty_tier || 'Beej',
+        tier: farmerRows[0]?.loyalty_tier || 'Vart Bronze',
         history: history
       });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -8009,12 +8009,12 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
       await pool.query('UPDATE farmers SET loyalty_tier_id = NULL');
       await pool.query('DELETE FROM loyalty_tiers');
       await pool.query(`INSERT INTO loyalty_tiers (name, min_points, max_points, icon, color, sort_order, active) VALUES
-        ('Beej', 0, 200, '🌱', '#86EFAC', 1, true),
-        ('Ankur', 201, 500, '🌿', '#4ADE80', 2, true),
-        ('Paudha', 501, 1000, '🪴', '#22C55E', 3, true),
-        ('Vruksh', 1001, 2500, '🌳', '#16A34A', 4, true),
-        ('Kisan Star', 2501, 5000, '⭐', '#F59E0B', 5, true),
-        ('Kisan Legend', 5001, 999999, '👑', '#EAB308', 6, true)`);
+        ('Vart Bronze', 0, 300, '🥉', '#CD7F32', 1, true),
+        ('Vart Silver', 301, 1000, '🥈', '#C0C0C0', 2, true),
+        ('Vart Gold', 1001, 3000, '🥇', '#FFD700', 3, true),
+        ('Vart Platinum', 3001, 8000, '💎', '#E5E4E2', 4, true),
+        ('Vart Diamond', 8001, 20000, '💍', '#B9F2FF', 5, true),
+        ('Vart Legend', 20001, 999999, '👑', '#EAB308', 6, true)`);
       console.log('Seeded 6 unified loyalty tiers');
     // Reassign all farmers to correct tier based on points
     await pool.query(`
@@ -8073,14 +8073,14 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
       await pool.query("ALTER TABLE farmers ADD COLUMN IF NOT EXISTS lifetime_points INTEGER DEFAULT 0");
       await pool.query("ALTER TABLE farmers ADD COLUMN IF NOT EXISTS loyalty_tier_id INTEGER");
       await pool.query("ALTER TABLE farmers ADD COLUMN IF NOT EXISTS tier_updated_at TIMESTAMP");
-      await pool.query("ALTER TABLE farmers ADD COLUMN IF NOT EXISTS loyalty_tier VARCHAR(20) DEFAULT 'Beej'");
+      await pool.query("ALTER TABLE farmers ADD COLUMN IF NOT EXISTS loyalty_tier VARCHAR(20) DEFAULT 'Vart Bronze'");
       results.push('farmers_columns');
 
       // app_settings
       await pool.query("CREATE TABLE IF NOT EXISTS app_settings (id SERIAL PRIMARY KEY, key VARCHAR(100) UNIQUE, value TEXT, created_at TIMESTAMP DEFAULT NOW())");
       
       // farmer_points (mobile gamification)
-      await pool.query("CREATE TABLE IF NOT EXISTS farmer_points (id SERIAL PRIMARY KEY, farmer_id TEXT UNIQUE NOT NULL, total_points INTEGER DEFAULT 0, current_level INTEGER DEFAULT 1, level_name VARCHAR(50) DEFAULT 'Beej', streak_days INTEGER DEFAULT 0, longest_streak INTEGER DEFAULT 0, last_active_date DATE, referral_code VARCHAR(50), total_referrals INTEGER DEFAULT 0, updated_at TIMESTAMP DEFAULT NOW(), created_at TIMESTAMP DEFAULT NOW())");
+      await pool.query("CREATE TABLE IF NOT EXISTS farmer_points (id SERIAL PRIMARY KEY, farmer_id TEXT UNIQUE NOT NULL, total_points INTEGER DEFAULT 0, current_level INTEGER DEFAULT 1, level_name VARCHAR(50) DEFAULT 'Vart Bronze', streak_days INTEGER DEFAULT 0, longest_streak INTEGER DEFAULT 0, last_active_date DATE, referral_code VARCHAR(50), total_referrals INTEGER DEFAULT 0, updated_at TIMESTAMP DEFAULT NOW(), created_at TIMESTAMP DEFAULT NOW())");
       results.push('farmer_points');
 
       // point_transactions (mobile gamification history)
