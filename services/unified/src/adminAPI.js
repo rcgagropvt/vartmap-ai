@@ -5574,6 +5574,79 @@ app.get('/api/v1/farmer/community/posts', communityAuth, async (req, res) => {
   });
 
 
+
+  // GET /api/v1/farmer/redemption-catalog - Browse redeemable items
+  app.get('/api/v1/farmer/redemption-catalog', farmerAuth, async (req, res) => {
+    try {
+      const farmerId = req.farmer.id;
+      const farmer = await pool.query('SELECT loyalty_points FROM farmers WHERE id = $1', [farmerId]);
+      const points = farmer.rows[0]?.loyalty_points || 0;
+      const catalog = await pool.query('SELECT id, name, description, category, points_required, value_inr, redemption_type, stock, redeemed_count FROM redemption_catalog WHERE active = true ORDER BY points_required ASC');
+      const items = catalog.rows.map(item => ({
+        ...item,
+        can_redeem: points >= item.points_required && (item.stock === -1 || item.redeemed_count < item.stock),
+        in_stock: item.stock === -1 || item.redeemed_count < item.stock
+      }));
+      res.json({ points, items });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // POST /api/v1/farmer/redeem - Redeem a catalog item
+  app.post('/api/v1/farmer/redeem', farmerAuth, async (req, res) => {
+    try {
+      const farmerId = req.farmer.id;
+      const { catalog_item_id, delivery_address } = req.body;
+      if (!catalog_item_id) return res.status(400).json({ error: 'catalog_item_id required' });
+
+      const farmer = await pool.query('SELECT id, phone, loyalty_points FROM farmers WHERE id = $1', [farmerId]);
+      if (!farmer.rows.length) return res.status(404).json({ error: 'Farmer not found' });
+
+      const item = await pool.query('SELECT * FROM redemption_catalog WHERE id = $1 AND active = true', [catalog_item_id]);
+      if (!item.rows.length) return res.status(404).json({ error: 'Item not found or inactive' });
+      if (item.rows[0].stock !== -1 && item.rows[0].redeemed_count >= item.rows[0].stock) return res.status(400).json({ error: 'Out of stock' });
+      if ((farmer.rows[0].loyalty_points || 0) < item.rows[0].points_required) return res.status(400).json({ error: 'Insufficient points', required: item.rows[0].points_required, available: farmer.rows[0].loyalty_points });
+
+      const newBalance = farmer.rows[0].loyalty_points - item.rows[0].points_required;
+      await pool.query('UPDATE farmers SET loyalty_points = $1 WHERE id = $2', [newBalance, farmerId]);
+      await pool.query('UPDATE redemption_catalog SET redeemed_count = redeemed_count + 1 WHERE id = $1', [catalog_item_id]);
+
+      // Also sync to farmer_points
+      await pool.query('UPDATE farmer_points SET total_points = total_points - $1 WHERE farmer_id = $2', [item.rows[0].points_required, farmerId]);
+
+      await pool.query(
+        `INSERT INTO loyalty_transactions (farmer_id, type, points, balance_after, source, description) VALUES ($1, 'redeem', $2, $3, 'redemption', $4)`,
+        [farmerId, item.rows[0].points_required, newBalance, 'Redeemed: ' + item.rows[0].name]
+      );
+
+      await pool.query(
+        `INSERT INTO point_transactions (farmer_id, type, points, description) VALUES ($1, 'redeem', $2, $3)`,
+        [farmerId, -item.rows[0].points_required, 'Redeemed: ' + item.rows[0].name]
+      );
+
+      const request = await pool.query(
+        `INSERT INTO redemption_requests (farmer_id, catalog_item_id, points_spent, farmer_phone, delivery_address, status) VALUES ($1, $2, $3, $4, $5, 'pending') RETURNING *`,
+        [farmerId, catalog_item_id, item.rows[0].points_required, farmer.rows[0].phone, delivery_address || '']
+      );
+
+      res.json({ success: true, redemption: request.rows[0], new_balance: newBalance, item_name: item.rows[0].name });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // GET /api/v1/farmer/redemptions - My redemption history
+  app.get('/api/v1/farmer/redemptions', farmerAuth, async (req, res) => {
+    try {
+      const farmerId = req.farmer.id;
+      const result = await pool.query(
+        `SELECT rr.*, rc.name as item_name, rc.description as item_description, rc.category, rc.redemption_type
+         FROM redemption_requests rr LEFT JOIN redemption_catalog rc ON rc.id = rr.catalog_item_id
+         WHERE rr.farmer_id = $1 ORDER BY rr.created_at DESC`,
+        [farmerId]
+      );
+      res.json({ redemptions: result.rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+
 // ===== YOUTUBE SHORTS AUTO-SYNC =====
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || '';
 const YOUTUBE_CHANNEL_ID = process.env.YOUTUBE_CHANNEL_ID || '';
