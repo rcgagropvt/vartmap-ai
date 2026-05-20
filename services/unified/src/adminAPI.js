@@ -4993,6 +4993,9 @@ const XLSX = require('xlsx');
         await pool.query("INSERT INTO wa_messages (id, session_id, farmer_id, direction, message_type, content, created_at) VALUES (gen_random_uuid(), $1, $2, 'outbound', 'text', $3, NOW())", [sessionId, farmerId, reply]);
       } catch (syncErr) { console.log('Chat sync error:', syncErr.message); }
 
+      // Award daily chat points
+      try { await awardPoints(pool, farmerId, 'daily_chat'); } catch(e) {}
+
       res.json({ reply });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
