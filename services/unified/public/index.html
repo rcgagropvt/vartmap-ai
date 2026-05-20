@@ -3648,6 +3648,7 @@ async function loadLoyaltyProgram() {
         <button onclick="showLoyaltyTab('redemptions')" id="tab-redemptions" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">Redemptions</button>
         <button onclick="showLoyaltyTab('leaderboard')" id="tab-leaderboard" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">Leaderboard</button>
         <button onclick="showLoyaltyTab('tierDist')" id="tab-tierDist" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:6px;cursor:pointer;background:#fff">Tier Distribution</button>
+        <button onclick="showLoyaltyTab('pointRules')" id="tab-pointRules" class="loyalty-tab" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;cursor:pointer;font-size:13px;font-weight:500">Point Rules</button>
       </div>
 
       <div id="loyaltyTabContent"></div>
@@ -3662,7 +3663,7 @@ async function loadLoyaltyProgram() {
   }
 }
 
-function showLoyaltyTab(tab) {
+async function showLoyaltyTab(tab) {
   document.querySelectorAll('.loyalty-tab').forEach(b => { b.style.background = '#fff'; b.style.color = '#1e293b'; });
   const activeBtn = document.getElementById('tab-' + tab);
   if (activeBtn) { activeBtn.style.background = '#1e293b'; activeBtn.style.color = '#fff'; }
@@ -3760,6 +3761,50 @@ function showLoyaltyTab(tab) {
           </tbody>
         </table>
       </div>` : '<div style="padding:40px;text-align:center;color:#6b7280">No farmers with points yet. Award points to get started!</div>';
+  } else if (tab === 'pointRules') {
+    // Fetch point rules
+    try {
+      const rulesRes = await fetch('/api/v1/loyalty/point-rules', { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') } });
+      const rules = await rulesRes.json();
+      container.innerHTML = `
+        <div style="background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h3 style="margin:0">Point Rules</h3>
+            <button onclick="showAddRuleModal()" style="background:#006a61;color:#fff;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-weight:600">+ Add Rule</button>
+          </div>
+          <p style="color:#6b7280;font-size:13px;margin-bottom:16px">Manage how farmers earn points. Changes sync to the mobile app automatically.</p>
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr style="border-bottom:2px solid #e5e7eb">
+                <th style="text-align:left;padding:10px">Icon</th>
+                <th style="text-align:left;padding:10px">Type</th>
+                <th style="text-align:left;padding:10px">Description</th>
+                <th style="text-align:center;padding:10px">Points</th>
+                <th style="text-align:center;padding:10px">Frequency</th>
+                <th style="text-align:center;padding:10px">Status</th>
+                <th style="text-align:center;padding:10px">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(Array.isArray(rules) ? rules : []).map(r => `
+                <tr style="border-bottom:1px solid #f1f5f9">
+                  <td style="padding:10px;font-size:20px">${r.icon || '🎯'}</td>
+                  <td style="padding:10px;font-weight:600">${r.type}</td>
+                  <td style="padding:10px;color:#4b5563">${r.description || ''}</td>
+                  <td style="padding:10px;text-align:center;font-weight:700;color:#006a61">+${r.points}</td>
+                  <td style="padding:10px;text-align:center"><span style="background:${r.frequency==='once'?'#DBEAFE':r.frequency==='daily'?'#DCFCE7':r.frequency==='repeatable'?'#FEF3C7':'#F3E8FF'};padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600">${r.frequency}${r.frequency==='daily_max'?' ('+r.daily_max+'/day)':''}</span></td>
+                  <td style="padding:10px;text-align:center">${r.active ? '<span style="color:#16a34a">Active</span>' : '<span style="color:#dc2626">Inactive</span>'}</td>
+                  <td style="padding:10px;text-align:center">
+                    <button onclick="editRule(${r.id})" style="background:none;border:1px solid #d1d5db;border-radius:6px;padding:4px 10px;cursor:pointer;margin-right:4px;font-size:12px">Edit</button>
+                    <button onclick="deleteRule(${r.id})" style="background:none;border:1px solid #fecaca;color:#dc2626;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px">Delete</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    } catch(e) { container.innerHTML = '<div style="padding:40px;text-align:center;color:red">Error: ' + e.message + '</div>'; }
+  
   } else if (tab === 'tierDist') {
     const dist = overview.tier_distribution || [];
     const total = dist.reduce((s, t) => s + (+t.count), 0) || 1;
@@ -6669,6 +6714,82 @@ async function loadAuditLog() {
 
 // ------
 if (TOKEN && USER) showApp();
+
+async function showAddRuleModal() {
+  openModal('Add Point Rule', `
+    <div class="form-group"><label>Type (unique key)</label><input id="ruleType" placeholder="e.g. daily_quiz"></div>
+    <div class="form-group"><label>Points</label><input id="rulePoints" type="number" min="1" placeholder="e.g. 25"></div>
+    <div class="form-group"><label>Description</label><input id="ruleDesc" placeholder="e.g. Complete daily quiz"></div>
+    <div class="form-group"><label>Icon (emoji)</label><input id="ruleIcon" placeholder="e.g. 📝" value="🎯"></div>
+    <div class="form-group"><label>Frequency</label><select id="ruleFreq"><option value="once">Once (one-time)</option><option value="daily">Daily</option><option value="repeatable">Repeatable</option><option value="daily_max">Daily with max</option></select></div>
+    <div class="form-group"><label>Daily Max (if daily_max)</label><input id="ruleDailyMax" type="number" min="1" value="1"></div>
+    <button onclick="saveRule()" style="background:#006a61;color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;width:100%;font-weight:600;margin-top:8px">Save Rule</button>
+  `);
+}
+
+async function saveRule() {
+  const body = {
+    type: document.getElementById('ruleType').value,
+    points: parseInt(document.getElementById('rulePoints').value),
+    description: document.getElementById('ruleDesc').value,
+    icon: document.getElementById('ruleIcon').value || '🎯',
+    frequency: document.getElementById('ruleFreq').value,
+    daily_max: parseInt(document.getElementById('ruleDailyMax').value) || 1
+  };
+  if (!body.type || !body.points) return alert('Type and points are required');
+  try {
+    const r = await fetch('/api/v1/loyalty/point-rules', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('token') }, body: JSON.stringify(body) });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error); }
+    closeModal();
+    showLoyaltyTab('pointRules');
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function editRule(id) {
+  try {
+    const res = await fetch('/api/v1/loyalty/point-rules', { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') } });
+    const rules = await res.json();
+    const rule = rules.find(r => r.id === id);
+    if (!rule) return alert('Rule not found');
+    openModal('Edit Point Rule', `
+      <div class="form-group"><label>Type</label><input id="ruleType" value="${rule.type}"></div>
+      <div class="form-group"><label>Points</label><input id="rulePoints" type="number" value="${rule.points}"></div>
+      <div class="form-group"><label>Description</label><input id="ruleDesc" value="${rule.description || ''}"></div>
+      <div class="form-group"><label>Icon</label><input id="ruleIcon" value="${rule.icon || '🎯'}"></div>
+      <div class="form-group"><label>Frequency</label><select id="ruleFreq"><option value="once" ${rule.frequency==='once'?'selected':''}>Once</option><option value="daily" ${rule.frequency==='daily'?'selected':''}>Daily</option><option value="repeatable" ${rule.frequency==='repeatable'?'selected':''}>Repeatable</option><option value="daily_max" ${rule.frequency==='daily_max'?'selected':''}>Daily with max</option></select></div>
+      <div class="form-group"><label>Daily Max</label><input id="ruleDailyMax" type="number" value="${rule.daily_max || 1}"></div>
+      <div class="form-group"><label>Active</label><select id="ruleActive"><option value="true" ${rule.active?'selected':''}>Active</option><option value="false" ${!rule.active?'selected':''}>Inactive</option></select></div>
+      <button onclick="updateRule(${id})" style="background:#006a61;color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;width:100%;font-weight:600;margin-top:8px">Update Rule</button>
+    `);
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function updateRule(id) {
+  const body = {
+    type: document.getElementById('ruleType').value,
+    points: parseInt(document.getElementById('rulePoints').value),
+    description: document.getElementById('ruleDesc').value,
+    icon: document.getElementById('ruleIcon').value,
+    frequency: document.getElementById('ruleFreq').value,
+    daily_max: parseInt(document.getElementById('ruleDailyMax').value) || 1,
+    active: document.getElementById('ruleActive').value === 'true'
+  };
+  try {
+    const r = await fetch('/api/v1/loyalty/point-rules/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('token') }, body: JSON.stringify(body) });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error); }
+    closeModal();
+    showLoyaltyTab('pointRules');
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function deleteRule(id) {
+  if (!confirm('Delete this rule? Farmers will no longer earn points for this action.')) return;
+  try {
+    await fetch('/api/v1/loyalty/point-rules/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') } });
+    showLoyaltyTab('pointRules');
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
 </script>
 </body>
 </html>

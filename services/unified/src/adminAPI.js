@@ -1356,6 +1356,60 @@ app.get('/api/v1/dashboard', auth, async (req, res) => {
   });
   
   // GET /api/v1/loyalty/tiers - List all tiers
+
+  // GET /api/v1/loyalty/point-rules - List all point rules
+  app.get('/api/v1/loyalty/point-rules', auth, async (req, res) => {
+    try {
+      const result = await pool.query('SELECT * FROM point_rules ORDER BY sort_order');
+      res.json(result.rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // POST /api/v1/loyalty/point-rules - Add new rule
+  app.post('/api/v1/loyalty/point-rules', auth, async (req, res) => {
+    try {
+      const { type, points, description, description_hi, icon, frequency, daily_max, active } = req.body;
+      if (!type || !points) return res.status(400).json({ error: 'type and points required' });
+      const result = await pool.query(
+        `INSERT INTO point_rules (type, points, description, description_hi, icon, frequency, daily_max, active)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+        [type, points, description || '', description_hi || '', icon || '🎯', frequency || 'once', daily_max || 1, active !== false]
+      );
+      res.json(result.rows[0]);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // PUT /api/v1/loyalty/point-rules/:id - Update rule
+  app.put('/api/v1/loyalty/point-rules/:id', auth, async (req, res) => {
+    try {
+      const { type, points, description, description_hi, icon, frequency, daily_max, active, sort_order } = req.body;
+      const result = await pool.query(
+        `UPDATE point_rules SET type=COALESCE($1,type), points=COALESCE($2,points), description=COALESCE($3,description),
+         description_hi=COALESCE($4,description_hi), icon=COALESCE($5,icon), frequency=COALESCE($6,frequency),
+         daily_max=COALESCE($7,daily_max), active=COALESCE($8,active), sort_order=COALESCE($9,sort_order) WHERE id=$10 RETURNING *`,
+        [type, points, description, description_hi, icon, frequency, daily_max, active, sort_order, req.params.id]
+      );
+      if (!result.rows.length) return res.status(404).json({ error: 'Rule not found' });
+      res.json(result.rows[0]);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // DELETE /api/v1/loyalty/point-rules/:id - Delete rule
+  app.delete('/api/v1/loyalty/point-rules/:id', auth, async (req, res) => {
+    try {
+      await pool.query('DELETE FROM point_rules WHERE id = $1', [req.params.id]);
+      res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // GET /api/v1/farmer/point-rules - Farmer-facing (active rules only)
+  app.get('/api/v1/farmer/point-rules', farmerAuth, async (req, res) => {
+    try {
+      const result = await pool.query('SELECT type, points, description, description_hi, icon, frequency FROM point_rules WHERE active = true ORDER BY sort_order');
+      res.json({ rules: result.rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
   app.get('/api/v1/loyalty/tiers', auth, async (req, res) => {
     try {
       const result = await pool.query('SELECT * FROM loyalty_tiers ORDER BY sort_order');
@@ -8147,6 +8201,41 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
       await pool.query("CREATE TABLE IF NOT EXISTS redemption_requests (id SERIAL PRIMARY KEY, farmer_id TEXT, catalog_item_id INTEGER, points_spent INTEGER, status VARCHAR(20) DEFAULT 'pending', admin_notes TEXT, created_at TIMESTAMP DEFAULT NOW(), processed_at TIMESTAMP)");
       results.push('redemption_requests');
 
+    // point_rules (admin-managed earning rules)
+    await pool.query(`CREATE TABLE IF NOT EXISTS point_rules (
+      id SERIAL PRIMARY KEY,
+      type VARCHAR(50) UNIQUE NOT NULL,
+      points INTEGER NOT NULL DEFAULT 0,
+      description VARCHAR(200),
+      description_hi VARCHAR(200),
+      icon VARCHAR(10),
+      frequency VARCHAR(20) DEFAULT 'once',
+      daily_max INTEGER DEFAULT 1,
+      active BOOLEAN DEFAULT true,
+      sort_order INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT NOW()
+    )`);
+    // Seed default rules if empty
+    const rulesCount = await pool.query('SELECT COUNT(*) FROM point_rules');
+    if (parseInt(rulesCount.rows[0].count) === 0) {
+      await pool.query(`INSERT INTO point_rules (type, points, description, icon, frequency, sort_order) VALUES
+        ('registration', 100, 'Welcome bonus for registration', '🎉', 'once', 1),
+        ('profile_complete', 50, 'Profile completed', '👤', 'once', 2),
+        ('daily_login', 5, 'Daily login', '📅', 'daily', 3),
+        ('daily_chat', 10, 'Daily AI chat', '🤖', 'daily', 4),
+        ('streak_7', 50, '7-day streak bonus', '🔥', 'repeatable', 5),
+        ('streak_14', 100, '14-day streak bonus', '🔥', 'repeatable', 6),
+        ('streak_30', 250, '30-day streak bonus', '🔥', 'repeatable', 7),
+        ('referral', 200, 'Friend registered via your referral', '👥', 'repeatable', 8),
+        ('referral_bonus', 50, 'Welcome bonus from referral', '🎁', 'once', 9),
+        ('soil_health_check', 25, 'First soil health check', '🧪', 'once', 10),
+        ('pest_alert_viewed', 15, 'First pest alert viewed', '🐛', 'once', 11),
+        ('community_post', 10, 'Posted in community', '💬', 'daily_max', 12)
+      ON CONFLICT (type) DO NOTHING`);
+      console.log('Seeded default point rules');
+    }
+    results.push('point_rules');
+
       // Add loyalty columns to farmers if missing
       await pool.query("ALTER TABLE farmers ADD COLUMN IF NOT EXISTS loyalty_points INTEGER DEFAULT 0");
       await pool.query("ALTER TABLE farmers ADD COLUMN IF NOT EXISTS lifetime_points INTEGER DEFAULT 0");
@@ -8216,7 +8305,16 @@ app.get("/api/v1/crop-calendar/init-tables", async (req, res) => {
 
   // Award points
   async function awardPoints(pool, farmerId, type, extraDesc) {
-    const rule = POINT_RULES[type];
+    // Try DB rules first, fallback to hardcoded
+    let rule;
+    try {
+      const dbRule = await pool.query('SELECT * FROM point_rules WHERE type = $1 AND active = true', [type]);
+      if (dbRule.rows.length > 0) {
+        const r = dbRule.rows[0];
+        rule = { points: r.points, description: r.description, once: r.frequency === 'once', daily: r.frequency === 'daily', repeatable: r.frequency === 'repeatable', daily_max: r.frequency === 'daily_max' ? r.daily_max : undefined };
+      }
+    } catch(e) {}
+    if (!rule) rule = POINT_RULES[type];
     if (!rule) return null;
 
     // Check one-time rules
